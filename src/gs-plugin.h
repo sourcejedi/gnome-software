@@ -101,6 +101,7 @@ typedef enum {
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_ADDONS		= 1 << 13,
 	GS_PLUGIN_REFINE_FLAGS_ALLOW_PACKAGES		= 1 << 14,
 	GS_PLUGIN_REFINE_FLAGS_ALLOW_NO_APPDATA		= 1 << 15,
+	GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS		= 1 << 16,
 	GS_PLUGIN_REFINE_FLAGS_LAST
 } GsPluginRefineFlags;
 
@@ -116,6 +117,8 @@ typedef enum {
 
 typedef const gchar	*(*GsPluginGetNameFunc)		(void);
 typedef const gchar	**(*GsPluginGetDepsFunc)	(GsPlugin	*plugin);
+typedef gboolean	*(*GsPluginGetSupportsReviewsFunc)	(GsPlugin	*plugin);
+typedef const gchar	*(*GsPluginGetReviewAuthFunc)	(GsPlugin	*plugin);
 typedef void		 (*GsPluginFunc)		(GsPlugin	*plugin);
 typedef gboolean	 (*GsPluginSearchFunc)		(GsPlugin	*plugin,
 							 gchar		**value,
@@ -243,6 +246,12 @@ gboolean	 gs_plugin_app_remove			(GsPlugin	*plugin,
 							 GCancellable	*cancellable,
 							 GError		**error);
 gboolean	 gs_plugin_app_set_rating		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_get_supports_review		(GsPlugin	*plugin);
+const gchar	*gs_plugin_get_review_auth		(GsPlugin	*plugin);
+gboolean	 gs_plugin_app_set_review		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GCancellable	*cancellable,
 							 GError		**error);

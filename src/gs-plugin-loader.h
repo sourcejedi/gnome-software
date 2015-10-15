@@ -56,6 +56,7 @@ typedef enum {
 	GS_PLUGIN_LOADER_ACTION_INSTALL,
 	GS_PLUGIN_LOADER_ACTION_REMOVE,
 	GS_PLUGIN_LOADER_ACTION_SET_RATING,
+	GS_PLUGIN_LOADER_ACTION_SET_REVIEW,
 	GS_PLUGIN_LOADER_ACTION_LAST
 } GsPluginLoaderAction;
 
@@ -212,6 +213,8 @@ GsApp		*gs_plugin_loader_dedupe		(GsPluginLoader	*plugin_loader,
 							 GsApp		*app);
 void		 gs_plugin_loader_set_network_status    (GsPluginLoader *plugin_loader,
 							 gboolean        online);
+gboolean	 gs_plugin_loader_get_supports_reviews  (GsPluginLoader *plugin_loader);
+gchar		**gs_plugin_loader_get_review_auths     (GsPluginLoader *plugin_loader);
 
 G_END_DECLS
 

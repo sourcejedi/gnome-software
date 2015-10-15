@@ -35,6 +35,8 @@
 #include "gs-screenshot-image.h"
 #include "gs-progress-button.h"
 #include "gs-star-widget.h"
+#include "gs-app-review-dialog.h"
+#include "gs-app-review-row.h"
 
 typedef enum {
 	GS_SHELL_DETAILS_STATE_LOADING,
@@ -85,6 +87,8 @@ struct _GsShellDetails
 	GtkWidget		*label_details_version_value;
 	GtkWidget		*label_pending;
 	GtkWidget		*list_box_addons;
+	GtkWidget		*box_reviews;
+	GtkWidget		*list_box_reviews;
 	GtkWidget		*scrolledwindow_details;
 	GtkWidget		*spinner_details;
 	GtkWidget		*spinner_install_remove;
@@ -863,6 +867,31 @@ gs_shell_details_refresh_addons (GsShellDetails *self)
 	}
 }
 
+static void
+gs_shell_details_refresh_reviews (GsShellDetails *self)
+{
+	GPtrArray *reviews;
+	guint i;
+
+	if (!gs_plugin_loader_get_supports_reviews (self->plugin_loader))
+		return;
+
+	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
+
+	reviews = gs_app_get_reviews (self->app);
+	for (i = 0; i < reviews->len; i++) {
+		GsAppReview *review;
+		GtkWidget *row;
+
+		review = g_ptr_array_index (reviews, i);
+
+		row = gs_app_review_row_new (review);
+
+		gtk_container_add (GTK_CONTAINER (self->list_box_reviews), row);
+		gtk_widget_show (row);
+	}
+}
+
 /**
  * gs_shell_details_app_refine_cb:
  **/
@@ -893,6 +922,7 @@ gs_shell_details_app_refine_cb (GObject *source,
 
 	gs_shell_details_refresh_screenshots (self);
 	gs_shell_details_refresh_addons (self);
+	gs_shell_details_refresh_reviews (self);
 	gs_shell_details_refresh_all (self);
 	gs_shell_details_set_state (self, GS_SHELL_DETAILS_STATE_READY);
 }
@@ -963,6 +993,7 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 	gs_shell_details_switch_to (self);
 	gs_shell_details_refresh_screenshots (self);
 	gs_shell_details_refresh_addons (self);
+	gs_shell_details_refresh_reviews (self);
 	gs_shell_details_refresh_all (self);
 	gs_shell_details_set_state (self, GS_SHELL_DETAILS_STATE_READY);
 }
@@ -977,7 +1008,8 @@ gs_shell_details_set_filename (GsShellDetails *self, const gchar *filename)
 	gs_plugin_loader_filename_to_app_async (self->plugin_loader,
 						filename,
 						GS_PLUGIN_REFINE_FLAGS_DEFAULT |
-						GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING,
+						GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING |
+						GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
 						self->cancellable,
 						gs_shell_details_filename_to_app_cb,
 						self);
@@ -999,7 +1031,8 @@ gs_shell_details_load (GsShellDetails *self)
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_ORIGIN |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_MENU_PATH |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_URL |
-					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_ADDONS,
+					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_ADDONS |
+					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
 					   self->cancellable,
 					   gs_shell_details_app_refine_cb,
 					   self);
@@ -1185,6 +1218,25 @@ gs_shell_details_app_set_ratings_cb (GObject *source,
 	}
 }
 
+
+/**
+ * gs_shell_details_app_set_review_cb:
+ **/
+static void
+gs_shell_details_app_set_review_cb (GObject *source,
+				GAsyncResult *res,
+				gpointer user_data)
+{
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
+	GsShellDetails *self = GS_SHELL_DETAILS (user_data);
+	g_autoptr(GError) error = NULL;
+
+	if (!gs_plugin_loader_app_action_finish (plugin_loader, res, &error)) {
+		g_warning ("failed to set review %s: %s",
+			   gs_app_get_id (self->app), error->message);
+	}
+}
+
 /**
  * gs_shell_details_rating_changed_cb:
  **/
@@ -1193,6 +1245,43 @@ gs_shell_details_rating_changed_cb (GsStarWidget *star,
 				    guint rating,
 				    GsShellDetails *self)
 {
+	GtkWidget *dialog;
+	GtkResponseType response;
+	gchar **review_auths;
+
+	dialog = gs_app_review_dialog_new ();
+	gs_app_review_dialog_set_rating (GS_APP_REVIEW_DIALOG (dialog), rating);
+
+	review_auths = gs_plugin_loader_get_review_auths (self->plugin_loader);
+	// FIXME: Use these
+
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
+	response = gtk_dialog_run (GTK_DIALOG (dialog));
+	if (response == GTK_RESPONSE_OK) {
+		g_autoptr(GsAppReview) review = NULL;
+		g_autoptr(GDateTime) now = NULL;
+		g_autofree gchar *text = NULL;
+
+		review = gs_app_review_new ();
+		gs_app_review_set_summary (review, gs_app_review_dialog_get_summary (GS_APP_REVIEW_DIALOG (dialog)));
+		text = gs_app_review_dialog_get_text (GS_APP_REVIEW_DIALOG (dialog));
+		gs_app_review_set_text (review, text);
+		gs_app_review_set_rating (review, gs_app_review_dialog_get_rating (GS_APP_REVIEW_DIALOG (dialog)));
+		gs_app_review_set_version (review, gs_app_get_version (self->app));
+		gs_app_review_set_reviewer (review, "Joe Bloggs"); // FIXME
+		now = g_date_time_new_now_local ();
+		gs_app_review_set_date (review, now);
+
+		/* call into the plugins to set the new value */
+		gs_app_set_self_review (self->app, review);
+		gs_plugin_loader_app_action_async (self->plugin_loader, self->app,
+						   GS_PLUGIN_LOADER_ACTION_SET_REVIEW,
+						   self->cancellable,
+						   gs_shell_details_app_set_review_cb,
+						   self);
+	}
+	gtk_widget_destroy (dialog);
+#if 0
 	g_debug ("%s rating changed from %i%% to %i%%",
 		 gs_app_get_id (self->app),
 		 gs_app_get_rating (self->app),
@@ -1206,6 +1295,7 @@ gs_shell_details_rating_changed_cb (GsStarWidget *star,
 					   self->cancellable,
 					   gs_shell_details_app_set_ratings_cb,
 					   self);
+#endif
 }
 
 static void
@@ -1239,6 +1329,10 @@ gs_shell_details_setup (GsShellDetails *self,
 	self->plugin_loader = g_object_ref (plugin_loader);
 	self->builder = g_object_ref (builder);
 	self->cancellable = g_object_ref (cancellable);
+
+	/* Show review widgets if we have plugins that provide them */
+	if (gs_plugin_loader_get_supports_reviews (plugin_loader))
+		gtk_widget_set_visible (self->box_reviews, TRUE);
 
 	/* set up star ratings */
 	self->star = gs_star_widget_new ();
@@ -1345,6 +1439,8 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_version_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_pending);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_addons);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_reviews);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_reviews);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, scrolledwindow_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_install_remove);

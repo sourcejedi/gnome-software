@@ -82,6 +82,8 @@ struct _GsApp
 	gint			 rating;
 	gint			 rating_confidence;
 	GsAppRatingKind		 rating_kind;
+	GsAppReview		*self_review;
+	GPtrArray		*reviews; /* of GsAppReview */
 	guint64			 size;
 	GsAppKind		 kind;
 	AsIdKind		 id_kind;
@@ -1595,6 +1597,49 @@ gs_app_set_rating_kind (GsApp *app, GsAppRatingKind rating_kind)
 }
 
 /**
+ * gs_app_get_self_review:
+ */
+GsAppReview *
+gs_app_get_self_review (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
+	return app->self_review;
+}
+
+/**
+ * gs_app_set_self_review:
+ */
+void
+gs_app_set_self_review (GsApp *app, GsAppReview *review)
+{
+	g_return_if_fail (GS_IS_APP (app));
+
+	g_clear_object (&app->self_review);
+	if (review != NULL)
+		app->self_review = g_object_ref (review);
+}
+
+/**
+ * gs_app_get_reviews:
+ */
+GPtrArray *
+gs_app_get_reviews (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
+	return app->reviews;
+}
+
+/**
+ * gs_app_add_review:
+ */
+void
+gs_app_add_review (GsApp *app, GsAppReview *review)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	g_ptr_array_add (app->reviews, g_object_ref (review));
+}
+
+/**
  * gs_app_get_size:
  */
 guint64
@@ -2163,12 +2208,14 @@ gs_app_dispose (GObject *object)
 	g_clear_object (&app->bundle);
 	g_clear_object (&app->featured_pixbuf);
 	g_clear_object (&app->icon);
+	g_clear_object (&app->reviews);
 	g_clear_object (&app->pixbuf);
 
 	g_clear_pointer (&app->addons, g_ptr_array_unref);
 	g_clear_pointer (&app->history, g_ptr_array_unref);
 	g_clear_pointer (&app->related, g_ptr_array_unref);
 	g_clear_pointer (&app->screenshots, g_ptr_array_unref);
+	g_clear_pointer (&app->reviews, g_ptr_array_unref);
 
 	G_OBJECT_CLASS (gs_app_parent_class)->dispose (object);
 }
@@ -2318,6 +2365,7 @@ gs_app_init (GsApp *app)
 	app->related = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->history = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->screenshots = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+	app->reviews = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->metadata = g_hash_table_new_full (g_str_hash,
 	                                        g_str_equal,
 	                                        g_free,

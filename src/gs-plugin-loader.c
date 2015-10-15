@@ -49,6 +49,9 @@ typedef struct
 
 	guint			 updates_changed_id;
 	gboolean		 online; 
+
+	gboolean		 supports_reviews;
+	gchar			**review_auths;
 } GsPluginLoaderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (GsPluginLoader, gs_plugin_loader, G_TYPE_OBJECT)
@@ -2587,6 +2590,11 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 		state->state_success = AS_APP_STATE_UNKNOWN;
 		state->state_failure = AS_APP_STATE_UNKNOWN;
 		break;
+	case GS_PLUGIN_LOADER_ACTION_SET_REVIEW:
+		state->function_name = "gs_plugin_app_set_review";
+		state->state_success = AS_APP_STATE_UNKNOWN;
+		state->state_failure = AS_APP_STATE_UNKNOWN;
+		break;
 	default:
 		g_assert_not_reached ();
 		break;
@@ -2798,13 +2806,17 @@ gs_plugin_loader_updates_changed_cb (GsPlugin *plugin, gpointer user_data)
  */
 static GsPlugin *
 gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
-			      const gchar *filename)
+			      const gchar *filename,
+			      GPtrArray *review_auths)
 {
 	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
 	gboolean ret;
 	GModule *module;
 	GsPluginGetNameFunc plugin_name = NULL;
 	GsPluginGetDepsFunc plugin_deps = NULL;
+	GsPluginGetSupportsReviewsFunc plugin_supports_reviews = NULL;
+	GsPluginGetReviewAuthFunc plugin_review_auth = NULL;
+	const gchar *review_auth;
 	GsPlugin *plugin = NULL;
 
 	module = g_module_open (filename, 0);
@@ -2828,6 +2840,21 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	(void) g_module_symbol (module,
 	                        "gs_plugin_get_deps",
 	                        (gpointer *) &plugin_deps);
+
+	/* Check if this plugin can do reviews */
+	(void) g_module_symbol (module,
+	                        "gs_plugin_get_supports_reviews",
+	                        (gpointer *) &plugin_supports_reviews);
+	if (plugin_supports_reviews && plugin_supports_reviews (plugin))
+		priv->supports_reviews = TRUE;
+
+	/* Check if this plugin requires any authorization for reviews */
+	(void) g_module_symbol (module,
+	                        "gs_plugin_get_review_auth",
+	                        (gpointer *) &plugin_review_auth);
+	review_auth = plugin_review_auth != NULL ? plugin_review_auth (plugin) : NULL;
+	if (review_auth)
+		g_ptr_array_add (review_auths, g_strdup (review_auth));
 
 	/* print what we know */
 	plugin = g_slice_new0 (GsPlugin);
@@ -2951,6 +2978,7 @@ gs_plugin_loader_setup (GsPluginLoader *plugin_loader, GError **error)
 	guint i;
 	guint j;
 	g_autoptr(GDir) dir = NULL;
+	GPtrArray *review_auths;
 
 	g_return_val_if_fail (priv->location != NULL, FALSE);
 
@@ -2964,6 +2992,7 @@ gs_plugin_loader_setup (GsPluginLoader *plugin_loader, GError **error)
 
 	/* try to open each plugin */
 	g_debug ("searching for plugins in %s", priv->location);
+	review_auths = g_ptr_array_new ();
 	do {
 		g_autofree gchar *filename_plugin = NULL;
 		filename_tmp = g_dir_read_name (dir);
@@ -2974,8 +3003,11 @@ gs_plugin_loader_setup (GsPluginLoader *plugin_loader, GError **error)
 		filename_plugin = g_build_filename (priv->location,
 						    filename_tmp,
 						    NULL);
-		gs_plugin_loader_open_plugin (plugin_loader, filename_plugin);
+		gs_plugin_loader_open_plugin (plugin_loader, filename_plugin, review_auths);
 	} while (TRUE);
+
+	g_ptr_array_add (review_auths, NULL);
+	priv->review_auths = (char **) g_ptr_array_free (review_auths, FALSE);
 
 	/* order by deps */
 	do {
@@ -3108,6 +3140,7 @@ gs_plugin_loader_finalize (GObject *object)
 
 	g_strfreev (priv->compatible_projects);
 	g_free (priv->location);
+	g_strfreev (priv->review_auths);
 
 	g_mutex_clear (&priv->pending_apps_mutex);
 	g_mutex_clear (&priv->app_cache_mutex);
@@ -3682,6 +3715,26 @@ gs_plugin_loader_offline_update_finish (GsPluginLoader *plugin_loader,
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
 	return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+/**
+ * gs_plugin_loader_get_supports_reviews:
+ */
+gboolean
+gs_plugin_loader_get_supports_reviews (GsPluginLoader *plugin_loader)
+{
+	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
+	return priv->supports_reviews;
+}
+
+/**
+ * gs_plugin_loader_get_review_auths:
+ */
+gchar **
+gs_plugin_loader_get_review_auths (GsPluginLoader *plugin_loader)
+{
+	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
+	return priv->review_auths;
 }
 
 /******************************************************************************/
