@@ -83,6 +83,7 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
+	GsAppReviews		*reviews;
 	guint64			 size;
 	GsAppKind		 kind;
 	AsIdKind		 id_kind;
@@ -289,6 +290,8 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
 	if (app->rating != -1)
 		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+	if (app->reviews != NULL)
+		g_string_append_printf (str, "\treviews:\t%p\n", app->reviews);
 	if (app->pixbuf != NULL)
 		g_string_append_printf (str, "\tpixbuf:\t%p\n", app->pixbuf);
 	if (app->install_date != 0) {
@@ -1637,6 +1640,27 @@ gs_app_set_rating (GsApp *app, gint rating)
 }
 
 /**
+ * gs_app_get_reviews:
+ */
+GsAppReviews *
+gs_app_get_reviews (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
+	return app->reviews;
+}
+
+/**
+ * gs_app_set_reviews:
+ */
+void
+gs_app_set_reviews (GsApp *app, GsAppReviews *reviews)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	g_clear_object (&app->reviews);
+	app->reviews = g_object_ref (reviews);
+}
+
+/**
  * gs_app_get_size:
  */
 guint64
@@ -2193,6 +2217,7 @@ gs_app_dispose (GObject *object)
 	GsApp *app = GS_APP (object);
 
 	g_clear_object (&app->icon);
+	g_clear_object (&app->reviews);
 	g_clear_object (&app->pixbuf);
 
 	g_clear_pointer (&app->addons, g_ptr_array_unref);
