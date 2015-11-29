@@ -40,7 +40,8 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_provenance.la			\
 	libgs_plugin_fedora_tagger_usage.la		\
 	libgs_plugin_epiphany.la			\
-	libgs_plugin_icons.la
+	libgs_plugin_icons.la				\
+	libgs_plugin_snappy.la
 
 if HAVE_PACKAGEKIT
 plugin_LTLIBRARIES +=					\
