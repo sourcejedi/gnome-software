@@ -33,10 +33,11 @@ UI_FILES =						\
 	category-tile.ui				\
 	feature-tile.ui					\
 	gnome-software.ui				\
-	gs-app-addon-row.ui				\
+	gs-app-addon-row.sui				\
 	gs-app-row.ui					\
 	gs-first-run-dialog.ui				\
 	gs-history-dialog.ui				\
+	gs-review-widget.ui				\
 	gs-shell-category.ui				\
 	gs-shell-extras.ui				\
 	gs-shell-details.ui				\
@@ -143,6 +144,8 @@ gnome_software_SOURCES =				\
 	gs-plugin.h					\
 	gs-progress-button.c				\
 	gs-progress-button.h				\
+	gs-review-widget.c				\
+	gs-review-widget.h				\
 	gs-screenshot-image.c				\
 	gs-screenshot-image.h				\
 	gs-shell.c					\
