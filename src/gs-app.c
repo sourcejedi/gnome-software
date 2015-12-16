@@ -83,7 +83,7 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
-	GsAppReviews		*reviews;
+	GPtrArray		*reviews; /* on GsAppReview */
 	guint64			 size;
 	GsAppKind		 kind;
 	AsIdKind		 id_kind;
@@ -1642,7 +1642,7 @@ gs_app_set_rating (GsApp *app, gint rating)
 /**
  * gs_app_get_reviews:
  */
-GsAppReviews *
+GPtrArray *
 gs_app_get_reviews (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), NULL);
@@ -1650,14 +1650,13 @@ gs_app_get_reviews (GsApp *app)
 }
 
 /**
- * gs_app_set_reviews:
+ * gs_app_add_review:
  */
 void
-gs_app_set_reviews (GsApp *app, GsAppReviews *reviews)
+gs_app_add_review (GsApp *app, GsAppReview *review)
 {
 	g_return_if_fail (GS_IS_APP (app));
-	g_clear_object (&app->reviews);
-	app->reviews = g_object_ref (reviews);
+	g_ptr_array_add (app->reviews, g_object_ref (review));
 }
 
 /**
@@ -2224,6 +2223,7 @@ gs_app_dispose (GObject *object)
 	g_clear_pointer (&app->history, g_ptr_array_unref);
 	g_clear_pointer (&app->related, g_ptr_array_unref);
 	g_clear_pointer (&app->screenshots, g_ptr_array_unref);
+	g_clear_pointer (&app->reviews, g_ptr_array_unref);
 
 	G_OBJECT_CLASS (gs_app_parent_class)->dispose (object);
 }
@@ -2374,6 +2374,7 @@ gs_app_init (GsApp *app)
 	app->related = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->history = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->screenshots = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+	app->reviews = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->metadata = g_hash_table_new_full (g_str_hash,
 	                                        g_str_equal,
 	                                        g_free,
