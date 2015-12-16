@@ -129,8 +129,8 @@ gnome_software_SOURCES =				\
 	gs-category-tile.h				\
 	gs-app-review.c					\
 	gs-app-review.h					\
-	gs-app-reviews.c				\
-	gs-app-reviews.h				\
+	gs-app-review-row.c				\
+	gs-app-review-row.h				\
 	gs-app-tile.c					\
 	gs-app-tile.h					\
 	gs-app-folder-dialog.c				\
