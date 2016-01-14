@@ -1473,6 +1473,25 @@ gs_shell_details_review_response_cb (GtkDialog *dialog,
 					      self);
 }
 
+
+/**
+ * gs_shell_details_app_set_review_cb:
+ **/
+static void
+gs_shell_details_app_set_review_cb (GObject *source,
+				GAsyncResult *res,
+				gpointer user_data)
+{
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
+	GsShellDetails *self = GS_SHELL_DETAILS (user_data);
+	g_autoptr(GError) error = NULL;
+
+	if (!gs_plugin_loader_app_action_finish (plugin_loader, res, &error)) {
+		g_warning ("failed to set review %s: %s",
+			   gs_app_get_id (self->app), error->message);
+	}
+}
+
 /**
  * gs_shell_details_write_review_cb:
  **/
