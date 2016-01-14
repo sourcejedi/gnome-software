@@ -25,6 +25,7 @@
 #include <math.h>
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
+#include <oauth.h>
 #include <sqlite3.h>
 
 #include <gs-plugin.h>
