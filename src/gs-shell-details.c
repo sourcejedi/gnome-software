@@ -963,6 +963,9 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 	GPtrArray *reviews;
 	guint i;
 
+	if (!gs_plugin_loader_get_supports_reviews (self->plugin_loader))
+		return;
+
 	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 
 	reviews = gs_app_get_reviews (self->app);
