@@ -123,6 +123,7 @@ typedef enum {
 
 typedef const gchar	*(*GsPluginGetNameFunc)		(void);
 typedef const gchar	**(*GsPluginGetDepsFunc)	(GsPlugin	*plugin);
+typedef gboolean	*(*GsPluginGetSupportsReviewsFunc)	(GsPlugin	*plugin);
 typedef const gchar	*(*GsPluginGetReviewAuthFunc)	(GsPlugin	*plugin);
 typedef void		 (*GsPluginFunc)		(GsPlugin	*plugin);
 typedef gboolean	 (*GsPluginSearchFunc)		(GsPlugin	*plugin,
@@ -274,6 +275,12 @@ gboolean	 gs_plugin_app_update			(GsPlugin	*plugin,
 							 GCancellable	*cancellable,
 							 GError		**error);
 gboolean	 gs_plugin_app_upgrade_download		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_get_supports_review		(GsPlugin	*plugin);
+const gchar	*gs_plugin_get_review_auth		(GsPlugin	*plugin);
+gboolean	 gs_plugin_app_set_review		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GCancellable	*cancellable,
 							 GError		**error);

@@ -91,6 +91,7 @@ struct _GsShellDetails
 	GtkWidget		*label_details_tag_webapp;
 	GtkWidget		*label_details_info_text;
 	GtkWidget		*list_box_addons;
+	GtkWidget		*box_reviews;
 	GtkWidget		*list_box_reviews;
 	GtkWidget		*scrolledwindow_details;
 	GtkWidget		*spinner_details;
@@ -956,6 +957,9 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 	GPtrArray *reviews;
 	guint i;
 
+	if (!gs_plugin_loader_get_supports_reviews (self->plugin_loader))
+		return;
+
 	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 
 	reviews = gs_app_get_reviews (self->app);
@@ -1347,6 +1351,7 @@ gs_shell_details_rating_changed_cb (GsStarWidget *star,
 	gs_app_review_dialog_set_rating (GS_APP_REVIEW_DIALOG (dialog), rating);
 
 	review_auths = gs_plugin_loader_get_review_auths (self->plugin_loader);
+	// FIXME: Use these
 
 	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
 	response = gtk_dialog_run (GTK_DIALOG (dialog));
@@ -1421,6 +1426,10 @@ gs_shell_details_setup (GsShellDetails *self,
 	self->plugin_loader = g_object_ref (plugin_loader);
 	self->builder = g_object_ref (builder);
 	self->cancellable = g_object_ref (cancellable);
+
+	/* Show review widgets if we have plugins that provide them */
+	if (gs_plugin_loader_get_supports_reviews (plugin_loader))
+		gtk_widget_set_visible (self->box_reviews, TRUE);
 
 	/* set up star ratings */
 	self->star = gs_star_widget_new ();
@@ -1531,6 +1540,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_tag_webapp);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_info_text);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_addons);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_reviews);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_reviews);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, scrolledwindow_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_details);
