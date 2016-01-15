@@ -478,6 +478,344 @@ load_database (GsPlugin *plugin, GError **error)
 	return TRUE;
 }
 
+static gint
+get_timestamp_sqlite_cb (void *data, gint argc,
+			 gchar **argv, gchar **col_name)
+{
+	gint64 *timestamp = (gint64 *) data;
+	*timestamp = g_ascii_strtoll (argv[0], NULL, 10);
+	return 0;
+}
+
+static gboolean
+set_package_stats (GsPlugin *plugin,
+		   const gchar *package_name,
+		   Histogram *histogram,
+		   GError **error)
+{
+	char *error_msg = NULL;
+	gint result;
+	g_autofree gchar *statement = NULL;
+
+	statement = g_strdup_printf ("INSERT OR REPLACE INTO review_stats (package_name, "
+				     "one_star_count, two_star_count, three_star_count, "
+                                     "four_star_count, five_star_count) "
+				     "VALUES ('%s', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT"', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "');",
+				     package_name, histogram->one_star_count, histogram->two_star_count,
+				     histogram->three_star_count, histogram->four_star_count, histogram->five_star_count);
+	result = sqlite3_exec (plugin->priv->db, statement, NULL, NULL, &error_msg);
+	if (result != SQLITE_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "SQL error: %s", error_msg);
+		sqlite3_free (error_msg);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static gboolean
+set_timestamp (GsPlugin *plugin,
+	       const gchar *type,
+	       GError **error)
+{
+	char *error_msg = NULL;
+	gint result;
+	g_autofree gchar *statement = NULL;
+
+	statement = g_strdup_printf ("INSERT OR REPLACE INTO timestamps (key, value) "
+				     "VALUES ('%s', '%" G_GINT64_FORMAT "');",
+				     type,
+				     g_get_real_time () / G_USEC_PER_SEC);
+	result = sqlite3_exec (plugin->priv->db, statement, NULL, NULL, &error_msg);
+	if (result != SQLITE_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "SQL error: %s", error_msg);
+		sqlite3_free (error_msg);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static gint
+get_rating_sqlite_cb (void *data,
+		      gint argc,
+		      gchar **argv,
+		      gchar **col_name)
+{
+	Histogram *histogram = (Histogram *) data;
+	histogram->one_star_count = g_ascii_strtoll (argv[0], NULL, 10);
+	histogram->two_star_count = g_ascii_strtoll (argv[1], NULL, 10);
+	histogram->three_star_count = g_ascii_strtoll (argv[2], NULL, 10);
+	histogram->four_star_count = g_ascii_strtoll (argv[3], NULL, 10);
+	histogram->five_star_count = g_ascii_strtoll (argv[4], NULL, 10);
+	return 0;
+}
+
+static gboolean
+get_rating (GsPlugin *plugin,
+	    const gchar *package_name,
+	    gint *rating,
+	    GError **error)
+{
+	Histogram histogram = { 0, 0, 0, 0, 0 };
+	gchar *error_msg = NULL;
+	gint result, n_ratings;
+	g_autofree gchar *statement = NULL;
+
+	/* Get histogram from the database */
+	statement = g_strdup_printf ("SELECT one_star_count, two_star_count, three_star_count, four_star_count, five_star_count FROM review_stats "
+				     "WHERE package_name = '%s'", package_name);
+	result = sqlite3_exec (plugin->priv->db,
+			       statement,
+			       get_rating_sqlite_cb,
+			       &histogram,
+			       &error_msg);
+	if (result != SQLITE_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "SQL error: %s", error_msg);
+		sqlite3_free (error_msg);
+		return FALSE;
+	}
+
+	/* Convert to a rating */
+	// FIXME: Convert to a Wilson score
+	n_ratings = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
+	if (n_ratings == 0)
+		*rating = -1;
+	else
+		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
+g_warning ("%s %zi %zi %zi %zi %zi / %d -> %d", package_name, histogram.one_star_count, histogram.two_star_count, histogram.three_star_count, histogram.four_star_count, histogram.five_star_count, n_ratings, *rating);
+
+	return TRUE;
+}
+
+static gboolean
+parse_histogram (const gchar *text, Histogram *histogram)
+{
+	JsonParser *parser = NULL;
+	JsonArray *array;
+	gboolean result = FALSE;
+
+	/* Histogram is a five element JSON array, e.g. "[1, 3, 5, 8, 4]" */
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, text, -1, NULL))
+		goto out;
+	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
+		goto out;
+	array = json_node_get_array (json_parser_get_root (parser));
+	if (json_array_get_length (array) != 5)
+		goto out;
+	histogram->one_star_count = json_array_get_int_element (array, 0);
+	histogram->two_star_count = json_array_get_int_element (array, 1);
+	histogram->three_star_count = json_array_get_int_element (array, 2);
+	histogram->four_star_count = json_array_get_int_element (array, 3);
+	histogram->five_star_count = json_array_get_int_element (array, 4);
+	result = TRUE;
+
+out:
+	g_clear_object (&parser);
+
+	return result;
+}
+
+static gboolean
+parse_review_entry (JsonNode *node, const gchar **package_name, Histogram *histogram)
+{
+	JsonObject *object;
+	const gchar *name = NULL, *histogram_text = NULL;
+
+	if (!JSON_NODE_HOLDS_OBJECT (node))
+		return FALSE;
+
+	object = json_node_get_object (node);
+
+	name = json_object_get_string_member (object, "package_name");
+	histogram_text = json_object_get_string_member (object, "histogram");
+	if (!name || !histogram_text)
+		return FALSE;
+
+	if (!parse_histogram (histogram_text, histogram))
+		return FALSE;
+	*package_name = name;
+
+	return TRUE;
+}
+
+static gboolean
+parse_review_entries (GsPlugin *plugin, const gchar *text, GError **error)
+{
+	JsonParser *parser = NULL;
+	JsonArray *array;
+	gint i;
+	gboolean result = FALSE;
+
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, text, -1, error))
+		goto out;
+	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
+		goto out;
+	array = json_node_get_array (json_parser_get_root (parser));
+	for (i = 0; i < json_array_get_length (array); i++) {
+		const gchar *package_name;
+		Histogram histogram;
+
+		/* Read in from JSON... (skip bad entries) */
+		if (!parse_review_entry (json_array_get_element (array, i), &package_name, &histogram))
+			continue;
+
+		/* ...write into the database (abort everything if can't write) */
+		if (!set_package_stats (plugin, package_name, &histogram, error))
+			goto out;
+	}
+	result = TRUE;
+
+out:
+	g_clear_object (&parser);
+
+	return result;
+}
+
+static gboolean
+download_review_stats (GsPlugin *plugin, GError **error)
+{
+	guint status_code;
+	g_autofree gchar *uri = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
+	g_auto(GStrv) split = NULL;
+
+	/* Get the review stats using HTTP */
+	uri = g_strdup_printf ("%s/api/1.0/review-stats/any/any/",
+			       UBUNTU_REVIEWS_SERVER);
+	msg = soup_message_new (SOUP_METHOD_GET, uri);
+	if (!setup_networking (plugin, error))
+		return FALSE;
+	status_code = soup_session_send_message (plugin->priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to download Ubuntu reviews dump: %s",
+			     soup_status_get_phrase (status_code));
+		return FALSE;
+	}
+
+	/* Extract the stats from the data */
+	if (!parse_review_entries (plugin, msg->response_body->data, error))
+		return FALSE;
+
+	/* Record the time we downloaded it */
+	return set_timestamp (plugin, "stats_mtime", error);
+}
+
+static gboolean
+load_database (GsPlugin *plugin, GError **error)
+{
+	const gchar *statement;
+	gboolean rebuild_ratings = FALSE;
+	char *error_msg = NULL;
+	gint result;
+	gint64 stats_mtime = 0;
+	gint64 now;
+	g_autoptr(GError) error_local = NULL;
+
+	g_debug ("trying to open database '%s'", plugin->priv->db_path);
+	if (!gs_mkdir_parent (plugin->priv->db_path, error))
+		return FALSE;
+	result = sqlite3_open (plugin->priv->db_path, &plugin->priv->db);
+	if (result != SQLITE_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Can't open Ubuntu review statistics database: %s",
+			     sqlite3_errmsg (plugin->priv->db));
+		return FALSE;
+	}
+
+	/* We don't need to keep doing fsync */
+	sqlite3_exec (plugin->priv->db, "PRAGMA synchronous=OFF",
+		      NULL, NULL, NULL);
+
+	/* Create a table to store the stats */
+	result = sqlite3_exec (plugin->priv->db, "SELECT * FROM review_stats LIMIT 1", NULL, NULL, &error_msg);
+	if (result != SQLITE_OK) {
+		g_debug ("creating table to repair: %s", error_msg);
+		sqlite3_free (error_msg);
+		statement = "CREATE TABLE review_stats ("
+			    "package_name TEXT PRIMARY KEY,"
+			    "one_star_count INTEGER DEFAULT 0,"
+			    "two_star_count INTEGER DEFAULT 0,"
+			    "three_star_count INTEGER DEFAULT 0,"
+			    "four_star_count INTEGER DEFAULT 0,"
+			    "five_star_count INTEGER DEFAULT 0);";
+		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
+		rebuild_ratings = TRUE;
+	}
+
+	/* Create a table to store local reviews */
+	result = sqlite3_exec (plugin->priv->db, "SELECT * FROM reviews LIMIT 1", NULL, NULL, &error_msg);
+	if (result != SQLITE_OK) {
+		g_debug ("creating table to repair: %s", error_msg);
+		sqlite3_free (error_msg);
+		statement = "CREATE TABLE reviews ("
+			    "package_name TEXT PRIMARY KEY,"
+			    "id TEXT,"
+			    "version TEXT,"
+			    "date TEXT,"
+			    "rating INTEGER,"
+                            "summary TEXT,"
+                            "text TEXT);";
+		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
+		rebuild_ratings = TRUE;
+	}
+
+	/* Create a table to store timestamps */
+	result = sqlite3_exec (plugin->priv->db,
+			       "SELECT value FROM timestamps WHERE key = 'stats_mtime' LIMIT 1",
+			       get_timestamp_sqlite_cb, &stats_mtime,
+			       &error_msg);
+	if (result != SQLITE_OK) {
+		g_debug ("creating table to repair: %s", error_msg);
+		sqlite3_free (error_msg);
+		statement = "CREATE TABLE timestamps ("
+			    "key TEXT PRIMARY KEY,"
+			    "value INTEGER DEFAULT 0);";
+		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
+
+		/* Set the time of database creation */
+		if (!set_timestamp (plugin, "stats_ctime", error))
+			return FALSE;
+	}
+
+	/* Download data if we have none or it is out of date */
+	now = g_get_real_time () / G_USEC_PER_SEC;
+	if (stats_mtime == 0 || rebuild_ratings) {
+		g_debug ("No Ubuntu review statistics");
+		if (!download_review_stats (plugin, &error_local)) {
+			g_warning ("Failed to get Ubuntu review statistics: %s",
+				   error_local->message);
+			return TRUE;
+		}
+	} else if (now - stats_mtime > REVIEW_STATS_AGE_MAX) {
+		g_debug ("Ubuntu review statistics was %" G_GINT64_FORMAT
+			 " days old, so regetting",
+			 (now - stats_mtime) / ( 60 * 60 * 24));
+		if (!download_review_stats (plugin, error))
+			return FALSE;
+	} else {
+		g_debug ("Ubuntu review statistics %" G_GINT64_FORMAT
+			 " days old, so no need to redownload",
+			 (now - stats_mtime) / ( 60 * 60 * 24));
+	}
+	return TRUE;
+}
+
 static GDateTime *
 parse_date_time (const gchar *text)
 {
@@ -638,7 +976,7 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 		}
 	}
 
-	return TRUE;
+	return ret;
 }
 
 static gboolean
