@@ -51,6 +51,7 @@ typedef struct
 	guint			 updates_changed_id;
 	gboolean		 online; 
 
+	gboolean		 supports_reviews;
 	gchar			**review_auths;
 } GsPluginLoaderPrivate;
 
@@ -2948,7 +2949,14 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 			 "gs_plugin_get_conflicts",
 			 (gpointer *) &plugin_conflicts);
 
-	/* Check if this module requires any authorization for reviews */
+	/* Check if this plugin can do reviews */
+	(void) g_module_symbol (module,
+	                        "gs_plugin_get_supports_reviews",
+	                        (gpointer *) &plugin_supports_reviews);
+	if (plugin_supports_reviews && plugin_supports_reviews (plugin))
+		priv->supports_reviews = TRUE;
+
+	/* Check if this plugin requires any authorization for reviews */
 	(void) g_module_symbol (module,
 	                        "gs_plugin_get_review_auth",
 	                        (gpointer *) &plugin_review_auth);
