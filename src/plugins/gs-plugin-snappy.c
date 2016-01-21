@@ -29,7 +29,6 @@
 #include <json-glib/json-glib.h>
 
 struct GsPluginPrivate {
-	GSocket *snapd_socket;
 };
 
 #define SNAPD_SOCKET_PATH "/run/snapd.socket"
@@ -45,23 +44,33 @@ gs_plugin_get_name (void)
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
-	g_autoptr (GSocketAddress) address = NULL;
-	GError *error = NULL;
-
 	/* create private area */
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
+}
 
-	/* Create socket to snapd */
-	plugin->priv->snapd_socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, &error); // FIXME: Handle error
+static GSocket *
+open_snapd_socket (GError **error)
+{
+	GSocket *socket;
+	g_autoptr (GSocketAddress) address = NULL;
+
+	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, error);
+	if (!socket)
+		return NULL;
 	address = g_unix_socket_address_new (SNAPD_SOCKET_PATH);
-	g_socket_connect (plugin->priv->snapd_socket, address, NULL, &error); // FIXME: Handle error
+	if (!g_socket_connect (socket, address, NULL, error)) {
+		g_object_unref (socket);
+		return NULL;
+	}
+
+	return socket;
 }
 
 static gboolean
-read_from_snapd (GsPlugin *plugin, gchar *buffer, gsize buffer_length, gsize *read_offset, GError **error)
+read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *read_offset, GError **error)
 {
 	gssize n_read;
-	n_read = g_socket_receive (plugin->priv->snapd_socket, buffer + *read_offset, buffer_length - *read_offset, NULL, error);
+	n_read = g_socket_receive (socket, buffer + *read_offset, buffer_length - *read_offset, NULL, error);
 	if (n_read < 0)
 		return FALSE;
 	*read_offset += n_read;
@@ -71,7 +80,7 @@ read_from_snapd (GsPlugin *plugin, gchar *buffer, gsize buffer_length, gsize *re
 }
 
 static gboolean
-send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, gchar **response_type, gchar **response, gsize *response_length, GError **error)
+send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, gchar **response_type, gchar **response, gsize *response_length, GError **error)
 {
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
@@ -85,13 +94,13 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 
 	/* Send HTTP request */
 	gssize n_written;
-	n_written = g_socket_send (plugin->priv->snapd_socket, request, strlen (request), NULL, error);
+	n_written = g_socket_send (socket, request, strlen (request), NULL, error);
 	if (n_written < 0)
 		return FALSE;
 
 	/* Read HTTP headers */
 	while (data_length < max_data_length && !body) {
-		if (!read_from_snapd (plugin, data, max_data_length, &data_length, error))
+		if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
 			return FALSE;
 		body = strstr (data, "\r\n\r\n");
 	}
@@ -123,7 +132,7 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 			chunk_start = strstr (body, "\r\n");
 			if (chunk_start)
 				break;
-			if (!read_from_snapd (plugin, data, max_data_length, &data_length, error))
+			if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
 				return FALSE;
 		}
 		if (!chunk_start) {
@@ -163,7 +172,7 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 
 	/* Read chunk content */
 	while (data_length < n_required)
-		if (!read_from_snapd (plugin, data, n_required - data_length, &data_length, error))
+		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, error))
 			return FALSE;
 
 	if (response_type)
@@ -181,14 +190,19 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 static gboolean
 get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
+	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
 	g_autofree gchar *response_type = NULL, *response = NULL;
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
 
+	socket = open_snapd_socket (error);
+	if (!socket)
+		return FALSE;
+
 	/* Get all the apps */
-	if (!send_snapd_request (plugin, "GET /1.0/packages HTTP/1.1\n\n", &status_code, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, "GET /1.0/packages HTTP/1.1\r\n\r\n", &status_code, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != 200) {
@@ -226,7 +240,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 	for (link = package_list; link; link = link->next) {
 		const gchar *id = link->data;
 		JsonObject *package;
-		const gchar *status;
+		const gchar *status, *icon_url;
 		g_autoptr(GsApp) app = NULL;
 
 		package = json_object_get_object_member (packages, id);
@@ -248,8 +262,34 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		else if (g_strcmp0 (status, "not installed") == 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
-		gs_app_set_description (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
+		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
+		icon_url = json_object_get_string_member (package, "icon");
+		if (g_str_has_prefix (icon_url, "/")) {
+#if 0
+			g_autofree gchar *request = NULL, *icon_response = NULL;
+			gsize icon_response_length;
+
+			request = g_strdup_printf ("GET %s HTTP/1.1\r\n\r\n", icon_url);
+			if (send_snapd_request (plugin, request, &status_code, NULL, &icon_response, &icon_response_length, NULL)) {
+				g_autoptr(GdkPixbufLoader) loader = NULL;
+
+				loader = gdk_pixbuf_loader_new ();
+				gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
+				gs_app_set_pixbuf (app, gdk_pixbuf_loader_get_pixbuf (loader));
+			}
+			else
+				g_printerr ("Failed to get icon\n");
+#endif
+		}
+		else {
+			g_autoptr(AsIcon) as_icon = NULL;
+
+			as_icon = as_icon_new ();
+			as_icon_set_kind (as_icon, AS_ICON_KIND_REMOTE);
+			as_icon_set_url (as_icon, icon_url);
+			gs_app_set_icon (app, as_icon);
+		}
 		gs_plugin_add_app (list, app);
 		g_printerr ("SNAPPY: +%s\n", gs_app_to_string (app));
 	}
@@ -261,7 +301,6 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-	g_object_unref (plugin->priv->snapd_socket);
 }
 
 static gboolean
