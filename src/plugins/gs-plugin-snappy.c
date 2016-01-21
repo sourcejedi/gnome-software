@@ -34,7 +34,7 @@ struct GsPluginPrivate {
 
 #define SNAPD_SOCKET_PATH "/run/snapd.socket"
 
-typedef gboolean (*AppFilterFunc)(const gchar *id, JsonObject *object);
+typedef gboolean (*AppFilterFunc)(const gchar *id, JsonObject *object, gpointer data);
 
 const gchar *
 gs_plugin_get_name (void)
@@ -95,8 +95,13 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 			return FALSE;
 		body = strstr (data, "\r\n\r\n");
 	}
-	if (!body)
-		return FALSE; // FIXME: Set error
+	if (!body) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "Unable to find header separator in snapd response");
+		return FALSE;
+	}
 
 	/* Body starts after header divider */
 	body += 4;
@@ -104,8 +109,13 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 
 	/* Parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
-	if (!soup_headers_parse_response (data, header_length, headers, NULL, status_code, &reason_phrase))
-		return FALSE; // FIXME: Set error
+	if (!soup_headers_parse_response (data, header_length, headers, NULL, status_code, &reason_phrase)) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response HTTP headers not parseable");
+		return FALSE;
+	}
 
 	/* Work out how much data to follow */
 	if (g_strcmp0 (soup_message_headers_get_one (headers, "Transfer-Encoding"), "chunked") == 0) {
@@ -116,8 +126,13 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 			if (!read_from_snapd (plugin, data, max_data_length, &data_length, error))
 				return FALSE;
 		}
-		if (!chunk_start)
-			return FALSE; // FIXME: Set error
+		if (!chunk_start) {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_FAILED,
+					     "Unable to find chunk header in snapd response");
+			return FALSE;
+		}
 		chunk_length = strtoul (body, NULL, 16);
 		chunk_start += 2;
 		// FIXME: Support multiple chunks
@@ -125,16 +140,26 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 	else {
 		const gchar *value;
 		value = soup_message_headers_get_one (headers, "Content-Length");
-		if (!value)
-			return FALSE; // FIXME: Set error
-		chunk_length = atoi (value);
+		if (!value) {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_FAILED,
+					     "Unable to determine content length of snapd response");
+			return FALSE;
+		}
+		chunk_length = strtoul (value, NULL, 10);
 		chunk_start = body;
 	}
 
 	/* Check if enough space to read chunk */
 	n_required = (chunk_start - data) + chunk_length;
-	if (n_required > max_data_length)
-		return FALSE; // FIXME: Set error
+	if (n_required > max_data_length) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Not enough space for snapd response, require %zi octets, have %zi", n_required, max_data_length);
+		return FALSE;
+	}
 
 	/* Read chunk content */
 	while (data_length < n_required)
@@ -154,7 +179,7 @@ send_snapd_request (GsPlugin *plugin, const gchar *request, guint *status_code, 
 }
 
 static gboolean
-get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, GError **error)
+get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
 	guint status_code;
 	g_autofree gchar *response_type = NULL, *response = NULL;
@@ -166,11 +191,28 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, GError **er
 	if (!send_snapd_request (plugin, "GET /1.0/packages HTTP/1.1\n\n", &status_code, &response_type, &response, NULL, error))
 		return FALSE;
 
-	if (status_code != 200)
-		return FALSE; // FIXME: Set error
+	if (status_code != 200) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %d", status_code);
+		return FALSE;
+	}
 
-	if (g_strcmp0 (response_type, "application/json") != 0)
-		return FALSE; // FIXME: Set error
+	if (!response_type) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd returned no content type");
+		return FALSE;
+	}
+	if (g_strcmp0 (response_type, "application/json") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned unexpected content type %s", response_type);
+		return FALSE;
+	}
 
 	parser = json_parser_new ();
 	if (!json_parser_load_from_data (parser, response, -1, NULL))
@@ -188,7 +230,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, GError **er
 		g_autoptr(GsApp) app = NULL;
 
 		package = json_object_get_object_member (packages, id);
-		if (!filter_func (id, package))
+		if (!filter_func (id, package, user_data))
 			continue;
 
 		app = gs_app_new (id);
@@ -197,7 +239,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, GError **er
 		status = json_object_get_string_member (package, "status");
 		if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
 			const gchar *update_available;
-			update_available = json_object_get_string_member (package, "update_available");
+			update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
 			if (update_available)
 				gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 			else
@@ -223,7 +265,7 @@ gs_plugin_destroy (GsPlugin *plugin)
 }
 
 static gboolean
-is_installed (const gchar *id, JsonObject *object)
+is_installed (const gchar *id, JsonObject *object, gpointer data)
 {
 	const gchar *status = json_object_get_string_member (object, "status");
 	return status && (strcmp (status, "installed") == 0 || strcmp (status, "active") == 0);
@@ -236,7 +278,14 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GError **error)
 {
 	g_printerr ("SNAPPY: gs_plugin_add_installed\n");
-	return get_apps (plugin, list, is_installed, error);
+	return get_apps (plugin, list, is_installed, NULL, error);
+}
+
+static gboolean
+matches_search (const gchar *id, JsonObject *object, gpointer data)
+{
+	gchar **values = data;
+	return TRUE;
 }
 
 gboolean
@@ -246,12 +295,8 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	gint i;
-	g_printerr ("SNAPPY: gs_plugin_add_search (%d)\n", g_strv_length (values));
-	for (i = 0; values[i]; i++)
-		g_printerr ("  %s\n", values[i]);
-	//gs_plugin_add_app (list, app);
-	return TRUE;
+	g_printerr ("SNAPPY: gs_plugin_add_search\n");
+	return get_apps (plugin, list, matches_search, values, error);
 }
 
 gboolean
