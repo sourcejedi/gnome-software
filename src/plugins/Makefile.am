@@ -12,6 +12,7 @@ AM_CPPFLAGS =						\
 	$(FWUPD_CFLAGS)					\
 	$(LIMBA_CFLAGS)					\
 	$(XDG_APP_CFLAGS)				\
+	$(JSON_GLIB_CFLAGS)				\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
 	-DGS_MODULESETDIR=\"$(datadir)/gnome-software/modulesets.d\" \
@@ -223,7 +224,7 @@ libgs_plugin_packagekit_proxy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_snappy_la_SOURCES = gs-plugin-snappy.c
-libgs_plugin_snappy_la_LIBADD = $(GS_PLUGIN_LIBS)
+libgs_plugin_snappy_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS)
 libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
