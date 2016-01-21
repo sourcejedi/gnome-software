@@ -64,6 +64,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_add_installed\n");
 	return FALSE;
 }
 
@@ -76,6 +77,7 @@ gs_plugin_add_sources (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_add_sources\n");
 	return FALSE;
 }
 
@@ -88,6 +90,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_app_install\n");
 	return FALSE;
 }
 
@@ -100,7 +103,19 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_app_remove\n");
 	return FALSE;
+}
+
+gboolean
+gs_plugin_add_search (GsPlugin *plugin,
+		      gchar **values,
+		      GList **list,
+		      GCancellable *cancellable,
+		      GError **error)
+{
+	g_printerr ("SNAPPY: gs_plugin_add_search (%d)\n", g_strv_length (values));
+	return TRUE;
 }
 
 /**
@@ -113,6 +128,7 @@ gs_plugin_add_search_files (GsPlugin *plugin,
                             GCancellable *cancellable,
                             GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_add_search_files\n");
 	return FALSE;
 }
 
@@ -126,5 +142,6 @@ gs_plugin_add_search_what_provides (GsPlugin *plugin,
                                     GCancellable *cancellable,
                                     GError **error)
 {
+	g_printerr ("SNAPPY: gs_plugin_add_search_what_provides\n");
 	return FALSE;
 }
