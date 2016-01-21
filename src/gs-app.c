@@ -2240,7 +2240,6 @@ gs_app_dispose (GObject *object)
 	GsApp *app = GS_APP (object);
 
 	g_clear_object (&app->icon);
-	g_clear_object (&app->reviews);
 	g_clear_object (&app->pixbuf);
 
 	g_clear_pointer (&app->addons, g_ptr_array_unref);
