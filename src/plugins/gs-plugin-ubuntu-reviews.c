@@ -837,11 +837,12 @@ set_package_review (GsPlugin *plugin,
                     GError **error)
 {
 	GVariant *credentials;
-	const gchar *consumer_key;
-	const gchar *consumer_secret;
-	const gchar *token;
-	const gchar *token_secret;
 	CredentialsFoundInfo *info;
+	const gchar *consumer_key = NULL;
+	const gchar *consumer_secret = NULL;
+	const gchar *token = NULL;
+	const gchar *token_secret = NULL;
+	gboolean result;
 
 	/* Write review into database so we can easily access it */
 	// FIXME
@@ -869,10 +870,11 @@ set_package_review (GsPlugin *plugin,
 	    !g_variant_lookup (credentials, "consumer_key", "&s", &consumer_key) ||
 	    !g_variant_lookup (credentials, "consumer_secret", "&s", &consumer_secret) ||
 	    !g_variant_lookup (credentials, "token", "&s", &token) ||
-	    !g_variant_lookup (credentials, "token_secret", "&s", &token_secret)) {
-		if (credentials)
-			g_variant_unref (credentials);
-
+	    !g_variant_lookup (credentials, "token_secret", "&s", &token_secret) ||
+	    !consumer_key[0] ||
+	    !consumer_secret[0] ||
+	    !token[0] ||
+	    !token_secret[0]) {
 		info = g_new (CredentialsFoundInfo, 1);
 		info->plugin = g_object_ref (plugin);
 		info->review = g_object_ref (review);
@@ -883,23 +885,30 @@ set_package_review (GsPlugin *plugin,
 		                          G_CALLBACK (credentials_found),
 		                          info);
 
-		return ubuntu_sso_credentials_call_login_sync (plugin->priv->credentials,
-		                                               "Ubuntu One",
-		                                               g_variant_new_array (G_VARIANT_TYPE ("{ss}"), NULL, 0),
-		                                               NULL,
-		                                               error);
+		result = ubuntu_sso_credentials_call_login_sync (plugin->priv->credentials,
+		                                                 "Ubuntu One",
+		                                                 g_variant_new_array (G_VARIANT_TYPE ("{ss}"), NULL, 0),
+		                                                 NULL,
+		                                                 error);
+
+		if (credentials)
+			g_variant_unref (credentials);
+
+		return result;
 	}
+
+	result = send_review (plugin,
+	                      review,
+	                      package_name,
+	                      consumer_key,
+	                      consumer_secret,
+	                      token,
+	                      token_secret,
+	                      error);
 
 	g_variant_unref (credentials);
 
-	return send_review (plugin,
-	                    review,
-	                    package_name,
-	                    consumer_key,
-	                    consumer_secret,
-	                    token,
-	                    token_secret,
-	                    error);
+	return result;
 }
 
 gboolean
