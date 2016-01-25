@@ -775,7 +775,7 @@ send_review (GsPlugin    *plugin,
 	json_builder_end_object (builder);
 	set_request (msg, builder);
 	g_object_unref (builder);
-	sign_message (msg, OA_HMAC, consumer_key, consumer_secret, token, token_secret);
+	sign_message (msg, OA_PLAINTEXT, consumer_key, consumer_secret, token, token_secret);
 
 	/* Send to the server */
 	status_code = soup_session_send_message (plugin->priv->session, msg);
