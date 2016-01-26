@@ -271,15 +271,18 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		status = json_object_get_string_member (package, "status");
 		if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
 			const gchar *update_available;
+
 			update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
 			if (update_available)
 				gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 			else
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			gs_app_set_size (app, g_ascii_strtoull (json_object_get_string_member (package, "installed_size"), NULL, 10));
 		}
-		else if (g_strcmp0 (status, "not installed") == 0)
+		else if (g_strcmp0 (status, "not installed") == 0) {
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		gs_app_set_size (app, json_object_get_int_member (package, "installed_size"));
+			gs_app_set_size (app, g_ascii_strtoull (json_object_get_string_member (package, "download_size"), NULL, 10));
+		}
 		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
