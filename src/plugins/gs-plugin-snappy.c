@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <gs-plugin.h>
 #include <gio/gunixsocketaddress.h>
 #include <libsoup/soup.h>
@@ -349,10 +350,31 @@ gs_plugin_add_installed (GsPlugin *plugin,
 }
 
 static gboolean
+string_contains (const gchar *string, const gchar *fragment)
+{
+	gint i, j;
+
+	for (i = 0; string[i]; i++) {
+		for (j = 0; fragment[j] && string[i+j] && tolower (string[i+j]) == tolower (fragment[j]); j++);
+		if (fragment[j] == '\0')
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean
 matches_search (const gchar *id, JsonObject *object, gpointer data)
 {
-	gchar **values = data;
-	return TRUE;
+	gchar **search_terms = data;
+	gint i;
+
+	for (i = 0; search_terms[i]; i++)
+		if (string_contains (json_object_get_string_member (object, "name"), search_terms[i]) ||
+		    string_contains (json_object_get_string_member (object, "description"), search_terms[i]))
+			return TRUE;
+
+	return FALSE;
 }
 
 gboolean
