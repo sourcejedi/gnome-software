@@ -265,6 +265,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		JsonObject *package;
 		const gchar *status, *icon_url;
 		g_autoptr(GsApp) app = NULL;
+		g_autoptr(AsIcon) icon = NULL;
 
 		package = json_object_get_object_member (packages, id);
 		if (!filter_func (id, package, user_data))
@@ -311,15 +312,14 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		}
 		else {
 #if 0
-			g_autoptr(AsIcon) as_icon = NULL;
+			g_autoptr(AsIcon) icon = NULL;
 
-			as_icon = as_icon_new ();
-			as_icon_set_kind (as_icon, AS_ICON_KIND_REMOTE);
-			as_icon_set_url (as_icon, icon_url);
-			gs_app_set_icon (app, as_icon);
+			icon = as_icon_new ();
+			as_icon_set_kind (icon, AS_ICON_KIND_REMOTE);
+			as_icon_set_url (icon, icon_url);
+			gs_app_set_icon (app, icon);
 #endif
 		}
-		gs_app_set_pixbuf (app, gdk_pixbuf_new_from_file ("/usr/share/icons/gnome/48x48/mimetypes/package-x-generic.png", NULL));
 		gs_plugin_add_app (list, app);
 	}
 	g_object_unref (parser);
