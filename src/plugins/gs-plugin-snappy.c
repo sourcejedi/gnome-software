@@ -316,7 +316,6 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		}
 		gs_app_set_pixbuf (app, gdk_pixbuf_new_from_file ("/usr/share/icons/gnome/48x48/mimetypes/package-x-generic.png", NULL));
 		gs_plugin_add_app (list, app);
-		g_printerr ("SNAPPY: +%s\n", gs_app_to_string (app));
 	}
 	g_object_unref (parser);
 
