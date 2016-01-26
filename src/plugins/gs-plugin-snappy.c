@@ -28,6 +28,8 @@
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
 
+// snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
+
 struct GsPluginPrivate {
 };
 
@@ -277,6 +279,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		}
 		else if (g_strcmp0 (status, "not installed") == 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+		gs_app_set_size (app, json_object_get_int_member (package, "installed_size"));
 		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
