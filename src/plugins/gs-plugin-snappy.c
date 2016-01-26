@@ -55,12 +55,22 @@ open_snapd_socket (GError **error)
 {
 	GSocket *socket;
 	g_autoptr (GSocketAddress) address = NULL;
+	g_autoptr(GError) sub_error = NULL;
 
-	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, error);
-	if (!socket)
+	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, &sub_error);
+	if (!socket) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to open snapd socket: %s", sub_error->message);
 		return NULL;
+	}
 	address = g_unix_socket_address_new (SNAPD_SOCKET_PATH);
-	if (!g_socket_connect (socket, address, NULL, error)) {
+	if (!g_socket_connect (socket, address, NULL, &sub_error)) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to connect snapd socket: %s", sub_error->message);
 		g_object_unref (socket);
 		return NULL;
 	}
@@ -82,12 +92,11 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 }
 
 static gboolean
-send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, gchar **response_type, gchar **response, gsize *response_length, GError **error)
+send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, gchar **reason_phrase, gchar **response_type, gchar **response, gsize *response_length, GError **error)
 {
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
 	g_autoptr (SoupMessageHeaders) headers = NULL;
-	g_autofree gchar *reason_phrase = NULL;
 	gsize chunk_length, n_required;
 	gchar *chunk_start = NULL;
 
@@ -120,7 +129,7 @@ send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, g
 
 	/* Parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
-	if (!soup_headers_parse_response (data, header_length, headers, NULL, status_code, &reason_phrase)) {
+	if (!soup_headers_parse_response (data, header_length, headers, NULL, status_code, reason_phrase)) {
 		g_set_error_literal (error,
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_FAILED,
@@ -194,30 +203,25 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 {
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
-	g_autofree gchar *response_type = NULL, *response = NULL;
+	g_autofree gchar *reason_phrase, *response_type = NULL, *response = NULL;
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
 	g_autoptr(GError) sub_error = NULL;
 
-	socket = open_snapd_socket (&sub_error);
-	if (!socket) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to open snapd socket: %s", sub_error->message);
+	socket = open_snapd_socket (error);
+	if (!socket)
 		return FALSE;
-	}
 
 	/* Get all the apps */
-	if (!send_snapd_request (socket, "GET /1.0/packages HTTP/1.1\r\n\r\n", &status_code, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, "GET /1.0/packages HTTP/1.1\r\n\r\n", &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
-	if (status_code != 200) {
+	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d", status_code);
+			     "snapd returned status code %d: %s", status_code, reason_phrase);
 		return FALSE;
 	}
 
@@ -293,7 +297,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 			gsize icon_response_length;
 
 			request = g_strdup_printf ("GET %s HTTP/1.1\r\n\r\n", icon_url);
-			if (send_snapd_request (plugin, request, &status_code, NULL, &icon_response, &icon_response_length, NULL)) {
+			if (send_snapd_request (plugin, request, &status_code, &reason_phrase, NULL, &icon_response, &icon_response_length, NULL)) {
 				g_autoptr(GdkPixbufLoader) loader = NULL;
 
 				loader = gdk_pixbuf_loader_new ();
@@ -362,6 +366,37 @@ gs_plugin_add_search (GsPlugin *plugin,
 	return get_apps (plugin, list, matches_search, values, error);
 }
 
+static gboolean
+send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GError **error)
+{
+	g_autofree gchar *content = NULL, *request = NULL;
+	g_autoptr(GSocket) socket = NULL;
+	guint status_code;
+	g_autofree gchar *reason_phrase, *response_type = NULL, *response = NULL;
+
+	socket = open_snapd_socket (error);
+	if (!socket)
+		return FALSE;
+
+	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
+	request = g_strdup_printf ("POST /1.0/packages/%s HTTP/1.1\r\n"
+                                   "Content-Length: %zi\r\n"
+                                   "\r\n"
+                                   "%s", id, strlen (content), content);
+	if (!send_snapd_request (socket, request, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %d: %s", status_code, reason_phrase);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 gboolean
 gs_plugin_app_install (GsPlugin *plugin,
 		       GsApp *app,
@@ -374,7 +409,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
 		return TRUE;
 
-	return TRUE;
+	return send_package_action (plugin, gs_app_get_id (app), "install", error);
 }
 
 gboolean
@@ -389,7 +424,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
 		return TRUE;
 
-	return TRUE;
+	return send_package_action (plugin, gs_app_get_id (app), "remove", error);
 }
 
 #if 0
