@@ -265,7 +265,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		JsonObject *package;
 		const gchar *status, *icon_url;
 		g_autoptr(GsApp) app = NULL;
-		g_autoptr(AsIcon) icon = NULL;
+		g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
 
 		package = json_object_get_object_member (packages, id);
 		if (!filter_func (id, package, user_data))
@@ -294,31 +294,46 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
 		icon_url = json_object_get_string_member (package, "icon");
 		if (g_str_has_prefix (icon_url, "/")) {
-#if 0
+			g_autoptr(GSocket) icon_socket = NULL;
 			g_autofree gchar *request = NULL, *icon_response = NULL;
 			gsize icon_response_length;
 
 			request = g_strdup_printf ("GET %s HTTP/1.1\r\n\r\n", icon_url);
-			if (send_snapd_request (plugin, request, &status_code, &reason_phrase, NULL, &icon_response, &icon_response_length, NULL)) {
+			icon_socket = open_snapd_socket (NULL);
+			if (icon_socket && send_snapd_request (icon_socket, request, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
 				g_autoptr(GdkPixbufLoader) loader = NULL;
 
 				loader = gdk_pixbuf_loader_new ();
 				gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
-				gs_app_set_pixbuf (app, gdk_pixbuf_loader_get_pixbuf (loader));
+				icon_pixbuf = gdk_pixbuf_loader_get_pixbuf (loader);
 			}
 			else
 				g_printerr ("Failed to get icon\n");
-#endif
 		}
 		else {
-#if 0
+			g_autoptr(SoupSession) session = NULL;
+			g_autoptr(SoupMessage) message = NULL;
+			g_autoptr(GdkPixbufLoader) loader = NULL;
+
+			session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
+			                                         "gnome-software",
+			                                         NULL);
+			message = soup_message_new (SOUP_METHOD_GET, icon_url);
+			soup_session_send_message (session, message);
+			loader = gdk_pixbuf_loader_new ();
+			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
+			icon_pixbuf = gdk_pixbuf_loader_get_pixbuf (loader);
+		}
+
+		if (icon_pixbuf)
+			gs_app_set_pixbuf (app, icon_pixbuf);
+		else {
 			g_autoptr(AsIcon) icon = NULL;
 
 			icon = as_icon_new ();
-			as_icon_set_kind (icon, AS_ICON_KIND_REMOTE);
-			as_icon_set_url (icon, icon_url);
+			as_icon_set_kind (icon, AS_ICON_KIND_STOCK);
+			as_icon_set_name (icon, "package-x-generic");
 			gs_app_set_icon (app, icon);
-#endif
 		}
 		gs_plugin_add_app (list, app);
 	}
