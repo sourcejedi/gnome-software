@@ -196,10 +196,16 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
+	g_autoptr(GError) sub_error = NULL;
 
-	socket = open_snapd_socket (error);
-	if (!socket)
+	socket = open_snapd_socket (&sub_error);
+	if (!socket) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to open snapd socket: %s", sub_error->message);
 		return FALSE;
+	}
 
 	/* Get all the apps */
 	if (!send_snapd_request (socket, "GET /1.0/packages HTTP/1.1\r\n\r\n", &status_code, &response_type, &response, NULL, error))
@@ -283,13 +289,16 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 #endif
 		}
 		else {
+#if 0
 			g_autoptr(AsIcon) as_icon = NULL;
 
 			as_icon = as_icon_new ();
 			as_icon_set_kind (as_icon, AS_ICON_KIND_REMOTE);
 			as_icon_set_url (as_icon, icon_url);
 			gs_app_set_icon (app, as_icon);
+#endif
 		}
+		gs_app_set_pixbuf (app, gdk_pixbuf_new_from_file ("/usr/share/icons/gnome/48x48/mimetypes/package-x-generic.png", NULL));
 		gs_plugin_add_app (list, app);
 		g_printerr ("SNAPPY: +%s\n", gs_app_to_string (app));
 	}
