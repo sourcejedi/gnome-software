@@ -235,10 +235,20 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 	}
 
 	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, response, -1, NULL))
-		return 1;
-	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser)))
-		return 1;
+	if (!json_parser_load_from_data (parser, response, -1, &sub_error)) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to parse snapd response: %s", sub_error->message);
+		return FALSE;
+	}
+	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response does is not a valid JSON object");
+		return FALSE;
+	}
 	root = json_node_get_object (json_parser_get_root (parser));
 	result = json_object_get_object_member (root, "result");
 	packages = json_object_get_object_member (result, "packages");
