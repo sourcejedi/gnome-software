@@ -92,6 +92,7 @@ struct _GsShellDetails
 	GtkWidget		*label_details_info_text;
 	GtkWidget		*list_box_addons;
 	GtkWidget		*box_reviews;
+	GtkWidget		*button_review;
 	GtkWidget		*list_box_reviews;
 	GtkWidget		*scrolledwindow_details;
 	GtkWidget		*spinner_details;
@@ -962,6 +963,9 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 
 	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 
+	/* If you haven't reviewed it, do it now */
+	gtk_widget_set_visible (self->button_review, !gs_app_get_self_review (self->app));
+
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
 		GsAppReview *review;
@@ -1336,18 +1340,16 @@ gs_shell_details_app_set_review_cb (GObject *source,
 }
 
 /**
- * gs_shell_details_rating_changed_cb:
+ * gs_shell_details_write_review_cb:
  **/
 static void
-gs_shell_details_rating_changed_cb (GsStarWidget *star,
-				    guint rating,
-				    GsShellDetails *self)
+gs_shell_details_write_review_cb (GtkButton *button,
+				  GsShellDetails *self)
 {
 	GtkWidget *dialog;
 	GtkResponseType response;
 
 	dialog = gs_app_review_dialog_new ();
-	gs_app_review_dialog_set_rating (GS_APP_REVIEW_DIALOG (dialog), rating);
 
 	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
 	response = gtk_dialog_run (GTK_DIALOG (dialog));
@@ -1375,7 +1377,16 @@ gs_shell_details_rating_changed_cb (GsStarWidget *star,
 						   self);
 	}
 	gtk_widget_destroy (dialog);
-#if 0
+}
+
+/**
+ * gs_shell_details_rating_changed_cb:
+ **/
+static void
+gs_shell_details_rating_changed_cb (GsStarWidget *star,
+				    guint rating,
+				    GsShellDetails *self)
+{
 	g_debug ("%s rating changed from %i%% to %i%%",
 		 gs_app_get_id (self->app),
 		 gs_app_get_rating (self->app),
@@ -1388,7 +1399,6 @@ gs_shell_details_rating_changed_cb (GsStarWidget *star,
 					   self->cancellable,
 					   gs_shell_details_app_set_ratings_cb,
 					   self);
-#endif
 }
 
 static void
@@ -1426,6 +1436,9 @@ gs_shell_details_setup (GsShellDetails *self,
 	/* Show review widgets if we have plugins that provide them */
 	if (gs_plugin_loader_get_supports_reviews (plugin_loader))
 		gtk_widget_set_visible (self->box_reviews, TRUE);
+	g_signal_connect (self->button_review, "clicked",
+			  G_CALLBACK (gs_shell_details_write_review_cb),
+			  self);
 
 	/* set up star ratings */
 	self->star = gs_star_widget_new ();
@@ -1537,6 +1550,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_info_text);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_addons);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_reviews);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, button_review);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_reviews);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, scrolledwindow_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_details);

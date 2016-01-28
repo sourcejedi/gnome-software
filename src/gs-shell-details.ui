@@ -1144,6 +1144,16 @@
                           </object>
                         </child>
                         <child>
+                          <object class="GtkButton" id="button_review">
+                            <property name="use_underline">True</property>
+                            <property name="label" translatable="yes">_Write Review</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="halign">start</property>
+                            <property name="valign">start</property>
+                          </object>
+                        </child>
+                        <child>
                           <object class="GtkListBox" id="list_box_reviews">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
