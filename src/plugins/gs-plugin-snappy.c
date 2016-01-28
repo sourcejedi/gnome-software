@@ -204,7 +204,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 {
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
-	g_autofree gchar *reason_phrase, *response_type = NULL, *response = NULL;
+	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
