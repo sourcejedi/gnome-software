@@ -93,8 +93,19 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 }
 
 static gboolean
-send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, gchar **reason_phrase, gchar **response_type, gchar **response, gsize *response_length, GError **error)
+send_snapd_request (GSocket *socket,
+		    const gchar *method,
+		    const gchar *path,
+		    const gchar *content,
+		    guint *status_code,
+		    gchar **reason_phrase,
+		    gchar **response_type,
+		    gchar **response,
+		    gsize *response_length,
+		    GError **error)
 {
+	g_autoptr (GString) request = NULL;
+	gssize n_written;
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
 	g_autoptr (SoupMessageHeaders) headers = NULL;
@@ -104,9 +115,17 @@ send_snapd_request (GSocket *socket, const gchar *request, guint *status_code, g
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
 
+	request = g_string_new ("");
+	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
+	g_string_append (request, "Host: gnome-software\r\n");
+	if (content)
+		g_string_append_printf (request, "Content-Length: %zi\r\n", strlen (content));
+	g_string_append (request, "\r\n");
+	if (content)
+		g_string_append (request, content);
+
 	/* Send HTTP request */
-	gssize n_written;
-	n_written = g_socket_send (socket, request, strlen (request), NULL, error);
+	n_written = g_socket_send (socket, request->str, request->len, NULL, error);
 	if (n_written < 0)
 		return FALSE;
 
@@ -215,7 +234,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		return FALSE;
 
 	/* Get all the apps */
-	if (!send_snapd_request (socket, "GET /1.0/packages HTTP/1.1\r\n\r\n", &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, "GET", "/2.0/snaps", NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -258,7 +277,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 	}
 	root = json_node_get_object (json_parser_get_root (parser));
 	result = json_object_get_object_member (root, "result");
-	packages = json_object_get_object_member (result, "packages");
+	packages = json_object_get_object_member (result, "snaps");
 	package_list = json_object_get_members (packages);
 	for (link = package_list; link; link = link->next) {
 		const gchar *id = link->data;
@@ -283,11 +302,11 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 				gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 			else
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-			gs_app_set_size (app, g_ascii_strtoull (json_object_get_string_member (package, "installed_size"), NULL, 10));
+			gs_app_set_size (app, json_object_get_int_member (package, "installed_size"));
 		}
 		else if (g_strcmp0 (status, "not installed") == 0) {
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-			gs_app_set_size (app, g_ascii_strtoull (json_object_get_string_member (package, "download_size"), NULL, 10));
+			gs_app_set_size (app, json_object_get_int_member (package, "download_size"));
 		}
 		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
@@ -295,12 +314,11 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		icon_url = json_object_get_string_member (package, "icon");
 		if (g_str_has_prefix (icon_url, "/")) {
 			g_autoptr(GSocket) icon_socket = NULL;
-			g_autofree gchar *request = NULL, *icon_response = NULL;
+			g_autofree gchar *icon_response = NULL;
 			gsize icon_response_length;
 
-			request = g_strdup_printf ("GET %s HTTP/1.1\r\n\r\n", icon_url);
 			icon_socket = open_snapd_socket (NULL);
-			if (icon_socket && send_snapd_request (icon_socket, request, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+			if (icon_socket && send_snapd_request (icon_socket, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
 				g_autoptr(GdkPixbufLoader) loader = NULL;
 
 				loader = gdk_pixbuf_loader_new ();
@@ -316,8 +334,8 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
-			                                         "gnome-software",
-			                                         NULL);
+								 "gnome-software",
+								 NULL);
 			message = soup_message_new (SOUP_METHOD_GET, icon_url);
 			soup_session_send_message (session, message);
 			loader = gdk_pixbuf_loader_new ();
@@ -406,7 +424,7 @@ gs_plugin_add_search (GsPlugin *plugin,
 static gboolean
 send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GError **error)
 {
-	g_autofree gchar *content = NULL, *request = NULL;
+	g_autofree gchar *content = NULL, *path = NULL;
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
 	g_autofree gchar *reason_phrase, *response_type = NULL, *response = NULL;
@@ -416,11 +434,8 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		return FALSE;
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
-	request = g_strdup_printf ("POST /1.0/packages/%s HTTP/1.1\r\n"
-                                   "Content-Length: %zi\r\n"
-                                   "\r\n"
-                                   "%s", id, strlen (content), content);
-	if (!send_snapd_request (socket, request, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	path = g_strdup_printf ("/2.0/snaps/%s", id);
+	if (!send_snapd_request (socket, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
