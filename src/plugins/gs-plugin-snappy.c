@@ -117,7 +117,7 @@ send_snapd_request (GSocket *socket,
 
 	request = g_string_new ("");
 	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
-	g_string_append (request, "Host: gnome-software\r\n");
+	g_string_append (request, "Host:\r\n");
 	if (content)
 		g_string_append_printf (request, "Content-Length: %zi\r\n", strlen (content));
 	g_string_append (request, "\r\n");
