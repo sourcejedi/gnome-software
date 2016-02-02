@@ -438,7 +438,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 	if (!send_snapd_request (socket, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
-	if (status_code != SOUP_STATUS_OK) {
+	if (status_code != SOUP_STATUS_ACCEPTED) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
