@@ -304,7 +304,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 			gs_app_set_size (app, json_object_get_int_member (package, "installed_size"));
 		}
-		else if (g_strcmp0 (status, "not installed") == 0) {
+		else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "removed") == 0) {
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 			gs_app_set_size (app, json_object_get_int_member (package, "download_size"));
 		}
