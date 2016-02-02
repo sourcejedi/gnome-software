@@ -323,7 +323,8 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 
 				loader = gdk_pixbuf_loader_new ();
 				gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
-				icon_pixbuf = gdk_pixbuf_loader_get_pixbuf (loader);
+				gdk_pixbuf_loader_close (loader, NULL);
+				icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 			}
 			else
 				g_printerr ("Failed to get icon\n");
@@ -340,7 +341,8 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 			soup_session_send_message (session, message);
 			loader = gdk_pixbuf_loader_new ();
 			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
-			icon_pixbuf = gdk_pixbuf_loader_get_pixbuf (loader);
+			gdk_pixbuf_loader_close (loader, NULL);
+			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 		}
 
 		if (icon_pixbuf)
