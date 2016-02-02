@@ -448,6 +448,8 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		return FALSE;
 	}
 
+	// FIXME: Need to poll for status - may stil have failed
+
 	return TRUE;
 }
 
@@ -457,13 +459,19 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
+	gboolean result;
+
 	g_printerr ("SNAPPY: gs_plugin_app_install\n");
 
 	/* We can only install apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
 		return TRUE;
 
-	return send_package_action (plugin, gs_app_get_id (app), "install", error);
+	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
+	result = send_package_action (plugin, gs_app_get_id (app), "install", error);
+	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+
+	return result;
 }
 
 gboolean
@@ -472,11 +480,17 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
+	gboolean result;
+
 	g_printerr ("SNAPPY: gs_plugin_app_remove\n");
 
 	/* We can only remove apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
 		return TRUE;
 
-	return send_package_action (plugin, gs_app_get_id (app), "remove", error);
+	gs_app_set_state (app, AS_APP_STATE_REMOVING);
+	result = send_package_action (plugin, gs_app_get_id (app), "remove", error);
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+
+	return result;
 }
