@@ -291,6 +291,8 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
 	if (app->rating != -1)
 		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+	if (app->self_review != NULL)
+		g_string_append_printf (str, "\tself-review:\t%p\n", app->self_review);
 	if (app->reviews != NULL)
 		g_string_append_printf (str, "\treviews:\t%p\n", app->reviews);
 	if (app->pixbuf != NULL)
