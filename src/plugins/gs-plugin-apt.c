@@ -212,6 +212,13 @@ gs_plugin_add_installed (GsPlugin *plugin,
 	return TRUE;
 }
 
+typedef struct
+{
+	GMainLoop *loop;
+	GsApp *app;
+	gchar **result;
+} TransactionData;
+
 static void
 transaction_property_changed_cb (GDBusConnection *connection,
 				 const gchar *sender_name,
@@ -221,13 +228,13 @@ transaction_property_changed_cb (GDBusConnection *connection,
 				 GVariant *parameters,
 				 gpointer user_data)
 {
-	GsApp *app = user_data;
+	TransactionData *data = user_data;
 	const gchar *name;
 	g_autoptr(GVariant) value = NULL;
 
 	g_variant_get (parameters, "(&sv)", &name, &value);
 	if (strcmp (name, "Progress") == 0)
-		gs_app_set_progress (app, g_variant_get_int32 (value));
+		gs_app_set_progress (data->app, g_variant_get_int32 (value));
 }
 
 static void
@@ -239,14 +246,11 @@ transaction_finished_cb (GDBusConnection *connection,
 			 GVariant *parameters,
 			 gpointer user_data)
 {
-	GMainLoop *loop = user_data;
-	const gchar *result;
+	TransactionData *data = user_data;
 
-	g_variant_get (parameters, "(&s)", &result);
-	g_printerr ("FINISHED %s\n", result);
-	// FIXME: Check result is "exit-success"
+	g_variant_get (parameters, "(s)", data->result);
 
-	g_main_loop_quit (loop);
+	g_main_loop_quit (data->loop);
 }
 
 static gboolean
@@ -255,8 +259,10 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 	g_autoptr(GDBusConnection) conn = NULL;
 	g_autoptr(GVariant) result = NULL;
 	GVariantBuilder builder;
-	gchar *transaction_path = NULL;
+	g_autofree gchar *transaction_path = NULL, *transaction_result = NULL;
 	g_autoptr(GMainLoop) loop = NULL;
+	guint property_signal, finished_signal;
+	TransactionData data;
 
 	conn = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, error);
 	if (conn == NULL)
@@ -282,34 +288,36 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 
 	loop = g_main_loop_new (NULL, FALSE);
 
-	// FIXME: Keep handlers to remove later
-	g_dbus_connection_signal_subscribe (conn,
-					    "org.debian.apt",
-					    "org.debian.apt.transaction",
-					    "PropertyChanged",
-					    transaction_path,
-					    NULL,
-					    G_DBUS_SIGNAL_FLAGS_NONE,
-					    transaction_property_changed_cb,
-					    app,
-					    NULL);
-	g_dbus_connection_signal_subscribe (conn,
-					    "org.debian.apt",
-					    "org.debian.apt.transaction",
-					    "Finished",
-					    transaction_path,
-					    NULL,
-					    G_DBUS_SIGNAL_FLAGS_NONE,
-					    transaction_finished_cb,
-					    loop,
-					    NULL);
+	data.app = app;
+	data.loop = loop;
+	data.result = &transaction_result;
+	property_signal = g_dbus_connection_signal_subscribe (conn,
+	                                                      "org.debian.apt",
+	                                                      "org.debian.apt.transaction",
+	                                                      "PropertyChanged",
+	                                                      transaction_path,
+	                                                      NULL,
+	                                                      G_DBUS_SIGNAL_FLAGS_NONE,
+	                                                      transaction_property_changed_cb,
+	                                                      &data,
+	                                                      NULL);
+	finished_signal = g_dbus_connection_signal_subscribe (conn,
+	                                                      "org.debian.apt",
+	                                                      "org.debian.apt.transaction",
+	                                                      "Finished",
+	                                                      transaction_path,
+	                                                      NULL,
+	                                                      G_DBUS_SIGNAL_FLAGS_NONE,
+	                                                      transaction_finished_cb,
+	                                                      &data,
+	                                                      NULL);
 	result = g_dbus_connection_call_sync (conn,
 					      "org.debian.apt",
 					      transaction_path,
 					      "org.debian.apt.transaction",
 					      "Run",
 					      g_variant_new ("()"),
-					      G_VARIANT_TYPE (""),
+					      G_VARIANT_TYPE ("()"),
 					      G_DBUS_CALL_FLAGS_NONE,
 					      -1,
 					      NULL,
@@ -318,8 +326,16 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 		return FALSE;
 
 	g_main_loop_run (loop);
+	g_dbus_connection_signal_unsubscribe (conn, property_signal);
+	g_dbus_connection_signal_unsubscribe (conn, finished_signal);
 
-	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	if (g_strcmp0 (transaction_result, "exit-success") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "apt trasaction returned result %s", transaction_result);
+		return FALSE;
+	}
 
 	return TRUE;
 }
