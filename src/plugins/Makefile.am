@@ -28,6 +28,7 @@ AM_CPPFLAGS =						\
 
 plugindir = $(libdir)/gs-plugins-${GS_PLUGIN_API_VERSION}
 plugin_LTLIBRARIES =					\
+	libgs_plugin_apt.la				\
 	libgs_plugin_appstream.la			\
 	libgs_plugin_dummy.la				\
 	libgs_plugin_hardcoded-featured.la		\
