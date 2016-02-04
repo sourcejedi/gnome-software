@@ -83,8 +83,6 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, 
 			continue;
 
 		if (g_str_has_prefix (lines[i], status_prefix)) {
-			if (strcmp (gs_app_get_source_default (app), "galculator") == 0)
-                                g_printerr ("XXX '%s'\n", lines[i] + strlen (status_prefix));
 			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed"))
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		} else if (g_str_has_prefix (lines[i], installed_size_prefix)) {
@@ -112,7 +110,7 @@ gs_plugin_refine (GsPlugin *plugin,
 	gboolean known_apps = FALSE;
 	g_autofree gchar **dpkg_argv = NULL, **cache_argv = NULL, *dpkg_stdout = NULL, *cache_stdout = NULL, *dpkg_stderr = NULL, *cache_stderr = NULL;
 
-	g_printerr ("APT: gs_plugin_refine");
+	/*g_printerr ("APT: gs_plugin_refine");
 	for (link = *list; link; link = link->next) {
 		GsApp *app = GS_APP (link->data);
 		g_printerr (" %s", gs_app_get_id (app));
@@ -127,7 +125,7 @@ gs_plugin_refine (GsPlugin *plugin,
 		g_printerr (" HISTORY");
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0)
 		g_printerr (" UPDATE_DETAILS");
-	g_printerr ("\n");
+	g_printerr ("\n");*/
 
 	// Get the information from the cache
 	dpkg_argv_array = g_ptr_array_new ();
@@ -352,7 +350,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
-	g_printerr ("APT: gs_plugin_app_install\n");
+	//g_printerr ("APT: gs_plugin_app_install\n");
 
 	if (!gs_app_get_source_default (app))
 		return TRUE;
@@ -374,7 +372,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	g_printerr ("APT: gs_plugin_app_remove\n");
+	//g_printerr ("APT: gs_plugin_app_remove\n");
 
 	if (!gs_app_get_source_default (app))
 		return TRUE;
