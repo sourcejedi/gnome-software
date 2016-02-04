@@ -722,12 +722,6 @@ set_request (SoupMessage *message, JsonBuilder *builder)
 	g_object_unref (generator);
 }
 
-gboolean
-gs_plugin_get_supports_reviews (GsPlugin *plugin)
-{
-	return TRUE;
-}
-
 static gboolean
 send_review (GsPlugin    *plugin,
              GsAppReview *review,
