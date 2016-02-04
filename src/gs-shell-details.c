@@ -1364,7 +1364,6 @@ gs_shell_details_write_review_cb (GtkButton *button,
 		gs_app_review_set_text (review, text);
 		gs_app_review_set_rating (review, gs_app_review_dialog_get_rating (GS_APP_REVIEW_DIALOG (dialog)));
 		gs_app_review_set_version (review, gs_app_get_version (self->app));
-		gs_app_review_set_reviewer (review, "Joe Bloggs"); // FIXME
 		now = g_date_time_new_now_local ();
 		gs_app_review_set_date (review, now);
 
