@@ -45,24 +45,23 @@ gs_app_review_row_refresh (GsAppReviewRow *row)
 {
 	const gchar *reviewer;
 	GDateTime *date;
-	gchar *text;
+	g_autofree gchar *text;
 
 	gs_star_widget_set_rating (GS_STAR_WIDGET (row->stars), gs_app_review_get_rating (row->review));
 	reviewer = gs_app_review_get_reviewer (row->review);
 	date = gs_app_review_get_date (row->review);
-	if (reviewer && date) {
+	if (reviewer != NULL && date != NULL) {
 		gchar *date_text = g_date_time_format (date, "%e %B %Y");
 		text = g_strdup_printf ("%s, %s", reviewer, date_text);
 		g_free (date_text);
 	}
-	else if (reviewer)
+	else if (reviewer != NULL)
 		text = g_strdup (reviewer);
-	else if (date)
+	else if (date != NULL)
 		text = g_date_time_format (date, "%e %B %Y");
 	else
 		text = g_strdup ("");
 	gtk_label_set_text (GTK_LABEL (row->author_label), text);
-	g_free (text);
 	gtk_label_set_text (GTK_LABEL (row->summary_label), gs_app_review_get_summary (row->review));
 	gtk_label_set_text (GTK_LABEL (row->text_label), gs_app_review_get_text (row->review));
 }
@@ -84,17 +83,6 @@ gs_app_review_row_notify_props_changed_cb (GsApp *app,
 					   GsAppReviewRow *row)
 {
 	g_idle_add (gs_app_review_row_refresh_idle, g_object_ref (row));
-}
-
-static void
-gs_app_review_row_set_review (GsAppReviewRow *row, GsAppReview *review)
-{
-	row->review = g_object_ref (review);
-
-	g_signal_connect_object (row->review, "notify::state",
-				 G_CALLBACK (gs_app_review_row_notify_props_changed_cb),
-				 row, 0);
-	gs_app_review_row_refresh (row);
 }
 
 static void
@@ -141,14 +129,18 @@ gs_app_review_row_class_init (GsAppReviewRowClass *klass)
 GtkWidget *
 gs_app_review_row_new (GsAppReview *review)
 {
-	GtkWidget *row;
+	GsAppReviewRow *row;
 
 	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
 
 	row = g_object_new (GS_TYPE_APP_REVIEW_ROW, NULL);
-	gs_app_review_row_set_review (GS_APP_REVIEW_ROW (row), review);
+	row->review = g_object_ref (review);
+	g_signal_connect_object (row->review, "notify::state",
+				 G_CALLBACK (gs_app_review_row_notify_props_changed_cb),
+				 row, 0);
+	gs_app_review_row_refresh (row);
 
-	return row;
+	return GTK_WIDGET (row);
 }
 
 /* vim: set noexpandtab: */
