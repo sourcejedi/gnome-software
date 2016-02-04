@@ -2838,6 +2838,7 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	GsPluginGetNameFunc plugin_name = NULL;
 	GsPluginGetDepsFunc plugin_deps = NULL;
 	GsPlugin *plugin = NULL;
+	gpointer set_review;
 
 	module = g_module_open (filename, 0);
 	if (module == NULL) {
@@ -2864,7 +2865,7 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	/* Check if this plugin can do reviews */
 	if (g_module_symbol (module,
 	                     "gs_plugin_app_set_review",
-	                     NULL))
+	                     &set_review))
 		priv->supports_reviews = TRUE;
 
 	/* print what we know */
