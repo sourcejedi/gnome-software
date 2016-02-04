@@ -60,7 +60,7 @@ find_app (GList **list, const gchar *source)
 }
 
 static void
-parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list)
+parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, gboolean mark_available)
 {
 	gchar **lines;
 	gint i;
@@ -74,7 +74,7 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list)
 	for (app = NULL, i = 0; lines[i]; i++) {
 		if (g_str_has_prefix (lines[i], package_prefix)) {
 			app = find_app (list, lines[i] + strlen (package_prefix));
-			if (app && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
+			if (app && mark_available && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
 				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 		}
 
@@ -83,6 +83,8 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list)
 			continue;
 
 		if (g_str_has_prefix (lines[i], status_prefix)) {
+			if (strcmp (gs_app_get_source_default (app), "galculator") == 0)
+                                g_printerr ("XXX '%s'\n", lines[i] + strlen (status_prefix));
 			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed"))
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		} else if (g_str_has_prefix (lines[i], installed_size_prefix)) {
@@ -159,8 +161,8 @@ gs_plugin_refine (GsPlugin *plugin,
 	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_stdout, &cache_stderr, NULL, error))
 		return FALSE;
 
-	parse_package_info (dpkg_stdout, flags, list);
-	parse_package_info (cache_stdout, flags, list);
+	parse_package_info (dpkg_stdout, flags, list, FALSE);
+	parse_package_info (cache_stdout, flags, list, TRUE);
 
 	return TRUE;
 }
