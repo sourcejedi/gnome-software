@@ -109,7 +109,6 @@ gs_plugin_refine (GsPlugin *plugin,
 	GPtrArray *dpkg_argv_array, *cache_argv_array;
 	gboolean known_apps = FALSE;
 	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **dpkg_argv = NULL, **cache_argv = NULL;
-	gint exit_status;
 
 	g_printerr ("APT: gs_plugin_refine");
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
@@ -139,10 +138,6 @@ gs_plugin_refine (GsPlugin *plugin,
 		if (!source)
 			continue;
 
-		// If state already known then nothing to add
-		//if (gs_app_get_state (app) != AS_APP_STATE_UNKNOWN)
-		//	continue;
-
 		known_apps = TRUE;
 		g_ptr_array_add (dpkg_argv_array, (gpointer) source);
 		g_ptr_array_add (cache_argv_array, (gpointer) source);
@@ -155,27 +150,10 @@ gs_plugin_refine (GsPlugin *plugin,
 	if (!known_apps)
 		return TRUE;
 
-	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, &exit_status, error))
+	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, NULL, error))
 		return FALSE;
-#if 0
-	// FIXME: Disabled since dpkg --status will return error for uninstalled packages
-	if (exit_status != EXIT_SUCCESS) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "dpkg --status returned status %d", exit_status);
+	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_output, NULL, NULL, error))
 		return FALSE;
-	}
-#endif
-	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_output, NULL, &exit_status, error))
-		return FALSE;
-	if (exit_status != EXIT_SUCCESS) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "apt-cache show returned status %d", exit_status);
-		return FALSE;
-	}
 
 	parse_package_info (dpkg_output, flags, list);
 	parse_package_info (cache_output, flags, list);
