@@ -108,7 +108,7 @@ gs_plugin_refine (GsPlugin *plugin,
 	GList *link;
 	GPtrArray *dpkg_argv_array, *cache_argv_array;
 	gboolean known_apps = FALSE;
-	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **dpkg_argv = NULL, **cache_argv = NULL;
+	g_autofree gchar **dpkg_argv = NULL, **cache_argv = NULL, *dpkg_stdout = NULL, *cache_stdout = NULL, *dpkg_stderr = NULL, *cache_stderr = NULL;
 
 	g_printerr ("APT: gs_plugin_refine");
 	for (link = *list; link; link = link->next) {
@@ -154,13 +154,13 @@ gs_plugin_refine (GsPlugin *plugin,
 	if (!known_apps)
 		return TRUE;
 
-	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, NULL, error))
+	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_stdout, &dpkg_stderr, NULL, error))
 		return FALSE;
-	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_output, NULL, NULL, error))
+	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_stdout, &cache_stderr, NULL, error))
 		return FALSE;
 
-	parse_package_info (dpkg_output, flags, list);
-	parse_package_info (cache_output, flags, list);
+	parse_package_info (dpkg_stdout, flags, list);
+	parse_package_info (cache_stdout, flags, list);
 
 	return TRUE;
 }
