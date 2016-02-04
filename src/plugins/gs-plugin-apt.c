@@ -59,64 +59,19 @@ find_app (GList **list, const gchar *source)
 	return NULL;
 }
 
-gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		  GList **list,
-		  GsPluginRefineFlags flags,
-		  GCancellable *cancellable,
-		  GError **error)
+static void
+parse_package_info (const gchar *info, GList **list)
 {
-	GList *link;
-	GPtrArray *argv_array;
-	gboolean known_apps = FALSE;
-	g_autofree gchar *output = NULL, **argv = NULL;
-	gint exit_status;
 	gchar **lines;
 	gint i;
 	gboolean is_installed;
 	GsApp *app = NULL;
 	const gchar *package_prefix = "Package: ";
 	const gchar *status_prefix = "Status: ";
+	const gchar *installed_size_prefix = "Installed-Size: ";
 	const gchar *version_prefix = "Version: ";
 
-	g_printerr ("APT: gs_plugin_refine\n");
-
-	// Get the information from the cache
-	argv_array = g_ptr_array_new ();
-	g_ptr_array_add (argv_array, (gpointer) "apt-cache");
-	g_ptr_array_add (argv_array, (gpointer) "show");
-	for (link = *list; link; link = link->next) {
-		const gchar *source;
-
-		app = GS_APP (link->data);
-
-		source = gs_app_get_source_default (app);
-		if (!source)
-			continue;
-
-		// If state already known then nothing to add
-		//if (gs_app_get_state (app) != AS_APP_STATE_UNKNOWN)
-		//	continue;
-
-		known_apps = TRUE;
-		g_ptr_array_add (argv_array, (gpointer) source);
-	}
-	g_ptr_array_add (argv_array, NULL);
-	argv = (gchar **) g_ptr_array_free (argv_array, FALSE);
-	if (!known_apps)
-		return TRUE;
-	if (!g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &output, NULL, &exit_status, error))
-		return FALSE;
-	if (exit_status != EXIT_SUCCESS) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "apt-cache show returned status %d", exit_status);
-		return FALSE;
-	}
-
-	// Parse information
-	lines = g_strsplit (output, "\n", -1);
+	lines = g_strsplit (info, "\n", -1);
 	is_installed = FALSE;
 	for (app = NULL, i = 0; lines[i]; i++) {
 		//g_printerr ("'%s'\n", lines[i]);
@@ -136,12 +91,12 @@ gs_plugin_refine (GsPlugin *plugin,
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 				is_installed = TRUE;
 			}
+		} else if (g_str_has_prefix (lines[i], installed_size_prefix)) {
+			gs_app_set_size (app, atoi (lines[i] + strlen (installed_size_prefix)) * 1024);
 		} else if (g_str_has_prefix (lines[i], version_prefix)) {
 			if (is_installed) {
-				g_printerr ("%s update %s\n", gs_app_get_id (app), lines[i] + strlen (version_prefix));
 				gs_app_set_version (app, lines[i] + strlen (version_prefix));
 			} else {// FIXME: Could be multiple versions available, could be versions older than installed
-				g_printerr ("%s update %s\n", gs_app_get_id (app), lines[i] + strlen (version_prefix));
 				//gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 				gs_app_set_update_version (app, lines[i] + strlen (version_prefix));
 			}
@@ -149,6 +104,58 @@ gs_plugin_refine (GsPlugin *plugin,
 	}
 
 	g_strfreev (lines);
+}
+
+gboolean
+gs_plugin_refine (GsPlugin *plugin,
+		  GList **list,
+		  GsPluginRefineFlags flags,
+		  GCancellable *cancellable,
+		  GError **error)
+{
+	GList *link;
+	GPtrArray *dpkg_argv_array, *cache_argv_array;
+	gboolean known_apps = FALSE;
+	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **argv = NULL;
+	gint exit_status;
+
+	g_printerr ("APT: gs_plugin_refine\n");
+
+	// Get the information from the cache
+	dpkg_argv_array = g_ptr_array_new ();
+	g_ptr_array_add (dpkg_argv_array, (gpointer) "dpkg");
+	g_ptr_array_add (dpkg_argv_array, (gpointer) "--status");
+	for (link = *list; link; link = link->next) {
+		GsApp *app = GS_APP (link->data);
+		const gchar *source;
+
+		source = gs_app_get_source_default (app);
+		if (!source)
+			continue;
+
+		// If state already known then nothing to add
+		//if (gs_app_get_state (app) != AS_APP_STATE_UNKNOWN)
+		//	continue;
+
+		known_apps = TRUE;
+		g_ptr_array_add (dpkg_argv_array, (gpointer) source);
+	}
+	g_ptr_array_add (dpkg_argv_array, NULL);
+	argv = (gchar **) g_ptr_array_free (dpkg_argv_array, FALSE);
+	if (!known_apps)
+		return TRUE;
+	if (!g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, &exit_status, error))
+		return FALSE;
+	if (exit_status != EXIT_SUCCESS) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "apt-cache show returned status %d", exit_status);
+		return FALSE;
+	}
+
+	parse_package_info (dpkg_output, list);
+	//parse_package_info (cache_output, list);
 
 	return TRUE;
 }
