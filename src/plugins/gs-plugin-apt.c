@@ -111,6 +111,10 @@ gs_plugin_refine (GsPlugin *plugin,
 	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **dpkg_argv = NULL, **cache_argv = NULL;
 
 	g_printerr ("APT: gs_plugin_refine");
+	for (link = *list; link; link = link->next) {
+		GsApp *app = GS_APP (link->data);
+		g_printerr (" %s", gs_app_get_id (app));
+	}
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
 		g_printerr (" LICENCE");
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0)
