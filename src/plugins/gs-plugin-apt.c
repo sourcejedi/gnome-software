@@ -60,11 +60,10 @@ find_app (GList **list, const gchar *source)
 }
 
 static void
-parse_package_info (const gchar *info, GList **list)
+parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list)
 {
 	gchar **lines;
 	gint i;
-	gboolean is_installed;
 	GsApp *app = NULL;
 	const gchar *package_prefix = "Package: ";
 	const gchar *status_prefix = "Status: ";
@@ -72,14 +71,11 @@ parse_package_info (const gchar *info, GList **list)
 	const gchar *version_prefix = "Version: ";
 
 	lines = g_strsplit (info, "\n", -1);
-	is_installed = FALSE;
 	for (app = NULL, i = 0; lines[i]; i++) {
-		//g_printerr ("'%s'\n", lines[i]);
 		if (g_str_has_prefix (lines[i], package_prefix)) {
 			app = find_app (list, lines[i] + strlen (package_prefix));
 			if (app && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
 				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-			is_installed = FALSE;
 		}
 
 		// Skip other fields until we find an app we know
@@ -87,19 +83,15 @@ parse_package_info (const gchar *info, GList **list)
 			continue;
 
 		if (g_str_has_prefix (lines[i], status_prefix)) {
-			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed")) {
+			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed"))
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-				is_installed = TRUE;
-			}
 		} else if (g_str_has_prefix (lines[i], installed_size_prefix)) {
-			gs_app_set_size (app, atoi (lines[i] + strlen (installed_size_prefix)) * 1024);
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0)
+				gs_app_set_size (app, atoi (lines[i] + strlen (installed_size_prefix)) * 1024);
 		} else if (g_str_has_prefix (lines[i], version_prefix)) {
-			if (is_installed) {
+			// FIXME: apt-cache contains multiple versions - pick the best
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0 && gs_app_get_version (app) == NULL)
 				gs_app_set_version (app, lines[i] + strlen (version_prefix));
-			} else {// FIXME: Could be multiple versions available, could be versions older than installed
-				//gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
-				gs_app_set_update_version (app, lines[i] + strlen (version_prefix));
-			}
 		}
 	}
 
@@ -116,15 +108,29 @@ gs_plugin_refine (GsPlugin *plugin,
 	GList *link;
 	GPtrArray *dpkg_argv_array, *cache_argv_array;
 	gboolean known_apps = FALSE;
-	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **argv = NULL;
+	g_autofree gchar *dpkg_output = NULL, *cache_output = NULL, **dpkg_argv = NULL, **cache_argv = NULL;
 	gint exit_status;
 
-	g_printerr ("APT: gs_plugin_refine\n");
+	g_printerr ("APT: gs_plugin_refine");
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
+		g_printerr (" LICENCE");
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0)
+		g_printerr (" SIZE");
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0)
+		g_printerr (" VERSION");
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_HISTORY) != 0)
+		g_printerr (" HISTORY");
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0)
+		g_printerr (" UPDATE_DETAILS");
+	g_printerr ("\n");
 
 	// Get the information from the cache
 	dpkg_argv_array = g_ptr_array_new ();
 	g_ptr_array_add (dpkg_argv_array, (gpointer) "dpkg");
 	g_ptr_array_add (dpkg_argv_array, (gpointer) "--status");
+	cache_argv_array = g_ptr_array_new ();
+	g_ptr_array_add (cache_argv_array, (gpointer) "apt-cache");
+	g_ptr_array_add (cache_argv_array, (gpointer) "show");
 	for (link = *list; link; link = link->next) {
 		GsApp *app = GS_APP (link->data);
 		const gchar *source;
@@ -139,12 +145,29 @@ gs_plugin_refine (GsPlugin *plugin,
 
 		known_apps = TRUE;
 		g_ptr_array_add (dpkg_argv_array, (gpointer) source);
+		g_ptr_array_add (cache_argv_array, (gpointer) source);
 	}
 	g_ptr_array_add (dpkg_argv_array, NULL);
-	argv = (gchar **) g_ptr_array_free (dpkg_argv_array, FALSE);
+	dpkg_argv = (gchar **) g_ptr_array_free (dpkg_argv_array, FALSE);
+	g_ptr_array_add (cache_argv_array, NULL);
+	cache_argv = (gchar **) g_ptr_array_free (cache_argv_array, FALSE);
+
 	if (!known_apps)
 		return TRUE;
-	if (!g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, &exit_status, error))
+
+	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_output, NULL, &exit_status, error))
+		return FALSE;
+#if 0
+	// FIXME: Disabled since dpkg --status will return error for uninstalled packages
+	if (exit_status != EXIT_SUCCESS) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "dpkg --status returned status %d", exit_status);
+		return FALSE;
+	}
+#endif
+	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_output, NULL, &exit_status, error))
 		return FALSE;
 	if (exit_status != EXIT_SUCCESS) {
 		g_set_error (error,
@@ -154,8 +177,8 @@ gs_plugin_refine (GsPlugin *plugin,
 		return FALSE;
 	}
 
-	parse_package_info (dpkg_output, list);
-	//parse_package_info (cache_output, list);
+	parse_package_info (dpkg_output, flags, list);
+	parse_package_info (cache_output, flags, list);
 
 	return TRUE;
 }
