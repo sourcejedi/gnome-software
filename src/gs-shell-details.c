@@ -964,7 +964,7 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 
 	/* If you haven't reviewed it, do it now */
-	gtk_widget_set_visible (self->button_review, !gs_app_get_self_review (self->app));
+	gtk_widget_set_visible (self->button_review, gs_app_get_self_review (self->app) == NULL);
 
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
