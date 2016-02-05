@@ -402,5 +402,9 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GError **error)
 {
 	//g_printerr ("APT: gs_plugin_refresh\n");
+
+	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
+		return TRUE;
+
 	return aptd_transaction ("UpdateCache", NULL, error);
 }
