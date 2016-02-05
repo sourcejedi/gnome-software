@@ -237,7 +237,7 @@ transaction_property_changed_cb (GDBusConnection *connection,
 	g_autoptr(GVariant) value = NULL;
 
 	g_variant_get (parameters, "(&sv)", &name, &value);
-	if (strcmp (name, "Progress") == 0)
+	if (data->app && strcmp (name, "Progress") == 0)
 		gs_app_set_progress (data->app, g_variant_get_int32 (value));
 }
 
@@ -261,8 +261,8 @@ static gboolean
 aptd_transaction (const gchar *method, GsApp *app, GError **error)
 {
 	g_autoptr(GDBusConnection) conn = NULL;
+	GVariant *parameters;
 	g_autoptr(GVariant) result = NULL;
-	GVariantBuilder builder;
 	g_autofree gchar *transaction_path = NULL, *transaction_result = NULL;
 	g_autoptr(GMainLoop) loop = NULL;
 	guint property_signal, finished_signal;
@@ -272,14 +272,20 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 	if (conn == NULL)
 		return FALSE;
 
-	g_variant_builder_init (&builder, G_VARIANT_TYPE ("as")),
-	g_variant_builder_add (&builder, "s", gs_app_get_source_default (app));
+	if (app) {
+		GVariantBuilder builder;
+		g_variant_builder_init (&builder, G_VARIANT_TYPE ("as")),
+		g_variant_builder_add (&builder, "s", gs_app_get_source_default (app));
+		parameters = g_variant_new ("(as)", &builder);
+	}
+	else
+		parameters = g_variant_new ("()");
 	result = g_dbus_connection_call_sync (conn,
 					      "org.debian.apt",
 					      "/org/debian/apt",
 					      "org.debian.apt",
 					      method,
-					      g_variant_new ("(as)", &builder),
+					      parameters,
 					      G_VARIANT_TYPE ("(s)"),
 					      G_DBUS_CALL_FLAGS_NONE,
 					      -1,
@@ -395,6 +401,6 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GCancellable *cancellable,
 		   GError **error)
 {
-	g_printerr ("APT: gs_plugin_refresh\n");
-	return TRUE;
+	//g_printerr ("APT: gs_plugin_refresh\n");
+	return aptd_transaction ("UpdateCache", NULL, error);
 }
