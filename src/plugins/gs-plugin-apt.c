@@ -23,9 +23,12 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <gs-plugin.h>
 
 struct GsPluginPrivate {
+	gboolean cache_loaded;
+	GList *dpkg_cache;
 };
 
 const gchar *
@@ -59,6 +62,119 @@ find_app (GList **list, const gchar *source)
 	return NULL;
 }
 
+// Ordering of symbols in dpkg ~, 0-9, A-Z, a-z, everything else (ASCII ordering)
+static int
+order (int c)
+{
+	if (isdigit(c))
+		return 0;
+	else if (isalpha(c))
+		return c;
+	else if (c == '~')
+		return -1;
+	else if (c)
+		return c + 256;
+	else
+		return 0;
+}
+
+// Check if this is a valid dpkg character ('-' terminates version for revision)
+static gboolean
+valid_char (char c)
+{
+	return c != '\0' && c != '-';
+}
+
+static int
+compare_version (const char *v0, const char *v1)
+{
+	while (valid_char (*v0) || valid_char (*v1))
+	{
+		int first_diff = 0;
+
+		// Compare non-digits based on ordering rules
+		while ((valid_char (*v0) && !isdigit (*v0)) || (valid_char (*v1) && !isdigit (*v1))) {
+			int ac = order (*v0);
+			int bc = order (*v1);
+
+			if (ac != bc)
+				return ac - bc;
+
+			v0++;
+			v1++;
+		}
+
+		// Skip leading zeroes
+		while (*v0 == '0')
+			v0++;
+		while (*v1 == '0')
+			v1++;
+
+		// Compare numbers - longest wins, otherwise compare next digit
+		while (isdigit (*v0) && isdigit (*v1)) {
+			if (first_diff == 0)
+				first_diff = *v0 - *v1;
+			v0++;
+			v1++;
+		}
+		if (isdigit (*v0))
+			return 1;
+		if (isdigit (*v1))
+			return -1;
+		if (first_diff)
+			return first_diff;
+	}
+
+	return 0;
+}
+
+// Get the epoch, i.e. 1:2.3-4 -> '1'
+static int
+get_epoch (const gchar *version)
+{
+	if (strchr (version, ':') == NULL)
+		return 0;
+	return atoi (version);
+}
+
+// Get the version after the epoch, i.e. 1:2.3-4 -> '2.3'
+static const gchar *
+get_version (const gchar *version)
+{
+	const gchar *v = strchr (version, ':');
+	return v ? v : version;
+}
+
+// Get the debian revision, i.e. 1:2.3-4 -> '4'
+static const gchar *
+get_revision (const gchar *version)
+{
+	const gchar *v = strchr (version, '-');
+	return v ? v + 1: version + strlen (version);
+}
+
+static int
+compare_dpkg_version (const gchar *v0, const gchar *v1)
+{
+	int r;
+
+	r = get_epoch (v0) - get_epoch (v1);
+	if (r != 0)
+		return r;
+
+	r = compare_version (get_version (v0), get_version (v1));
+	if (r != 0)
+		return r;
+
+	return compare_version (get_revision (v0), get_revision (v1));
+}
+
+static gboolean
+version_newer (const gchar *v0, const gchar *v1)
+{
+	return v0 ? compare_dpkg_version (v0, v1) < 0 : TRUE;
+}
+
 static void
 parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, gboolean mark_available)
 {
@@ -79,31 +195,34 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, 
 		}
 
 		// Skip other fields until we find an app we know
-		if (!app)
+		if (app == NULL)
 			continue;
 
 		if (g_str_has_prefix (lines[i], status_prefix)) {
 			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed"))
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-		} else if (g_str_has_prefix (lines[i], installed_size_prefix)) {
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0)
+		} else if (g_str_has_prefix (lines[i], installed_size_prefix) && (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0) {
+			if (gs_app_get_size (app) == 0)
 				gs_app_set_size (app, atoi (lines[i] + strlen (installed_size_prefix)) * 1024);
-		} else if (g_str_has_prefix (lines[i], version_prefix)) {
-			// FIXME: apt-cache contains multiple versions - pick the best
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0 && gs_app_get_version (app) == NULL)
-				gs_app_set_version (app, lines[i] + strlen (version_prefix));
+		} else if (g_str_has_prefix (lines[i], version_prefix) && (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
+			const gchar *version = lines[i] + strlen (version_prefix);
+
+			if (gs_app_get_version (app) == NULL)
+				gs_app_set_version (app, version);
+			if (gs_app_get_state (app) == AS_APP_STATE_INSTALLED && version_newer (gs_app_get_update_version (app), version))
+				gs_app_set_update_version (app, version);
 		}
 	}
 
 	g_strfreev (lines);
 }
 
-gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		  GList **list,
-		  GsPluginRefineFlags flags,
-		  GCancellable *cancellable,
-		  GError **error)
+static gboolean
+refine (GsPlugin *plugin,
+        GList **list,
+        GsPluginRefineFlags flags,
+        GCancellable *cancellable,
+        GError **error)
 {
 	GList *link;
 	GPtrArray *dpkg_argv_array, *cache_argv_array;
@@ -139,7 +258,7 @@ gs_plugin_refine (GsPlugin *plugin,
 		const gchar *source;
 
 		source = gs_app_get_source_default (app);
-		if (!source)
+		if (source == NULL)
 			continue;
 
 		known_apps = TRUE;
@@ -166,19 +285,26 @@ gs_plugin_refine (GsPlugin *plugin,
 }
 
 gboolean
-gs_plugin_add_installed (GsPlugin *plugin,
-			 GList **list,
-			 GCancellable *cancellable,
-			 GError **error)
+gs_plugin_refine (GsPlugin *plugin,
+		  GList **list,
+		  GsPluginRefineFlags flags,
+		  GCancellable *cancellable,
+		  GError **error)
 {
-	g_autofree gchar *output = NULL;
+	// NOTE: Had to put into a static function so can be called from inside plugin - not sure why
+	return refine (plugin, list, flags, cancellable, error);
+}
+
+static gchar **
+get_installed (GError **error)
+{
+	g_autofree gchar *dpkg_stdout = NULL, *dpkg_stderr = NULL;
 	gint exit_status;
-	gchar **lines = NULL;
+	gchar *argv[3] = { (gchar *) "dpkg", (gchar *) "--get-selections", NULL }, **lines;
 	int i;
+	GPtrArray *array;
 
-	g_printerr ("APT: gs_plugin_add_installed\n");
-
-	if (!g_spawn_command_line_sync ("dpkg --get-selections", &output, NULL, &exit_status, error))
+	if (!g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_stdout, &dpkg_stderr, &exit_status, error))
 		return FALSE;
 	if (exit_status != EXIT_SUCCESS) {
 		g_set_error (error,
@@ -188,14 +314,15 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		return FALSE;
 	}
 
-	lines = g_strsplit (output, "\n", -1);
+	array = g_ptr_array_new ();
+	lines = g_strsplit (dpkg_stdout, "\n", -1);
 	for (i = 0; lines[i]; i++) {
 		g_autoptr(GsApp) app = NULL;
-		gchar *id, *status, *c;
+		gchar *status, *c;
 
 		// Line is the form <name>\t<status> - find the status and only use installed packages
 		status = strrchr (lines[i], '\t');
-		if (!status)
+		if (status == NULL)
 			continue;
 		status++;
 		if (strcmp (status, "install") != 0)
@@ -204,14 +331,38 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		// Split out name
 		c = strchr (lines[i], '\t');
 		*c = '\0';
-		id = lines[i];
+		g_ptr_array_add (array, (gpointer) g_strdup (lines[i]));
+	}
+	g_strfreev (lines);
+	g_ptr_array_add (array, NULL);
 
-		app = gs_app_new (id);
-		gs_app_add_source (app, id);
+	return (gchar **) g_ptr_array_free (array, FALSE);
+}
+
+gboolean
+gs_plugin_add_installed (GsPlugin *plugin,
+			 GList **list,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	gchar **installed;
+	int i;
+
+	//g_printerr ("APT: gs_plugin_add_installed\n");
+
+	installed = get_installed (error);
+	if (installed == NULL)
+		return FALSE;
+
+	for (i = 0; installed[i] != NULL; i++) {
+		g_autoptr(GsApp) app = NULL;
+
+		app = gs_app_new (installed[i]);
+		gs_app_add_source (app, installed[i]);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_plugin_add_app (list, app);
 	}
-	g_strfreev (lines);
+	g_strfreev (installed);
 
 	return TRUE;
 }
@@ -291,7 +442,7 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 					      -1,
 					      NULL,
 					      error);
-	if (!result)
+	if (result == NULL)
 		return FALSE;
 	g_variant_get (result, "(s)", &transaction_path);
 	g_variant_unref (result);
@@ -332,7 +483,7 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 					      -1,
 					      NULL,
 					      error);
-	if (!result)
+	if (result == NULL)
 		return FALSE;
 
 	g_main_loop_run (loop);
@@ -358,7 +509,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 {
 	//g_printerr ("APT: gs_plugin_app_install\n");
 
-	if (!gs_app_get_source_default (app))
+	if (gs_app_get_source_default (app) == NULL)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
@@ -380,7 +531,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 {
 	//g_printerr ("APT: gs_plugin_app_remove\n");
 
-	if (!gs_app_get_source_default (app))
+	if (gs_app_get_source_default (app) == NULL)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
@@ -407,4 +558,36 @@ gs_plugin_refresh (GsPlugin *plugin,
 		return TRUE;
 
 	return aptd_transaction ("UpdateCache", NULL, error);
+}
+
+gboolean
+gs_plugin_add_updates (GsPlugin *plugin,
+                       GList **list,
+                       GCancellable *cancellable,
+                       GError **error)
+{
+	GList *installed = NULL, *link;
+
+	g_printerr ("APT: gs_plugin_add_updates\n");
+
+	// Get the version of everything installed
+	// FIXME: Checks all the packages we don't have appstream data for (so inefficient)
+	if (!gs_plugin_add_installed (plugin, &installed, NULL, error) ||
+	    !refine (plugin, &installed, GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION, NULL, error)) {
+		g_list_free_full (installed, g_object_unref);
+		return FALSE;
+	}
+
+	for (link = installed; link; link = link->next) {
+		GsApp *app = GS_APP (link->data);
+		const gchar *v0, *v1;
+
+		v0 = gs_app_get_version (app);
+		v1 = gs_app_get_update_version (app);
+		if (v0 != NULL && v1 != NULL && version_newer (v0, v1))
+			gs_plugin_add_app (list, app);
+	}
+	g_list_free_full (installed, g_object_unref);
+
+	return TRUE;
 }
