@@ -30,14 +30,11 @@
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
-#include "ubuntu-sso-credentials-proxy.h"
-
 struct GsPluginPrivate {
-	gchar                   *db_path;
-	sqlite3                 *db;
-	gsize			 db_loaded;
-	SoupSession		*session;
-	UbuntuSSOCredentials    *credentials;
+	gchar		*db_path;
+	sqlite3		*db;
+	gsize		 db_loaded;
+	SoupSession	*session;
 };
 
 typedef struct {
@@ -89,8 +86,6 @@ gs_plugin_get_deps (GsPlugin *plugin)
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-	g_clear_object (&plugin->priv->credentials);
-
 	if (plugin->priv->db != NULL)
 		sqlite3_close (plugin->priv->db);
 	if (plugin->priv->session != NULL)
@@ -700,8 +695,8 @@ add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
 
 static void
 sign_message (SoupMessage *message, OAuthMethod method,
-              const gchar *oauth_consumer_key, const gchar *oauth_consumer_secret,
-              const gchar *oauth_token, const gchar *oauth_token_secret)
+              const gchar *consumer_key, const gchar *consumer_secret,
+              const gchar *token_key, const gchar *token_secret)
 {
 	g_autofree gchar *url = NULL, *oauth_authorization_parameters = NULL, *authorization_text = NULL;
 	gchar **url_parameters = NULL;
@@ -714,8 +709,8 @@ sign_message (SoupMessage *message, OAuthMethod method,
 	                           NULL,
 	                           method,
 	                           message->method,
-	                           oauth_consumer_key, oauth_consumer_secret,
-	                           oauth_token, oauth_token_secret);
+	                           consumer_key, consumer_secret,
+	                           token_key, token_secret);
 	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
 	oauth_free_array (&url_parameters_length, &url_parameters);
 	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
@@ -739,7 +734,7 @@ send_review (GsPlugin    *plugin,
              const gchar *package_name,
              const gchar *consumer_key,
              const gchar *consumer_secret,
-             const gchar *token,
+             const gchar *token_key,
              const gchar *token_secret,
              GError **error)
 {
@@ -780,7 +775,7 @@ send_review (GsPlugin    *plugin,
 	json_builder_end_object (builder);
 	set_request (msg, builder);
 	g_object_unref (builder);
-	sign_message (msg, OA_PLAINTEXT, consumer_key, consumer_secret, token, token_secret);
+	sign_message (msg, OA_PLAINTEXT, consumer_key, consumer_secret, token_key, token_secret);
 
 	/* Send to the server */
 	status_code = soup_session_send_message (plugin->priv->session, msg);
@@ -796,122 +791,28 @@ send_review (GsPlugin    *plugin,
 	return TRUE;
 }
 
-typedef struct CredentialsFoundInfo {
-	GsPlugin    *plugin;
-	GsReview *review;
-	gchar       *package_name;
-} CredentialsFoundInfo;
-
-static void
-credentials_found (CredentialsFoundInfo *info,
-                   const gchar          *app_name,
-                   GVariant             *credentials,
-                   UbuntuSSOCredentials *proxy)
-{
-	const gchar *consumer_key;
-	const gchar *consumer_secret;
-	const gchar *token;
-	const gchar *token_secret;
-
-	g_signal_handlers_disconnect_by_func (proxy, credentials_found, info);
-
-	if (credentials &&
-	    g_variant_lookup (credentials, "consumer_key", "&s", &consumer_key) &&
-	    g_variant_lookup (credentials, "consumer_secret", "&s", &consumer_secret) &&
-	    g_variant_lookup (credentials, "token", "&s", &token) &&
-	    g_variant_lookup (credentials, "token_secret", "&s", &token_secret))
-		send_review (info->plugin,
-		             info->review,
-		             info->package_name,
-		             consumer_key,
-		             consumer_secret,
-		             token,
-		             token_secret,
-		             NULL);
-
-	g_free (info->package_name);
-	g_object_unref (info->review);
-	g_object_unref (info->plugin);
-	g_free (info);
-}
-
 static gboolean
 set_package_review (GsPlugin *plugin,
                     GsReview *review,
                     const gchar *package_name,
                     GError **error)
 {
-	GVariant *credentials;
-	CredentialsFoundInfo *info;
-	const gchar *consumer_key = NULL;
-	const gchar *consumer_secret = NULL;
-	const gchar *token = NULL;
-	const gchar *token_secret = NULL;
 	gboolean result;
 
 	/* Write review into database so we can easily access it */
-	// FIXME
 
 	/* Load OAuth token */
-	if (!plugin->priv->credentials) {
-		plugin->priv->credentials = ubuntu_sso_credentials_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
-		                                                                           G_DBUS_PROXY_FLAGS_GET_INVALIDATED_PROPERTIES,
-		                                                                           "com.ubuntu.sso",
-		                                                                           "/com/ubuntu/sso/credentials",
-		                                                                           NULL,
-		                                                                           error);
 
-		if (!plugin->priv->credentials)
-			return FALSE;
-	}
-
-	if (!ubuntu_sso_credentials_call_find_credentials_and_wait_sync (plugin->priv->credentials,
-	                                                                 "Ubuntu One",
-	                                                                 g_variant_new_array (G_VARIANT_TYPE ("{ss}"), NULL, 0),
-	                                                                 &credentials,
-	                                                                 NULL,
-	                                                                 error) ||
-	    !credentials ||
-	    !g_variant_lookup (credentials, "consumer_key", "&s", &consumer_key) ||
-	    !g_variant_lookup (credentials, "consumer_secret", "&s", &consumer_secret) ||
-	    !g_variant_lookup (credentials, "token", "&s", &token) ||
-	    !g_variant_lookup (credentials, "token_secret", "&s", &token_secret) ||
-	    !consumer_key[0] ||
-	    !consumer_secret[0] ||
-	    !token[0] ||
-	    !token_secret[0]) {
-		info = g_new (CredentialsFoundInfo, 1);
-		info->plugin = g_object_ref (plugin);
-		info->review = g_object_ref (review);
-		info->package_name = g_strdup (package_name);
-
-		g_signal_connect_swapped (plugin->priv->credentials,
-		                          "credentials-found",
-		                          G_CALLBACK (credentials_found),
-		                          info);
-
-		result = ubuntu_sso_credentials_call_login_sync (plugin->priv->credentials,
-		                                                 "Ubuntu One",
-		                                                 g_variant_new_array (G_VARIANT_TYPE ("{ss}"), NULL, 0),
-		                                                 NULL,
-		                                                 error);
-
-		if (credentials)
-			g_variant_unref (credentials);
-
-		return result;
-	}
-
+	/*
 	result = send_review (plugin,
 	                      review,
 	                      package_name,
 	                      consumer_key,
 	                      consumer_secret,
-	                      token,
+	                      token_key,
 	                      token_secret,
 	                      error);
-
-	g_variant_unref (credentials);
+	*/
 
 	return result;
 }
