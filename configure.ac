@@ -56,7 +56,6 @@ AC_DEFINE(GETTEXT_PACKAGE, "AC_PACKAGE_NAME", [gnome-software])
 AM_PATH_GLIB_2_0(2.46.0, :, AC_MSG_ERROR([GLib is required]), gobject gmodule gio)
 AM_GLIB_GNU_GETTEXT
 GLIB_GSETTINGS
-AC_PATH_PROG([GDBUS_CODEGEN], [gdbus-codegen])
 
 dnl ---------------------------------------------------------------------------
 dnl - Check library dependencies
