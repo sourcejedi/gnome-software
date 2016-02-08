@@ -19,23 +19,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef GS_APP_REVIEW_ROW_H
-#define GS_APP_REVIEW_ROW_H
+#ifndef GS_REVIEW_ROW_H
+#define GS_REVIEW_ROW_H
 
 #include <gtk/gtk.h>
 
-#include "gs-app-review.h"
+#include "gs-review.h"
 
 G_BEGIN_DECLS
 
-#define GS_TYPE_APP_REVIEW_ROW (gs_app_review_row_get_type ())
+#define GS_TYPE_REVIEW_ROW (gs_review_row_get_type ())
 
-G_DECLARE_FINAL_TYPE (GsAppReviewRow, gs_app_review_row, GS, APP_REVIEW_ROW, GtkListBoxRow)
+G_DECLARE_FINAL_TYPE (GsReviewRow, gs_review_row, GS, REVIEW_ROW, GtkListBoxRow)
 
-GtkWidget	*gs_app_review_row_new			(GsAppReview *review);
+GtkWidget	*gs_review_row_new	(GsReview *review);
 
 G_END_DECLS
 
-#endif /* GS_APP_REVIEW_ROW_H */
+#endif /* GS_REVIEW_ROW_H */
 
 /* vim: set noexpandtab: */

@@ -490,10 +490,10 @@ parse_date_time (const gchar *text)
 	return g_date_time_new_utc (values[0], values[1], values[2], values[3], values[4], values[5]);
 }
 
-static GsAppReview *
+static GsReview *
 parse_review (JsonNode *node)
 {
-	GsAppReview *review;
+	GsReview *review;
 	JsonObject *object;
 	gint64 star_rating;
 
@@ -502,15 +502,15 @@ parse_review (JsonNode *node)
 
 	object = json_node_get_object (node);
 
-	review = gs_app_review_new ();
-	gs_app_review_set_reviewer (review, json_object_get_string_member (object, "reviewer_displayname"));
-	gs_app_review_set_summary (review, json_object_get_string_member (object, "summary"));
-	gs_app_review_set_text (review, json_object_get_string_member (object, "review_text"));
-	gs_app_review_set_version (review, json_object_get_string_member (object, "version"));
+	review = gs_review_new ();
+	gs_review_set_reviewer (review, json_object_get_string_member (object, "reviewer_displayname"));
+	gs_review_set_summary (review, json_object_get_string_member (object, "summary"));
+	gs_review_set_text (review, json_object_get_string_member (object, "review_text"));
+	gs_review_set_version (review, json_object_get_string_member (object, "version"));
 	star_rating = json_object_get_int_member (object, "rating");
 	if (star_rating > 0)
-		gs_app_review_set_rating (review, star_rating * 20);
-	gs_app_review_set_date (review, parse_date_time (json_object_get_string_member (object, "date_created")));
+		gs_review_set_rating (review, star_rating * 20);
+	gs_review_set_date (review, parse_date_time (json_object_get_string_member (object, "date_created")));
 
 	return review;
 }
@@ -530,7 +530,7 @@ parse_reviews (GsPlugin *plugin, const gchar *text, GsApp *app, GError **error)
 		goto out;
 	array = json_node_get_array (json_parser_get_root (parser));
 	for (i = 0; i < json_array_get_length (array); i++) {
-		GsAppReview *review;
+		GsReview *review;
 
 		/* Read in from JSON... (skip bad entries) */
 		review = parse_review (json_array_get_element (array, i));
@@ -724,7 +724,7 @@ set_request (SoupMessage *message, JsonBuilder *builder)
 
 static gboolean
 send_review (GsPlugin    *plugin,
-             GsAppReview *review,
+             GsReview *review,
              const gchar *package_name,
              const gchar *consumer_key,
              const gchar *consumer_secret,
@@ -740,7 +740,7 @@ send_review (GsPlugin    *plugin,
 	guint status_code;
 
 	/* Ubuntu reviews require a summary and description - just make one up for now */
-	rating = gs_app_review_get_rating (review);
+	rating = gs_review_get_rating (review);
 	if (rating > 80)
 		n_stars = 5;
 	else if (rating > 60)
@@ -758,12 +758,12 @@ send_review (GsPlugin    *plugin,
 	builder = json_builder_new ();
 	json_builder_begin_object (builder);
 	add_string_member (builder, "package_name", package_name);
-	add_string_member (builder, "summary", gs_app_review_get_summary (review));
-	add_string_member (builder, "review_text", gs_app_review_get_text (review));
+	add_string_member (builder, "summary", gs_review_get_summary (review));
+	add_string_member (builder, "review_text", gs_review_get_text (review));
 	add_string_member (builder, "language", "en"); // FIXME
 	add_string_member (builder, "origin", "ubuntu"); // FIXME gs_app_get_origin (app));
 	add_string_member (builder, "distroseries", "xenial"); // FIXME
-	add_string_member (builder, "version", gs_app_review_get_version (review));
+	add_string_member (builder, "version", gs_review_get_version (review));
 	add_int_member (builder, "rating", n_stars);
 	add_string_member (builder, "arch_tag", "amd64"); // FIXME
 	json_builder_end_object (builder);
@@ -787,7 +787,7 @@ send_review (GsPlugin    *plugin,
 
 typedef struct CredentialsFoundInfo {
 	GsPlugin    *plugin;
-	GsAppReview *review;
+	GsReview *review;
 	gchar       *package_name;
 } CredentialsFoundInfo;
 
@@ -826,7 +826,7 @@ credentials_found (CredentialsFoundInfo *info,
 
 static gboolean
 set_package_review (GsPlugin *plugin,
-                    GsAppReview *review,
+                    GsReview *review,
                     const gchar *package_name,
                     GError **error)
 {
@@ -911,7 +911,7 @@ gs_plugin_app_set_review (GsPlugin *plugin,
 			  GCancellable *cancellable,
 			  GError **error)
 {
-	GsAppReview *review;
+	GsReview *review;
 	GPtrArray *sources;
 	const gchar *package_name;
 	gboolean ret;

@@ -24,32 +24,32 @@
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 
-#include "gs-app-review-row.h"
+#include "gs-review-row.h"
 #include "gs-star-widget.h"
 
-struct _GsAppReviewRow
+struct _GsReviewRow
 {
 	GtkListBoxRow	 parent_instance;
 
-	GsAppReview	*review;
+	GsReview	*review;
 	GtkWidget	*stars;
 	GtkWidget	*summary_label;
 	GtkWidget	*author_label;
 	GtkWidget	*text_label;
 };
 
-G_DEFINE_TYPE (GsAppReviewRow, gs_app_review_row, GTK_TYPE_LIST_BOX_ROW)
+G_DEFINE_TYPE (GsReviewRow, gs_review_row, GTK_TYPE_LIST_BOX_ROW)
 
 static void
-gs_app_review_row_refresh (GsAppReviewRow *row)
+gs_review_row_refresh (GsReviewRow *row)
 {
 	const gchar *reviewer;
 	GDateTime *date;
 	g_autofree gchar *text;
 
-	gs_star_widget_set_rating (GS_STAR_WIDGET (row->stars), gs_app_review_get_rating (row->review));
-	reviewer = gs_app_review_get_reviewer (row->review);
-	date = gs_app_review_get_date (row->review);
+	gs_star_widget_set_rating (GS_STAR_WIDGET (row->stars), gs_review_get_rating (row->review));
+	reviewer = gs_review_get_reviewer (row->review);
+	date = gs_review_get_date (row->review);
 	if (reviewer != NULL && date != NULL) {
 		gchar *date_text = g_date_time_format (date, "%e %B %Y");
 		text = g_strdup_printf ("%s, %s", reviewer, date_text);
@@ -62,83 +62,83 @@ gs_app_review_row_refresh (GsAppReviewRow *row)
 	else
 		text = g_strdup ("");
 	gtk_label_set_text (GTK_LABEL (row->author_label), text);
-	gtk_label_set_text (GTK_LABEL (row->summary_label), gs_app_review_get_summary (row->review));
-	gtk_label_set_text (GTK_LABEL (row->text_label), gs_app_review_get_text (row->review));
+	gtk_label_set_text (GTK_LABEL (row->summary_label), gs_review_get_summary (row->review));
+	gtk_label_set_text (GTK_LABEL (row->text_label), gs_review_get_text (row->review));
 }
 
 static gboolean
-gs_app_review_row_refresh_idle (gpointer user_data)
+gs_review_row_refresh_idle (gpointer user_data)
 {
-	GsAppReviewRow *row = GS_APP_REVIEW_ROW (user_data);
+	GsReviewRow *row = GS_REVIEW_ROW (user_data);
 
-	gs_app_review_row_refresh (row);
+	gs_review_row_refresh (row);
 
 	g_object_unref (row);
 	return G_SOURCE_REMOVE;
 }
 
 static void
-gs_app_review_row_notify_props_changed_cb (GsApp *app,
-					   GParamSpec *pspec,
-					   GsAppReviewRow *row)
+gs_review_row_notify_props_changed_cb (GsApp *app,
+				       GParamSpec *pspec,
+				       GsReviewRow *row)
 {
-	g_idle_add (gs_app_review_row_refresh_idle, g_object_ref (row));
+	g_idle_add (gs_review_row_refresh_idle, g_object_ref (row));
 }
 
 static void
-gs_app_review_row_init (GsAppReviewRow *row)
+gs_review_row_init (GsReviewRow *row)
 {
 	gtk_widget_set_has_window (GTK_WIDGET (row), FALSE);
 	gtk_widget_init_template (GTK_WIDGET (row));
 }
 
 static void
-gs_app_review_row_dispose (GObject *object)
+gs_review_row_dispose (GObject *object)
 {
-	GsAppReviewRow *row = GS_APP_REVIEW_ROW (object);
+	GsReviewRow *row = GS_REVIEW_ROW (object);
 
 	g_clear_object (&row->review);
 
-	G_OBJECT_CLASS (gs_app_review_row_parent_class)->dispose (object);
+	G_OBJECT_CLASS (gs_review_row_parent_class)->dispose (object);
 }
 
 static void
-gs_app_review_row_class_init (GsAppReviewRowClass *klass)
+gs_review_row_class_init (GsReviewRowClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-	object_class->dispose = gs_app_review_row_dispose;
+	object_class->dispose = gs_review_row_dispose;
 
-	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-app-review-row.ui");
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-review-row.ui");
 
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewRow, stars);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewRow, summary_label);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewRow, author_label);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewRow, text_label);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, stars);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, summary_label);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, author_label);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, text_label);
 }
 
 /**
- * gs_app_review_row_new:
+ * gs_review_row_new:
  * @review: The review to show
  *
  * Create a widget suitable for showing an application review.
  *
- * Return value: A new @GsAppReviewRow.
+ * Return value: A new @GsReviewRow.
  **/
 GtkWidget *
-gs_app_review_row_new (GsAppReview *review)
+gs_review_row_new (GsReview *review)
 {
-	GsAppReviewRow *row;
+	GsReviewRow *row;
 
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 
-	row = g_object_new (GS_TYPE_APP_REVIEW_ROW, NULL);
+	row = g_object_new (GS_TYPE_REVIEW_ROW, NULL);
 	row->review = g_object_ref (review);
 	g_signal_connect_object (row->review, "notify::state",
-				 G_CALLBACK (gs_app_review_row_notify_props_changed_cb),
+				 G_CALLBACK (gs_review_row_notify_props_changed_cb),
 				 row, 0);
-	gs_app_review_row_refresh (row);
+	gs_review_row_refresh (row);
 
 	return GTK_WIDGET (row);
 }

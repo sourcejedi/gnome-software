@@ -24,10 +24,10 @@
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 
-#include "gs-app-review-dialog.h"
+#include "gs-review-dialog.h"
 #include "gs-star-widget.h"
 
-struct _GsAppReviewDialog
+struct _GsReviewDialog
 {
 	GtkDialog	 parent_instance;
 
@@ -37,28 +37,28 @@ struct _GsAppReviewDialog
 	GtkWidget	*post_button;
 };
 
-G_DEFINE_TYPE (GsAppReviewDialog, gs_app_review_dialog, GTK_TYPE_DIALOG)
+G_DEFINE_TYPE (GsReviewDialog, gs_review_dialog, GTK_TYPE_DIALOG)
 
 gint
-gs_app_review_dialog_get_rating (GsAppReviewDialog *dialog)
+gs_review_dialog_get_rating (GsReviewDialog *dialog)
 {
 	return gs_star_widget_get_rating (GS_STAR_WIDGET (dialog->star));
 }
 
 void
-gs_app_review_dialog_set_rating	(GsAppReviewDialog *dialog, gint rating)
+gs_review_dialog_set_rating	(GsReviewDialog *dialog, gint rating)
 {
 	gs_star_widget_set_rating (GS_STAR_WIDGET (dialog->star), rating);
 }
 
 const gchar *
-gs_app_review_dialog_get_summary (GsAppReviewDialog *dialog)
+gs_review_dialog_get_summary (GsReviewDialog *dialog)
 {
 	return gtk_entry_get_text (GTK_ENTRY (dialog->summary_entry));
 }
 
 gchar *
-gs_app_review_dialog_get_text (GsAppReviewDialog *dialog)
+gs_review_dialog_get_text (GsReviewDialog *dialog)
 {
 	GtkTextBuffer *buffer;
 	GtkTextIter start, end;
@@ -70,28 +70,28 @@ gs_app_review_dialog_get_text (GsAppReviewDialog *dialog)
 }
 
 static void
-gs_app_review_dialog_init (GsAppReviewDialog *dialog)
+gs_review_dialog_init (GsReviewDialog *dialog)
 {
 	gtk_widget_init_template (GTK_WIDGET (dialog));
 }
 
 static void
-gs_app_review_dialog_class_init (GsAppReviewDialogClass *klass)
+gs_review_dialog_class_init (GsReviewDialogClass *klass)
 {
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-app-review-dialog.ui");
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-review-dialog.ui");
 
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewDialog, star);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewDialog, summary_entry);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewDialog, text_view);
-	gtk_widget_class_bind_template_child (widget_class, GsAppReviewDialog, post_button);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, star);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, summary_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, text_view);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, post_button);
 }
 
 GtkWidget *
-gs_app_review_dialog_new (void)
+gs_review_dialog_new (void)
 {
-	return GTK_WIDGET (g_object_new (GS_TYPE_APP_REVIEW_DIALOG,
+	return GTK_WIDGET (g_object_new (GS_TYPE_REVIEW_DIALOG,
 					 "use-header-bar", TRUE,
 					 NULL));
 }

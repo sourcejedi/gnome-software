@@ -83,8 +83,8 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
-	GsAppReview		*self_review;
-	GPtrArray		*reviews; /* of GsAppReview */
+	GsReview		*self_review;
+	GPtrArray		*reviews; /* of GsReview */
 	guint64			 size;
 	GsAppKind		 kind;
 	AsIdKind		 id_kind;
@@ -1645,7 +1645,7 @@ gs_app_set_rating (GsApp *app, gint rating)
 /**
  * gs_app_get_self_review:
  */
-GsAppReview *
+GsReview *
 gs_app_get_self_review (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), NULL);
@@ -1656,7 +1656,7 @@ gs_app_get_self_review (GsApp *app)
  * gs_app_set_self_review:
  */
 void
-gs_app_set_self_review (GsApp *app, GsAppReview *review)
+gs_app_set_self_review (GsApp *app, GsReview *review)
 {
 	g_return_if_fail (GS_IS_APP (app));
 
@@ -1679,7 +1679,7 @@ gs_app_get_reviews (GsApp *app)
  * gs_app_add_review:
  */
 void
-gs_app_add_review (GsApp *app, GsAppReview *review)
+gs_app_add_review (GsApp *app, GsReview *review)
 {
 	g_return_if_fail (GS_IS_APP (app));
 	g_ptr_array_add (app->reviews, g_object_ref (review));

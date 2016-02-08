@@ -21,9 +21,9 @@
 
 #include "config.h"
 
-#include "gs-app-review.h"
+#include "gs-review.h"
 
-struct _GsAppReview
+struct _GsReview
 {
 	GObject			 parent_instance;
 
@@ -46,138 +46,138 @@ enum {
 	PROP_LAST
 };
 
-G_DEFINE_TYPE (GsAppReview, gs_app_review, G_TYPE_OBJECT)
+G_DEFINE_TYPE (GsReview, gs_review, G_TYPE_OBJECT)
 
 /**
- * gs_app_review_get_summary:
+ * gs_review_get_summary:
  */
 const gchar *
-gs_app_review_get_summary (GsAppReview *review)
+gs_review_get_summary (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 	return review->summary;
 }
 
 /**
- * gs_app_review_set_summary:
+ * gs_review_set_summary:
  */
 void
-gs_app_review_set_summary (GsAppReview *review, const gchar *summary)
+gs_review_set_summary (GsReview *review, const gchar *summary)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	g_free (review->summary);
 	review->summary = g_strdup (summary);
 }
 
 /**
- * gs_app_review_get_text:
+ * gs_review_get_text:
  **/
 const gchar *
-gs_app_review_get_text (GsAppReview *review)
+gs_review_get_text (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 	return review->text;
 }
 
 /**
- * gs_app_review_set_text:
+ * gs_review_set_text:
  */
 void
-gs_app_review_set_text (GsAppReview *review, const gchar *text)
+gs_review_set_text (GsReview *review, const gchar *text)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	g_free (review->text);
 	review->text = g_strdup (text);
 }
 
 /**
- * gs_app_review_get_rating:
+ * gs_review_get_rating:
  */
 gint
-gs_app_review_get_rating (GsAppReview *review)
+gs_review_get_rating (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), -1);
+	g_return_val_if_fail (GS_IS_REVIEW (review), -1);
 	return review->rating;
 }
 
 /**
- * gs_app_review_set_rating:
+ * gs_review_set_rating:
  */
 void
-gs_app_review_set_rating (GsAppReview *review, gint rating)
+gs_review_set_rating (GsReview *review, gint rating)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	review->rating = rating;
 }
 
 /**
- * gs_app_review_get_reviewer:
+ * gs_review_get_reviewer:
  **/
 const gchar *
-gs_app_review_get_reviewer (GsAppReview *review)
+gs_review_get_reviewer (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 	return review->reviewer;
 }
 
 /**
- * gs_app_review_set_version:
+ * gs_review_set_version:
  */
 void
-gs_app_review_set_version (GsAppReview *review, const gchar *version)
+gs_review_set_version (GsReview *review, const gchar *version)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	g_free (review->version);
 	review->version = g_strdup (version);
 }
 
 /**
- * gs_app_review_get_version:
+ * gs_review_get_version:
  **/
 const gchar *
-gs_app_review_get_version (GsAppReview *review)
+gs_review_get_version (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 	return review->version;
 }
 
 /**
- * gs_app_review_set_reviewer:
+ * gs_review_set_reviewer:
  */
 void
-gs_app_review_set_reviewer (GsAppReview *review, const gchar *reviewer)
+gs_review_set_reviewer (GsReview *review, const gchar *reviewer)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	g_free (review->reviewer);
 	review->reviewer = g_strdup (reviewer);
 }
 
 /**
- * gs_app_review_get_date:
+ * gs_review_get_date:
  **/
 GDateTime *
-gs_app_review_get_date (GsAppReview *review)
+gs_review_get_date (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_APP_REVIEW (review), NULL);
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
 	return review->date;
 }
 
 /**
- * gs_app_review_set_date:
+ * gs_review_set_date:
  */
 void
-gs_app_review_set_date (GsAppReview *review, GDateTime *date)
+gs_review_set_date (GsReview *review, GDateTime *date)
 {
-	g_return_if_fail (GS_IS_APP_REVIEW (review));
+	g_return_if_fail (GS_IS_REVIEW (review));
 	g_clear_pointer (&review->date, g_date_time_unref);
 	if (date)
 		review->date = g_date_time_ref (date);
 }
 
 static void
-gs_app_review_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+gs_review_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GsAppReview *review = GS_APP_REVIEW (object);
+	GsReview *review = GS_REVIEW (object);
 
 	switch (prop_id) {
 	case PROP_SUMMARY:
@@ -205,28 +205,28 @@ gs_app_review_get_property (GObject *object, guint prop_id, GValue *value, GPara
 }
 
 static void
-gs_app_review_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+gs_review_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
 {
-	GsAppReview *review = GS_APP_REVIEW (object);
+	GsReview *review = GS_REVIEW (object);
 
 	switch (prop_id) {
 	case PROP_SUMMARY:
-		gs_app_review_set_summary (review, g_value_get_string (value));
+		gs_review_set_summary (review, g_value_get_string (value));
 		break;
 	case PROP_TEXT:
-		gs_app_review_set_text (review, g_value_get_string (value));
+		gs_review_set_text (review, g_value_get_string (value));
 		break;
 	case PROP_RATING:
-		gs_app_review_set_rating (review, g_value_get_int (value));
+		gs_review_set_rating (review, g_value_get_int (value));
 		break;
 	case PROP_VERSION:
-		gs_app_review_set_version (review, g_value_get_string (value));
+		gs_review_set_version (review, g_value_get_string (value));
 		break;
 	case PROP_REVIEWER:
-		gs_app_review_set_reviewer (review, g_value_get_string (value));
+		gs_review_set_reviewer (review, g_value_get_string (value));
 		break;
 	case PROP_DATE:
-		gs_app_review_set_date (review, g_value_get_object (value));
+		gs_review_set_date (review, g_value_get_object (value));
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -235,36 +235,36 @@ gs_app_review_set_property (GObject *object, guint prop_id, const GValue *value,
 }
 
 static void
-gs_app_review_dispose (GObject *object)
+gs_review_dispose (GObject *object)
 {
-	GsAppReview *review = GS_APP_REVIEW (object);
+	GsReview *review = GS_REVIEW (object);
 
 	g_clear_pointer (&review->date, g_date_time_unref);
 
-	G_OBJECT_CLASS (gs_app_review_parent_class)->dispose (object);
+	G_OBJECT_CLASS (gs_review_parent_class)->dispose (object);
 }
 
 static void
-gs_app_review_finalize (GObject *object)
+gs_review_finalize (GObject *object)
 {
-	GsAppReview *review = GS_APP_REVIEW (object);
+	GsReview *review = GS_REVIEW (object);
 
 	g_free (review->summary);
 	g_free (review->text);
 	g_free (review->reviewer);
 
-	G_OBJECT_CLASS (gs_app_review_parent_class)->finalize (object);
+	G_OBJECT_CLASS (gs_review_parent_class)->finalize (object);
 }
 
 static void
-gs_app_review_class_init (GsAppReviewClass *klass)
+gs_review_class_init (GsReviewClass *klass)
 {
 	GParamSpec *pspec;
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
-	object_class->dispose = gs_app_review_dispose;
-	object_class->finalize = gs_app_review_finalize;
-	object_class->get_property = gs_app_review_get_property;
-	object_class->set_property = gs_app_review_set_property;
+	object_class->dispose = gs_review_dispose;
+	object_class->finalize = gs_review_finalize;
+	object_class->get_property = gs_review_get_property;
+	object_class->set_property = gs_review_set_property;
 
 	/**
 	 * GsApp:summary:
@@ -310,28 +310,28 @@ gs_app_review_class_init (GsAppReviewClass *klass)
 	 * GsApp:date:
 	 */
 	pspec = g_param_spec_object ("date", NULL, NULL,
-				     GS_TYPE_APP_REVIEW,
+				     GS_TYPE_REVIEW,
 				     G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 	g_object_class_install_property (object_class, PROP_DATE, pspec);
 }
 
 static void
-gs_app_review_init (GsAppReview *review)
+gs_review_init (GsReview *review)
 {
 	review->rating = -1;
 }
 
 /**
- * gs_app_review_new:
+ * gs_review_new:
  *
- * Return value: a new #GsAppReview object.
+ * Return value: a new #GsReview object.
  **/
-GsAppReview *
-gs_app_review_new (void)
+GsReview *
+gs_review_new (void)
 {
-	GsAppReview *review;
-	review = g_object_new (GS_TYPE_APP_REVIEW, NULL);
-	return GS_APP_REVIEW (review);
+	GsReview *review;
+	review = g_object_new (GS_TYPE_REVIEW, NULL);
+	return GS_REVIEW (review);
 }
 
 /* vim: set noexpandtab: */

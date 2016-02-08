@@ -35,10 +35,10 @@ UI_FILES =						\
 	gnome-software.ui				\
 	gs-app-addon-row.ui				\
 	gs-app-row.ui					\
-	gs-app-review-dialog.ui				\
-	gs-app-review-row.ui				\
 	gs-first-run-dialog.ui				\
 	gs-history-dialog.ui				\
+	gs-review-dialog.ui				\
+	gs-review-row.ui				\
 	gs-shell-category.ui				\
 	gs-shell-extras.ui				\
 	gs-shell-details.ui				\
@@ -119,12 +119,6 @@ gnome_software_SOURCES =				\
 	gs-feature-tile.h				\
 	gs-category-tile.c				\
 	gs-category-tile.h				\
-	gs-app-review.c					\
-	gs-app-review.h					\
-	gs-app-review-dialog.c				\
-	gs-app-review-dialog.h				\
-	gs-app-review-row.c				\
-	gs-app-review-row.h				\
 	gs-app-tile.c					\
 	gs-app-tile.h					\
 	gs-app-folder-dialog.c				\
@@ -147,6 +141,12 @@ gnome_software_SOURCES =				\
 	gs-plugin.h					\
 	gs-progress-button.c				\
 	gs-progress-button.h				\
+	gs-review.c					\
+	gs-review.h					\
+	gs-review-dialog.c				\
+	gs-review-dialog.h				\
+	gs-review-row.c					\
+	gs-review-row.h					\
 	gs-screenshot-image.c				\
 	gs-screenshot-image.h				\
 	gs-shell.c					\

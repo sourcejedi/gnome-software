@@ -34,8 +34,8 @@
 #include "gs-screenshot-image.h"
 #include "gs-progress-button.h"
 #include "gs-star-widget.h"
-#include "gs-app-review-dialog.h"
-#include "gs-app-review-row.h"
+#include "gs-review-dialog.h"
+#include "gs-review-row.h"
 
 typedef enum {
 	GS_SHELL_DETAILS_STATE_LOADING,
@@ -968,12 +968,12 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
-		GsAppReview *review;
+		GsReview *review;
 		GtkWidget *row;
 
 		review = g_ptr_array_index (reviews, i);
 
-		row = gs_app_review_row_new (review);
+		row = gs_review_row_new (review);
 
 		gtk_container_add (GTK_CONTAINER (self->list_box_reviews), row);
 		gtk_widget_show (row);
@@ -1349,23 +1349,23 @@ gs_shell_details_write_review_cb (GtkButton *button,
 	GtkWidget *dialog;
 	GtkResponseType response;
 
-	dialog = gs_app_review_dialog_new ();
+	dialog = gs_review_dialog_new ();
 
 	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
 	response = gtk_dialog_run (GTK_DIALOG (dialog));
 	if (response == GTK_RESPONSE_OK) {
-		g_autoptr(GsAppReview) review = NULL;
+		g_autoptr(GsReview) review = NULL;
 		g_autoptr(GDateTime) now = NULL;
 		g_autofree gchar *text = NULL;
 
-		review = gs_app_review_new ();
-		gs_app_review_set_summary (review, gs_app_review_dialog_get_summary (GS_APP_REVIEW_DIALOG (dialog)));
-		text = gs_app_review_dialog_get_text (GS_APP_REVIEW_DIALOG (dialog));
-		gs_app_review_set_text (review, text);
-		gs_app_review_set_rating (review, gs_app_review_dialog_get_rating (GS_APP_REVIEW_DIALOG (dialog)));
-		gs_app_review_set_version (review, gs_app_get_version (self->app));
+		review = gs_review_new ();
+		gs_review_set_summary (review, gs_review_dialog_get_summary (GS_REVIEW_DIALOG (dialog)));
+		text = gs_review_dialog_get_text (GS_REVIEW_DIALOG (dialog));
+		gs_review_set_text (review, text);
+		gs_review_set_rating (review, gs_review_dialog_get_rating (GS_REVIEW_DIALOG (dialog)));
+		gs_review_set_version (review, gs_app_get_version (self->app));
 		now = g_date_time_new_now_local ();
-		gs_app_review_set_date (review, now);
+		gs_review_set_date (review, now);
 
 		/* call into the plugins to set the new value */
 		gs_app_set_self_review (self->app, review);
