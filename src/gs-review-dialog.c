@@ -224,7 +224,6 @@ gs_review_dialog_class_init (GsReviewDialogClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, label_rating_desc);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, summary_entry);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, text_view);
-	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, post_button);
 }
 
 GtkWidget *
