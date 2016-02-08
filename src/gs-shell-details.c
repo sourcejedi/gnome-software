@@ -52,7 +52,6 @@ struct _GsShellDetails
 	GCancellable		*cancellable;
 	GsApp			*app;
 	GsShell			*shell;
-	GtkWidget		*star;
 	SoupSession		*session;
 
 	GtkWidget		*application_details_icon;
@@ -61,7 +60,8 @@ struct _GsShellDetails
 	GtkWidget		*box_addons;
 	GtkWidget		*box_details;
 	GtkWidget		*box_details_description;
-	GtkWidget		*box_details_header;
+	GtkWidget		*star;
+	GtkWidget		*label_review_count;
 	GtkWidget		*box_details_screenshot;
 	GtkWidget		*box_details_screenshot_main;
 	GtkWidget		*box_details_screenshot_thumbnails;
@@ -733,6 +733,15 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 						   gs_app_get_rating (self->app));
 		} else {
 			gtk_widget_set_visible (self->star, FALSE);
+		}
+		if (gs_app_get_review_count (self->app) != 0) {
+			g_autofree gchar *text = NULL;
+
+			gtk_widget_set_visible (self->label_review_count, TRUE);
+			text = g_strdup_printf ("(%u)", gs_app_get_review_count (self->app));
+			gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
+		} else {
+			gtk_widget_set_visible (self->label_review_count, FALSE);
 		}
 		break;
 	}
@@ -1440,13 +1449,9 @@ gs_shell_details_setup (GsShellDetails *self,
 			  self);
 
 	/* set up star ratings */
-	self->star = gs_star_widget_new ();
 	g_signal_connect (self->star, "rating-changed",
 			  G_CALLBACK (gs_shell_details_rating_changed_cb),
 			  self);
-	gtk_widget_set_visible (self->star, TRUE);
-	gtk_widget_set_valign (self->star, GTK_ALIGN_START);
-	gtk_box_pack_start (GTK_BOX (self->box_details_header), self->star, FALSE, FALSE, 0);
 
 	/* setup details */
 	g_signal_connect (self->button_install, "clicked",
@@ -1518,7 +1523,8 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_addons);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details_description);
-	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details_header);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, star);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_review_count);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details_screenshot);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details_screenshot_main);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_details_screenshot_thumbnails);

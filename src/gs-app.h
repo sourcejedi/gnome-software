@@ -198,6 +198,9 @@ void		 gs_app_set_metadata		(GsApp		*app,
 gint		 gs_app_get_rating		(GsApp		*app);
 void		 gs_app_set_rating		(GsApp		*app,
 						 gint		 rating);
+guint		 gs_app_get_review_count	(GsApp		*app);
+void		 gs_app_set_review_count	(GsApp		*app,
+						 guint		 review_count);
 GsReview	*gs_app_get_self_review		(GsApp		*app);
 void		 gs_app_set_self_review		(GsApp		*app,
 						 GsReview	*review);

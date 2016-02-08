@@ -183,10 +183,10 @@ set_timestamp (GsPlugin *plugin,
 }
 
 static gint
-get_rating_sqlite_cb (void *data,
-		      gint argc,
-		      gchar **argv,
-		      gchar **col_name)
+get_review_stats_sqlite_cb (void *data,
+			    gint argc,
+			    gchar **argv,
+			    gchar **col_name)
 {
 	Histogram *histogram = (Histogram *) data;
 	histogram->one_star_count = g_ascii_strtoll (argv[0], NULL, 10);
@@ -198,14 +198,15 @@ get_rating_sqlite_cb (void *data,
 }
 
 static gboolean
-get_rating (GsPlugin *plugin,
-	    const gchar *package_name,
-	    gint *rating,
-	    GError **error)
+get_review_stats (GsPlugin *plugin,
+		  const gchar *package_name,
+		  gint *rating,
+		  gint *review_count,
+		  GError **error)
 {
 	Histogram histogram = { 0, 0, 0, 0, 0 };
 	gchar *error_msg = NULL;
-	gint result, n_ratings;
+	gint result;
 	g_autofree gchar *statement = NULL;
 
 	/* Get histogram from the database */
@@ -213,7 +214,7 @@ get_rating (GsPlugin *plugin,
 				     "WHERE package_name = '%s'", package_name);
 	result = sqlite3_exec (plugin->priv->db,
 			       statement,
-			       get_rating_sqlite_cb,
+			       get_review_stats_sqlite_cb,
 			       &histogram,
 			       &error_msg);
 	if (result != SQLITE_OK) {
@@ -227,12 +228,11 @@ get_rating (GsPlugin *plugin,
 
 	/* Convert to a rating */
 	// FIXME: Convert to a Wilson score
-	n_ratings = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
-	if (n_ratings == 0)
+	*review_count = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
+	if (*review_count == 0)
 		*rating = -1;
 	else
-		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
-g_warning ("%s %zi %zi %zi %zi %zi / %d -> %d", package_name, histogram.one_star_count, histogram.two_star_count, histogram.three_star_count, histogram.four_star_count, histogram.five_star_count, n_ratings, *rating);
+		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / *review_count;
 
 	return TRUE;
 }
@@ -601,6 +601,7 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 	for (i = 0; i < sources->len; i++) {
 		const gchar *package_name;
 		gint rating;
+		guint review_count;
 		gboolean ret;
 
 		/* If we have a local review, use that as the rating */
@@ -608,13 +609,14 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 
 		/* Otherwise use the statistics */
 		package_name = g_ptr_array_index (sources, i);
-		ret = get_rating (plugin, package_name, &rating, error);
+		ret = get_review_stats (plugin, package_name, &rating, &review_count, error);
 		if (!ret)
 			return FALSE;
 		if (rating != -1) {
 			g_debug ("ubuntu-reviews setting rating on %s to %i%%",
 				 package_name, rating);
 			gs_app_set_rating (app, rating);
+			gs_app_set_review_count (app, review_count);
 			if (rating > 80)
 				gs_app_add_kudo (app, GS_APP_KUDO_POPULAR);
 		}

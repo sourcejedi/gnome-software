@@ -83,6 +83,7 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
+	guint			 review_count;
 	GsReview		*self_review;
 	GPtrArray		*reviews; /* of GsReview */
 	guint64			 size;
@@ -112,6 +113,7 @@ enum {
 	PROP_SUMMARY,
 	PROP_DESCRIPTION,
 	PROP_RATING,
+	PROP_REVIEW_COUNT,
 	PROP_KIND,
 	PROP_STATE,
 	PROP_PROGRESS,
@@ -291,6 +293,8 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
 	if (app->rating != -1)
 		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+	if (app->review_count != 0)
+		g_string_append_printf (str, "\treview-count:\t%u\n", app->review_count);
 	if (app->self_review != NULL)
 		g_string_append_printf (str, "\tself-review:\t%p\n", app->self_review);
 	if (app->reviews != NULL)
@@ -1643,6 +1647,27 @@ gs_app_set_rating (GsApp *app, gint rating)
 }
 
 /**
+ * gs_app_get_review_count:
+ */
+guint
+gs_app_get_review_count (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), 0);
+	return app->review_count;
+}
+
+/**
+ * gs_app_set_review_count:
+ */
+void
+gs_app_set_review_count (GsApp *app, guint review_count)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	app->review_count = review_count;
+	gs_app_queue_notify (app, "review-count");
+}
+
+/**
  * gs_app_get_self_review:
  */
 GsReview *
@@ -2163,6 +2188,9 @@ gs_app_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *
 	case PROP_RATING:
 		g_value_set_int (value, app->rating);
 		break;
+	case PROP_REVIEW_COUNT:
+		g_value_set_int (value, app->review_count);
+		break;
 	case PROP_KIND:
 		g_value_set_uint (value, app->kind);
 		break;
@@ -2213,6 +2241,9 @@ gs_app_set_property (GObject *object, guint prop_id, const GValue *value, GParam
 		break;
 	case PROP_RATING:
 		gs_app_set_rating (app, g_value_get_int (value));
+		break;
+	case PROP_REVIEW_COUNT:
+		gs_app_set_review_count (app, g_value_get_uint (value));
 		break;
 	case PROP_KIND:
 		gs_app_set_kind (app, g_value_get_uint (value));
@@ -2348,6 +2379,14 @@ gs_app_class_init (GsAppClass *klass)
 				  -1, 100, -1,
 				  G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 	g_object_class_install_property (object_class, PROP_RATING, pspec);
+
+	/**
+	 * GsApp:review-count:
+	 */
+	pspec = g_param_spec_uint ("review-count", NULL, NULL,
+				  0, G_MAXUINT, 0,
+				  G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
+	g_object_class_install_property (object_class, PROP_REVIEW_COUNT, pspec);
 
 	/**
 	 * GsApp:kind:

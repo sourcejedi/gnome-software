@@ -227,6 +227,45 @@
                             <property name="position">1</property>
                           </packing>
                         </child>
+                        <child>
+                          <object class="GtkBox" id="star_box">
+                            <property name="visible">True</property>
+                            <property name="valign">start</property>
+                            <child>
+                              <object class="GsStarWidget" id="star">
+                                <property name="visible">True</property>
+                                <property name="halign">start</property>
+                                <property name="valign">center</property>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">False</property>
+                                <property name="position">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="label_review_count">
+                                <property name="visible">True</property>
+                                <property name="margin_start">5</property>
+                                <property name="halign">start</property>
+                                <property name="valign">center</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">False</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">False</property>
+                            <property name="position">2</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
