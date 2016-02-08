@@ -34,7 +34,6 @@ struct _GsReviewDialog
 	GtkWidget	*star;
 	GtkWidget	*summary_entry;
 	GtkWidget	*text_view;
-	GtkWidget	*post_button;
 };
 
 G_DEFINE_TYPE (GsReviewDialog, gs_review_dialog, GTK_TYPE_DIALOG)
@@ -46,7 +45,7 @@ gs_review_dialog_get_rating (GsReviewDialog *dialog)
 }
 
 void
-gs_review_dialog_set_rating	(GsReviewDialog *dialog, gint rating)
+gs_review_dialog_set_rating (GsReviewDialog *dialog, gint rating)
 {
 	gs_star_widget_set_rating (GS_STAR_WIDGET (dialog->star), rating);
 }
@@ -73,6 +72,7 @@ static void
 gs_review_dialog_init (GsReviewDialog *dialog)
 {
 	gtk_widget_init_template (GTK_WIDGET (dialog));
+	gs_star_widget_set_icon_size (GS_STAR_WIDGET (dialog->star), 32);
 }
 
 static void
@@ -85,7 +85,6 @@ gs_review_dialog_class_init (GsReviewDialogClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, star);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, summary_entry);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, text_view);
-	gtk_widget_class_bind_template_child (widget_class, GsReviewDialog, post_button);
 }
 
 GtkWidget *
