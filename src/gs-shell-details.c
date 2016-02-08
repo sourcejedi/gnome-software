@@ -973,12 +973,12 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
-		GsAppReview *review;
+		GsReview *review;
 		GtkWidget *row;
 
 		review = g_ptr_array_index (reviews, i);
 
-		row = gs_app_review_row_new (review);
+		row = gs_review_row_new (review);
 
 		gtk_container_add (GTK_CONTAINER (self->list_box_reviews), row);
 		gtk_widget_show (row);
