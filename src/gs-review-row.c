@@ -35,6 +35,7 @@ struct _GsReviewRow
 	GtkWidget	*stars;
 	GtkWidget	*summary_label;
 	GtkWidget	*author_label;
+	GtkWidget	*date_label;
 	GtkWidget	*text_label;
 };
 
@@ -49,19 +50,13 @@ gs_review_row_refresh (GsReviewRow *row)
 
 	gs_star_widget_set_rating (GS_STAR_WIDGET (row->stars), gs_review_get_rating (row->review));
 	reviewer = gs_review_get_reviewer (row->review);
+	gtk_label_set_text (GTK_LABEL (row->author_label), reviewer ? reviewer : "");
 	date = gs_review_get_date (row->review);
-	if (reviewer != NULL && date != NULL) {
-		gchar *date_text = g_date_time_format (date, "%e %B %Y");
-		text = g_strdup_printf ("%s, %s", reviewer, date_text);
-		g_free (date_text);
-	}
-	else if (reviewer != NULL)
-		text = g_strdup (reviewer);
-	else if (date != NULL)
+	if (date != NULL)
 		text = g_date_time_format (date, "%e %B %Y");
 	else
 		text = g_strdup ("");
-	gtk_label_set_text (GTK_LABEL (row->author_label), text);
+	gtk_label_set_text (GTK_LABEL (row->date_label), text);
 	gtk_label_set_text (GTK_LABEL (row->summary_label), gs_review_get_summary (row->review));
 	gtk_label_set_text (GTK_LABEL (row->text_label), gs_review_get_text (row->review));
 }
@@ -115,6 +110,7 @@ gs_review_row_class_init (GsReviewRowClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, stars);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, summary_label);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, author_label);
+	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, date_label);
 	gtk_widget_class_bind_template_child (widget_class, GsReviewRow, text_label);
 }
 
