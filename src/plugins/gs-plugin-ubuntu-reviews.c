@@ -30,11 +30,17 @@
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
+#include "ubuntu-login-dialog.h"
+
 struct GsPluginPrivate {
 	gchar		*db_path;
 	sqlite3		*db;
 	gsize		 db_loaded;
 	SoupSession	*session;
+	gchar		*consumer_key;
+	gchar		*consumer_secret;
+	gchar		*token_key;
+	gchar		*token_secret;
 };
 
 typedef struct {
@@ -86,10 +92,14 @@ gs_plugin_get_deps (GsPlugin *plugin)
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-	if (plugin->priv->db != NULL)
-		sqlite3_close (plugin->priv->db);
-	if (plugin->priv->session != NULL)
-		g_object_unref (plugin->priv->session);
+	GsPluginPrivate *priv = plugin->priv;
+
+	g_clear_pointer (&priv->token_secret, g_free);
+	g_clear_pointer (&priv->token_key, g_free);
+	g_clear_pointer (&priv->consumer_secret, g_free);
+	g_clear_pointer (&priv->consumer_key, g_free);
+	g_clear_pointer (&priv->db, sqlite3_close);
+	g_clear_object (&priv->session);
 }
 
 static gboolean
@@ -729,15 +739,12 @@ set_request (SoupMessage *message, JsonBuilder *builder)
 }
 
 static gboolean
-send_review (GsPlugin    *plugin,
-             GsReview *review,
-             const gchar *package_name,
-             const gchar *consumer_key,
-             const gchar *consumer_secret,
-             const gchar *token_key,
-             const gchar *token_secret,
-             GError **error)
+set_package_review (GsPlugin *plugin,
+                    GsReview *review,
+                    const gchar *package_name,
+                    GError **error)
 {
+	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
 	g_autofree gchar *uri;
@@ -775,10 +782,15 @@ send_review (GsPlugin    *plugin,
 	json_builder_end_object (builder);
 	set_request (msg, builder);
 	g_object_unref (builder);
-	sign_message (msg, OA_PLAINTEXT, consumer_key, consumer_secret, token_key, token_secret);
+	sign_message (msg,
+	              OA_PLAINTEXT,
+	              priv->consumer_key,
+	              priv->consumer_secret,
+	              priv->token_key,
+	              priv->token_secret);
 
 	/* Send to the server */
-	status_code = soup_session_send_message (plugin->priv->session, msg);
+	status_code = soup_session_send_message (priv->session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
@@ -792,29 +804,54 @@ send_review (GsPlugin    *plugin,
 }
 
 static gboolean
-set_package_review (GsPlugin *plugin,
-                    GsReview *review,
-                    const gchar *package_name,
-                    GError **error)
+sign_into_ubuntu (GsPlugin  *plugin,
+                  GError   **error)
 {
-	gboolean result;
+	GsPluginPrivate *priv = plugin->priv;
+	GtkWidget *dialog;
+	gboolean remember;
+	gboolean success;
 
-	/* Write review into database so we can easily access it */
+	if (priv->consumer_key != NULL &&
+	    priv->consumer_secret != NULL &&
+	    priv->token_key != NULL &&
+	    priv->token_secret != NULL)
+		return TRUE;
 
-	/* Load OAuth token */
+	g_clear_pointer (&priv->token_secret, g_free);
+	g_clear_pointer (&priv->token_key, g_free);
+	g_clear_pointer (&priv->consumer_secret, g_free);
+	g_clear_pointer (&priv->consumer_key, g_free);
 
-	/*
-	result = send_review (plugin,
-	                      review,
-	                      package_name,
-	                      consumer_key,
-	                      consumer_secret,
-	                      token_key,
-	                      token_secret,
-	                      error);
-	*/
+	dialog = ubuntu_login_dialog_new ();
 
-	return result;
+	g_object_set (dialog, "session", plugin->priv->session, NULL);
+
+	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
+	case GTK_RESPONSE_DELETE_EVENT:
+	case GTK_RESPONSE_CANCEL:
+		success = FALSE;
+		break;
+
+	case GTK_RESPONSE_OK:
+		g_object_get (dialog,
+		              "remember", &remember,
+		              "consumer-key", &priv->consumer_key,
+		              "consumer-secret", &priv->consumer_secret,
+		              "token-key", &priv->token_key,
+		              "token-secret", &priv->token_secret,
+		              NULL);
+
+		if (remember) {
+			/* FIXME: store credentials somewhere... */
+		}
+
+		success = TRUE;
+		break;
+	}
+
+	gtk_widget_destroy (dialog);
+	return success;
 }
 
 gboolean
@@ -849,6 +886,9 @@ gs_plugin_app_set_review (GsPlugin *plugin,
 	}
 
 	if (!setup_networking (plugin, error))
+		return FALSE;
+
+	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
 
 	/* set rating for each package */
