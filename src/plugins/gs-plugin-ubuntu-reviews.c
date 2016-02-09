@@ -552,6 +552,7 @@ parse_reviews (GsPlugin *plugin, const gchar *text, GsApp *app, GError **error)
 			continue;
 
 		gs_app_add_review (app, review);
+		g_object_unref (review);
 	}
 	result = TRUE;
 
