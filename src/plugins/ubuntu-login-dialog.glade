@@ -128,7 +128,7 @@
                     <property name="margin_bottom">5</property>
                     <property name="hexpand">True</property>
                     <property name="visibility">False</property>
-                    <property name="invisible_char">*</property>
+                    <property name="invisible_char">•</property>
                     <property name="input_purpose">password</property>
                   </object>
                   <packing>
