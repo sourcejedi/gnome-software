@@ -147,6 +147,12 @@
 	font-weight: bold;
 }
 
+.reviewbar {
+	background-image: none;
+	background-color: #babdb6;
+	color: #555753;
+}
+
 .error-label {
 	text-shadow: none;
 }

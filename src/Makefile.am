@@ -144,6 +144,8 @@ gnome_software_SOURCES =				\
 	gs-progress-button.h				\
 	gs-review.c					\
 	gs-review.h					\
+	gs-review-bar.c					\
+	gs-review-bar.h					\
 	gs-review-dialog.c				\
 	gs-review-dialog.h				\
 	gs-review-histogram.c				\

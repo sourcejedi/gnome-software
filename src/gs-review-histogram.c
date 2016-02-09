@@ -25,14 +25,15 @@
 #include <gtk/gtk.h>
 
 #include "gs-review-histogram.h"
+#include "gs-review-bar.h"
 
 typedef struct
 {
-	GtkWidget	*progress5;
-	GtkWidget	*progress4;
-	GtkWidget	*progress3;
-	GtkWidget	*progress2;
-	GtkWidget	*progress1;
+	GtkWidget	*bar5;
+	GtkWidget	*bar4;
+	GtkWidget	*bar3;
+	GtkWidget	*bar2;
+	GtkWidget	*bar1;
 	GtkWidget	*label_count5;
 	GtkWidget	*label_count4;
 	GtkWidget	*label_count3;
@@ -76,15 +77,15 @@ gs_review_histogram_set_ratings (GsReviewHistogram *histogram,
 	max = count4 > max ? count4 : max;
 	max = count5 > max ? count5 : max;
 
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (priv->progress5), count5 / max);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar5), count5 / max);
 	set_label (priv->label_count5, count5);
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (priv->progress4), count4 / max);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar4), count4 / max);
 	set_label (priv->label_count4, count4);
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (priv->progress3), count3 / max);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar3), count3 / max);
 	set_label (priv->label_count3, count3);
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (priv->progress2), count2 / max);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar2), count2 / max);
 	set_label (priv->label_count2, count2);
-	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (priv->progress1), count1 / max);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar1), count1 / max);
 	set_label (priv->label_count1, count1);
 	set_label (priv->label_total, count1 + count2 + count3 + count4 + count5);
 }
@@ -102,11 +103,11 @@ gs_review_histogram_class_init (GsReviewHistogramClass *klass)
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-review-histogram.ui");
 
-	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, progress5);
-	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, progress4);
-	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, progress3);
-	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, progress2);
-	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, progress1);
+	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, bar5);
+	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, bar4);
+	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, bar3);
+	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, bar2);
+	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, bar1);
 	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, label_count5);
 	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, label_count4);
 	gtk_widget_class_bind_template_child_private (widget_class, GsReviewHistogram, label_count3);

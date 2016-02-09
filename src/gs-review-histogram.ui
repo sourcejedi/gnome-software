@@ -37,9 +37,13 @@
           </packing>
         </child>
         <child>
-          <object class="GtkProgressBar" id="progress5">
+          <object class="GsReviewBar" id="bar5">
             <property name="visible">True</property>
             <property name="margin-left">25</property>
+            <property name="width-request">120</property>
+            <style>
+              <class name="reviewbar"/>
+            </style>
           </object>
           <packing>
             <property name="left-attach">2</property>
@@ -89,9 +93,12 @@
           </packing>
         </child>
         <child>
-          <object class="GtkProgressBar" id="progress4">
+          <object class="GsReviewBar" id="bar4">
             <property name="visible">True</property>
             <property name="margin-left">25</property>
+            <style>
+              <class name="reviewbar"/>
+            </style>
           </object>
           <packing>
             <property name="left-attach">2</property>
@@ -141,9 +148,12 @@
           </packing>
         </child>
         <child>
-          <object class="GtkProgressBar" id="progress3">
+          <object class="GsReviewBar" id="bar3">
             <property name="visible">True</property>
             <property name="margin-left">25</property>
+            <style>
+              <class name="reviewbar"/>
+            </style>
           </object>
           <packing>
             <property name="left-attach">2</property>
@@ -193,9 +203,12 @@
           </packing>
         </child>
         <child>
-          <object class="GtkProgressBar" id="progress2">
+          <object class="GsReviewBar" id="bar2">
             <property name="visible">True</property>
             <property name="margin-left">25</property>
+            <style>
+              <class name="reviewbar"/>
+            </style>
           </object>
           <packing>
             <property name="left-attach">2</property>
@@ -245,9 +258,12 @@
           </packing>
         </child>
         <child>
-          <object class="GtkProgressBar" id="progress1">
+          <object class="GsReviewBar" id="bar1">
             <property name="visible">True</property>
             <property name="margin-left">25</property>
+            <style>
+              <class name="reviewbar"/>
+            </style>
           </object>
           <packing>
             <property name="left-attach">2</property>
