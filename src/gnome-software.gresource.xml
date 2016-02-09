@@ -35,6 +35,6 @@
   <file>gtk-style.css</file>
   <file>gtk-style-hc.css</file>
   <file>plugins/ubuntu-one.png</file>
-  <file preprocess="xml-stripblanks">plugins/ubuntu-login-dialog.glade</file>
+  <file preprocess="xml-stripblanks">plugins/ubuntu-login-dialog.ui</file>
  </gresource>
 </gresources>

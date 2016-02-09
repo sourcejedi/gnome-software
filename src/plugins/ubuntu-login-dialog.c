@@ -528,7 +528,7 @@ remember_check_toggled_cb (UbuntuLoginDialog *self,
 static void
 ubuntu_login_dialog_init (UbuntuLoginDialog *self)
 {
-  self->builder = gtk_builder_new_from_resource ("/org/gnome/Software/plugins/ubuntu-login-dialog.glade");
+  self->builder = gtk_builder_new_from_resource ("/org/gnome/Software/plugins/ubuntu-login-dialog.ui");
   self->content_box = GTK_WIDGET (gtk_builder_get_object (self->builder, "content-box"));
   self->cancel_button = GTK_WIDGET (gtk_builder_get_object (self->builder, "cancel-button"));
   self->next_button = GTK_WIDGET (gtk_builder_get_object (self->builder, "next-button"));
