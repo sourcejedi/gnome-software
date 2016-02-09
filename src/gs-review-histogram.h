@@ -38,11 +38,7 @@ struct _GsReviewHistogramClass
 GtkWidget	*gs_review_histogram_new			(void);
 
 void		 gs_review_histogram_set_ratings		(GsReviewHistogram *histogram,
-								 guint count1,
-								 guint count2,
-								 guint count3,
-								 guint count4,
-								 guint count5);
+								 GArray *review_ratings);
 
 G_END_DECLS
 

@@ -579,13 +579,13 @@ static void
 gs_shell_details_refresh_all (GsShellDetails *self)
 {
 	GPtrArray *history;
+	GArray *review_ratings;
 	GdkPixbuf *pixbuf = NULL;
 	GList *addons;
 	GtkWidget *widget;
 	const gchar *tmp;
 	gboolean ret;
 	gchar **menu_path;
-	guint count1, count2, count3, count4, count5;
 	guint64 kudos;
 	guint64 updated;
 	guint64 user_integration_bf;
@@ -737,17 +737,18 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 		} else {
 			gtk_widget_set_visible (self->star, FALSE);
 		}
-		if (gs_app_get_rating_counts (self->app, &count1, &count2, &count3, &count4, &count5)) {
+		review_ratings = gs_app_get_review_ratings (self->app);
+		if (review_ratings != NULL) {
 			gtk_widget_set_visible (self->histogram, TRUE);
-			gs_review_histogram_set_ratings (GS_REVIEW_HISTOGRAM (self->histogram), count1, count2, count3, count4, count5);
+			gs_review_histogram_set_ratings (GS_REVIEW_HISTOGRAM (self->histogram),
+						         review_ratings);
 		} else {
 			gtk_widget_set_visible (self->histogram, FALSE);
 		}
-		if (gs_app_get_review_count (self->app) != 0) {
+		if (gs_app_get_reviews (self->app) != NULL) {
 			g_autofree gchar *text = NULL;
-
 			gtk_widget_set_visible (self->label_review_count, TRUE);
-			text = g_strdup_printf ("(%u)", gs_app_get_review_count (self->app));
+			text = g_strdup_printf ("(%u)", gs_app_get_reviews (self->app)->len);
 			gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
 		} else {
 			gtk_widget_set_visible (self->label_review_count, FALSE);
@@ -970,32 +971,97 @@ gs_shell_details_refresh_addons (GsShellDetails *self)
 	}
 }
 
+static void gs_shell_details_refresh_reviews (GsShellDetails *self);
+
+/**
+ * gs_shell_details_app_set_review_cb:
+ **/
+static void
+gs_shell_details_app_set_review_cb (GObject *source,
+				GAsyncResult *res,
+				gpointer user_data)
+{
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
+	GsShellDetails *self = GS_SHELL_DETAILS (user_data);
+	g_autoptr(GError) error = NULL;
+
+	if (!gs_plugin_loader_app_action_finish (plugin_loader, res, &error)) {
+		g_warning ("failed to set review %s: %s",
+			   gs_app_get_id (self->app), error->message);
+		return;
+	}
+	gs_shell_details_refresh_reviews (self);
+}
+
+static void
+gs_shell_details_review_button_clicked_cb (GsReviewRow *row,
+					   GsReviewAction action,
+					   GsShellDetails *self)
+{
+	gs_plugin_loader_review_action_async (self->plugin_loader,
+					      self->app,
+					      gs_review_row_get_review (row),
+					      action,
+					      self->cancellable,
+					      gs_shell_details_app_set_review_cb,
+					      self);
+}
+
 static void
 gs_shell_details_refresh_reviews (GsShellDetails *self)
 {
 	GPtrArray *reviews;
+	gboolean show_review_button = TRUE;
 	guint i;
+	guint64 possible_actions = 0;
+	struct {
+		GsReviewAction action;
+		const gchar *plugin_func;
+	} plugin_vfuncs[] = {
+		{ GS_REVIEW_ACTION_UPVOTE,	"gs_plugin_review_upvote" },
+		{ GS_REVIEW_ACTION_DOWNVOTE,	"gs_plugin_review_downvote" },
+		{ GS_REVIEW_ACTION_REPORT,	"gs_plugin_review_report" },
+		{ GS_REVIEW_ACTION_SUBMIT,	"gs_plugin_review_submit" },
+		{ GS_REVIEW_ACTION_REMOVE,	"gs_plugin_review_remove" },
+		{ GS_REVIEW_ACTION_LAST,	NULL }
+	};
 
-	if (!gs_plugin_loader_get_supports_reviews (self->plugin_loader))
+	if (!gs_plugin_loader_get_plugin_supported (self->plugin_loader,
+						    "gs_plugin_review_submit"))
 		return;
 
 	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 
-	/* If you haven't reviewed it, do it now */
-	gtk_widget_set_visible (self->button_review, gs_app_get_self_review (self->app) == NULL);
+	/* find what the plugins support */
+	for (i = 0; plugin_vfuncs[i].action != GS_REVIEW_ACTION_LAST; i++) {
+		if (gs_plugin_loader_get_plugin_supported (self->plugin_loader,
+							   plugin_vfuncs[i].plugin_func)) {
+			possible_actions |= 1 << plugin_vfuncs[i].action;
+		}
+	}
 
+	/* add all the reviews */
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
-		GsReview *review;
-		GtkWidget *row;
+		GsReview *review = g_ptr_array_index (reviews, i);
+		GtkWidget *row = gs_review_row_new (review);
+		guint64 actions;
 
-		review = g_ptr_array_index (reviews, i);
-
-		row = gs_review_row_new (review);
-
+		g_signal_connect (row, "button-clicked",
+				  G_CALLBACK (gs_shell_details_review_button_clicked_cb), self);
+		if (gs_review_get_state (review) & GS_REVIEW_STATE_SELF) {
+			actions = possible_actions & 1 << GS_REVIEW_ACTION_REMOVE;
+			show_review_button = FALSE;
+		} else {
+			actions = possible_actions & ~(1 << GS_REVIEW_ACTION_REMOVE);
+		}
+		gs_review_row_set_actions (GS_REVIEW_ROW (row), actions);
 		gtk_container_add (GTK_CONTAINER (self->list_box_reviews), row);
 		gtk_widget_show (row);
 	}
+
+	/* show the button only if the user never reviewed */
+	gtk_widget_set_visible (self->button_review, show_review_button);
 }
 
 /**
@@ -1124,6 +1190,7 @@ gs_shell_details_set_filename (GsShellDetails *self, const gchar *filename)
 						filename,
 						GS_PLUGIN_REFINE_FLAGS_DEFAULT |
 						GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING |
+						GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS |
 						GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
 						self->cancellable,
 						gs_shell_details_filename_to_app_cb,
@@ -1149,6 +1216,7 @@ gs_shell_details_load (GsShellDetails *self)
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_SETUP_ACTION |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_ADDONS |
+					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
 					   self->cancellable,
 					   gs_shell_details_app_refine_cb,
@@ -1338,25 +1406,6 @@ gs_shell_details_app_set_ratings_cb (GObject *source,
 	}
 }
 
-
-/**
- * gs_shell_details_app_set_review_cb:
- **/
-static void
-gs_shell_details_app_set_review_cb (GObject *source,
-				GAsyncResult *res,
-				gpointer user_data)
-{
-	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
-	GsShellDetails *self = GS_SHELL_DETAILS (user_data);
-	g_autoptr(GError) error = NULL;
-
-	if (!gs_plugin_loader_app_action_finish (plugin_loader, res, &error)) {
-		g_warning ("failed to set review %s: %s",
-			   gs_app_get_id (self->app), error->message);
-	}
-}
-
 /**
  * gs_shell_details_write_review_cb:
  **/
@@ -1386,12 +1435,13 @@ gs_shell_details_write_review_cb (GtkButton *button,
 		gs_review_set_date (review, now);
 
 		/* call into the plugins to set the new value */
-		gs_app_set_self_review (self->app, review);
-		gs_plugin_loader_app_action_async (self->plugin_loader, self->app,
-						   GS_PLUGIN_LOADER_ACTION_SET_REVIEW,
-						   self->cancellable,
-						   gs_shell_details_app_set_review_cb,
-						   self);
+		gs_plugin_loader_review_action_async (self->plugin_loader,
+						      self->app,
+						      review,
+						      GS_REVIEW_ACTION_SUBMIT,
+						      self->cancellable,
+						      gs_shell_details_app_set_review_cb,
+						      self);
 	}
 	gtk_widget_destroy (dialog);
 }
@@ -1451,7 +1501,8 @@ gs_shell_details_setup (GsShellDetails *self,
 	self->cancellable = g_object_ref (cancellable);
 
 	/* Show review widgets if we have plugins that provide them */
-	if (gs_plugin_loader_get_supports_reviews (plugin_loader))
+	if (gs_plugin_loader_get_plugin_supported (plugin_loader,
+						   "gs_plugin_review_submit"))
 		gtk_widget_set_visible (self->box_reviews, TRUE);
 	g_signal_connect (self->button_review, "clicked",
 			  G_CALLBACK (gs_shell_details_write_review_cb),

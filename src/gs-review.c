@@ -27,26 +27,75 @@ struct _GsReview
 {
 	GObject			 parent_instance;
 
+	GsReviewState		 state;
 	gchar			*summary;
 	gchar			*text;
+	gint			 karma;
+	gint			 score;
 	gint			 rating;
 	gchar			*version;
 	gchar			*reviewer;
 	GDateTime		*date;
+	GHashTable		*metadata;
 };
 
 enum {
 	PROP_0,
+	PROP_KARMA,
 	PROP_SUMMARY,
 	PROP_TEXT,
 	PROP_RATING,
 	PROP_VERSION,
 	PROP_REVIEWER,
 	PROP_DATE,
+	PROP_STATE,
 	PROP_LAST
 };
 
 G_DEFINE_TYPE (GsReview, gs_review, G_TYPE_OBJECT)
+
+/**
+ * gs_review_get_karma:
+ */
+gint
+gs_review_get_karma (GsReview *review)
+{
+	g_return_val_if_fail (GS_IS_REVIEW (review), 0);
+	return review->karma;
+}
+
+/**
+ * gs_review_set_karma:
+ */
+void
+gs_review_set_karma (GsReview *review, gint karma)
+{
+	g_return_if_fail (GS_IS_REVIEW (review));
+	review->karma = karma;
+}
+
+/**
+ * gs_review_get_score:
+ *
+ * This allows the UI to sort reviews into the correct order.
+ * Higher numbers indicate a more important or relevant review.
+ */
+gint
+gs_review_get_score (GsReview *review)
+{
+	g_return_val_if_fail (GS_IS_REVIEW (review), 0);
+	return review->score;
+}
+
+/**
+ * gs_review_set_score:
+ */
+void
+gs_review_set_score (GsReview *review, gint score)
+{
+	g_return_if_fail (GS_IS_REVIEW (review));
+	review->score = score;
+}
 
 /**
  * gs_review_get_summary:
@@ -96,7 +145,7 @@ gs_review_set_text (GsReview *review, const gchar *text)
 gint
 gs_review_get_rating (GsReview *review)
 {
-	g_return_val_if_fail (GS_IS_REVIEW (review), -1);
+	g_return_val_if_fail (GS_IS_REVIEW (review), 0);
 	return review->rating;
 }
 
@@ -108,6 +157,26 @@ gs_review_set_rating (GsReview *review, gint rating)
 {
 	g_return_if_fail (GS_IS_REVIEW (review));
 	review->rating = rating;
+}
+
+/**
+ * gs_review_get_state:
+ */
+GsReviewState
+gs_review_get_state (GsReview *review)
+{
+	g_return_val_if_fail (GS_IS_REVIEW (review), 0);
+	return review->state;
+}
+
+/**
+ * gs_review_set_state:
+ */
+void
+gs_review_set_state (GsReview *review, GsReviewState state)
+{
+	g_return_if_fail (GS_IS_REVIEW (review));
+	review->state = state;
 }
 
 /**
@@ -170,16 +239,40 @@ gs_review_set_date (GsReview *review, GDateTime *date)
 {
 	g_return_if_fail (GS_IS_REVIEW (review));
 	g_clear_pointer (&review->date, g_date_time_unref);
-	if (date)
+	if (date != NULL)
 		review->date = g_date_time_ref (date);
 }
 
+/**
+ * gs_review_get_metadata_item:
+ */
+const gchar *
+gs_review_get_metadata_item (GsReview *review, const gchar *key)
+{
+	g_return_val_if_fail (GS_IS_REVIEW (review), NULL);
+	return g_hash_table_lookup (review->metadata, key);
+}
+
+/**
+ * gs_review_add_metadata:
+ */
+void
+gs_review_add_metadata (GsReview *review, const gchar *key, const gchar *value)
+{
+	g_return_if_fail (GS_IS_REVIEW (review));
+	g_hash_table_insert (review->metadata, g_strdup (key), g_strdup (value));
+}
+
 static void
-gs_review_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+gs_review_get_property (GObject *object, guint prop_id,
+			GValue *value, GParamSpec *pspec)
 {
 	GsReview *review = GS_REVIEW (object);
 
 	switch (prop_id) {
+	case PROP_KARMA:
+		g_value_set_int (value, review->karma);
+		break;
 	case PROP_SUMMARY:
 		g_value_set_string (value, review->summary);
 		break;
@@ -188,6 +281,9 @@ gs_review_get_property (GObject *object, guint prop_id, GValue *value, GParamSpe
 		break;
 	case PROP_RATING:
 		g_value_set_int (value, review->rating);
+		break;
+	case PROP_STATE:
+		g_value_set_uint64 (value, review->state);
 		break;
 	case PROP_VERSION:
 		g_value_set_string (value, review->version);
@@ -205,11 +301,15 @@ gs_review_get_property (GObject *object, guint prop_id, GValue *value, GParamSpe
 }
 
 static void
-gs_review_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+gs_review_set_property (GObject *object, guint prop_id,
+			const GValue *value, GParamSpec *pspec)
 {
 	GsReview *review = GS_REVIEW (object);
 
 	switch (prop_id) {
+	case PROP_KARMA:
+		gs_review_set_karma (review, g_value_get_int (value));
+		break;
 	case PROP_SUMMARY:
 		gs_review_set_summary (review, g_value_get_string (value));
 		break;
@@ -218,6 +318,9 @@ gs_review_set_property (GObject *object, guint prop_id, const GValue *value, GPa
 		break;
 	case PROP_RATING:
 		gs_review_set_rating (review, g_value_get_int (value));
+		break;
+	case PROP_STATE:
+		gs_review_set_state (review, g_value_get_uint64 (value));
 		break;
 	case PROP_VERSION:
 		gs_review_set_version (review, g_value_get_string (value));
@@ -252,6 +355,7 @@ gs_review_finalize (GObject *object)
 	g_free (review->summary);
 	g_free (review->text);
 	g_free (review->reviewer);
+	g_hash_table_unref (review->metadata);
 
 	G_OBJECT_CLASS (gs_review_parent_class)->finalize (object);
 }
@@ -265,6 +369,14 @@ gs_review_class_init (GsReviewClass *klass)
 	object_class->finalize = gs_review_finalize;
 	object_class->get_property = gs_review_get_property;
 	object_class->set_property = gs_review_set_property;
+
+	/**
+	 * GsApp:karma:
+	 */
+	pspec = g_param_spec_int ("karma", NULL, NULL,
+				  G_MININT, G_MAXINT, 0,
+				  G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
+	g_object_class_install_property (object_class, PROP_KARMA, pspec);
 
 	/**
 	 * GsApp:summary:
@@ -289,6 +401,16 @@ gs_review_class_init (GsReviewClass *klass)
 				  -1, 100, -1,
 				  G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 	g_object_class_install_property (object_class, PROP_RATING, pspec);
+
+	/**
+	 * GsApp:state:
+	 */
+	pspec = g_param_spec_uint64 ("state", NULL, NULL,
+				     GS_REVIEW_STATE_NONE,
+				     GS_REVIEW_STATE_LAST,
+				     GS_REVIEW_STATE_NONE,
+				     G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
+	g_object_class_install_property (object_class, PROP_STATE, pspec);
 
 	/**
 	 * GsApp:version:
@@ -319,6 +441,8 @@ static void
 gs_review_init (GsReview *review)
 {
 	review->rating = -1;
+	review->metadata = g_hash_table_new_full (g_str_hash, g_str_equal,
+						  g_free, g_free);
 }
 
 /**

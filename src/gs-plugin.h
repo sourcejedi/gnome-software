@@ -108,6 +108,7 @@ typedef enum {
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPGRADE_REMOVED	= 1 << 16,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE	= 1 << 17,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS		= 1 << 18,
+	GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS	= 1 << 19,
 	GS_PLUGIN_REFINE_FLAGS_LAST
 } GsPluginRefineFlags;
 
@@ -140,6 +141,11 @@ typedef gboolean	 (*GsPluginResultsFunc)		(GsPlugin	*plugin,
 							 GError		**error);
 typedef gboolean	 (*GsPluginActionFunc)		(GsPlugin	*plugin,
 							 GsApp		*app,
+							 GCancellable	*cancellable,
+							 GError		**error);
+typedef gboolean	 (*GsPluginReviewFunc)		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
 							 GCancellable	*cancellable,
 							 GError		**error);
 typedef gboolean	 (*GsPluginRefineFunc)		(GsPlugin	*plugin,
@@ -276,8 +282,29 @@ gboolean	 gs_plugin_app_upgrade_download		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GCancellable	*cancellable,
 							 GError		**error);
-gboolean	 gs_plugin_app_set_review		(GsPlugin	*plugin,
+gboolean	 gs_plugin_review_submit		(GsPlugin	*plugin,
 							 GsApp		*app,
+							 GsReview	*review,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_review_upvote		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_review_downvote		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_review_report		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_review_remove		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
 							 GCancellable	*cancellable,
 							 GError		**error);
 gboolean	 gs_plugin_refresh			(GsPlugin	*plugin,

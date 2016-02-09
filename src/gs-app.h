@@ -198,24 +198,9 @@ void		 gs_app_set_metadata		(GsApp		*app,
 gint		 gs_app_get_rating		(GsApp		*app);
 void		 gs_app_set_rating		(GsApp		*app,
 						 gint		 rating);
-gboolean	 gs_app_get_rating_counts	(GsApp		*app,
-						 guint		*count1,
-						 guint		*count2,
-						 guint		*count3,
-						 guint		*count4,
-						 guint		*count5);
-void		 gs_app_set_rating_counts	(GsApp		*app,
-						 guint		 count1,
-						 guint		 count2,
-						 guint		 count3,
-						 guint		 count4,
-						 guint		 count5);
-guint		 gs_app_get_review_count	(GsApp		*app);
-void		 gs_app_set_review_count	(GsApp		*app,
-						 guint		 review_count);
-GsReview	*gs_app_get_self_review		(GsApp		*app);
-void		 gs_app_set_self_review		(GsApp		*app,
-						 GsReview	*review);
+GArray		*gs_app_get_review_ratings	(GsApp		*app);
+void		 gs_app_set_review_ratings	(GsApp		*app,
+						 GArray		*review_ratings);
 GPtrArray	*gs_app_get_reviews		(GsApp		*app);
 void		 gs_app_add_review		(GsApp		*app,
 						 GsReview	*review);

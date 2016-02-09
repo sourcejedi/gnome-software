@@ -63,7 +63,7 @@ gs_review_bar_draw (GtkWidget *widget, cairo_t *cr)
 
 	context = gtk_widget_get_style_context (widget);
 
-	// Don't fill the complete height (too heavy beside GtkLabel of that height)
+	/* don't fill the complete height (too heavy beside GtkLabel of that height) */
 	y_offset = floor (0.15 * gtk_widget_get_allocated_height (widget));
 	bar_height = gtk_widget_get_allocated_height (widget) - (y_offset * 2);
 

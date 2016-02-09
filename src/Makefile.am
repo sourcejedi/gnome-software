@@ -80,6 +80,7 @@ noinst_PROGRAMS =					\
 
 gnome_software_cmd_SOURCES =				\
 	gs-app.c					\
+	gs-review.c					\
 	gs-cmd.c					\
 	gs-utils.c					\
 	gs-os-release.c					\
@@ -278,6 +279,7 @@ gs_self_test_SOURCES =						\
 	gs-plugin-loader-sync.c					\
 	gs-plugin-loader.c					\
 	gs-plugin.c						\
+	gs-review.c						\
 	gs-utils.c						\
 	gs-self-test.c
 

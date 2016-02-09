@@ -111,8 +111,8 @@ setup_networking (GsPlugin *plugin, GError **error)
 
 	/* set up a session */
 	plugin->priv->session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
-	                                                       "gnome-software",
-	                                                       NULL);
+							       "gnome-software",
+							       NULL);
 	if (plugin->priv->session == NULL) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
@@ -145,7 +145,7 @@ set_package_stats (GsPlugin *plugin,
 
 	statement = g_strdup_printf ("INSERT OR REPLACE INTO review_stats (package_name, "
 				     "one_star_count, two_star_count, three_star_count, "
-                                     "four_star_count, five_star_count) "
+				     "four_star_count, five_star_count) "
 				     "VALUES ('%s', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT"', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "');",
 				     package_name, histogram->one_star_count, histogram->two_star_count,
 				     histogram->three_star_count, histogram->four_star_count, histogram->five_star_count);
@@ -206,11 +206,7 @@ static gboolean
 get_review_stats (GsPlugin *plugin,
 		  const gchar *package_name,
 		  gint *rating,
-		  guint *count1,
-		  guint *count2,
-		  guint *count3,
-		  guint *count4,
-		  guint *count5,
+		  gint *review_ratings,
 		  GError **error)
 {
 	Histogram histogram = { 0, 0, 0, 0, 0 };
@@ -242,11 +238,12 @@ get_review_stats (GsPlugin *plugin,
 		*rating = -1;
 	else
 		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
-	*count1 = histogram.one_star_count;
-	*count2 = histogram.two_star_count;
-	*count3 = histogram.three_star_count;
-	*count4 = histogram.four_star_count;
-	*count5 = histogram.five_star_count;
+	review_ratings[0] = 0;
+	review_ratings[1] = histogram.one_star_count;
+	review_ratings[2] = histogram.two_star_count;
+	review_ratings[3] = histogram.three_star_count;
+	review_ratings[4] = histogram.four_star_count;
+	review_ratings[5] = histogram.five_star_count;
 
 	return TRUE;
 }
@@ -424,8 +421,8 @@ load_database (GsPlugin *plugin, GError **error)
 			    "version TEXT,"
 			    "date TEXT,"
 			    "rating INTEGER,"
-                            "summary TEXT,"
-                            "text TEXT);";
+			    "summary TEXT,"
+			    "text TEXT);";
 		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
 		rebuild_ratings = TRUE;
 	}
@@ -616,7 +613,7 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 	for (i = 0; i < sources->len; i++) {
 		const gchar *package_name;
 		gint rating;
-		guint count1, count2, count3, count4, count5, review_count;
+		gint review_ratings[6];
 		gboolean ret;
 
 		/* If we have a local review, use that as the rating */
@@ -624,14 +621,18 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 
 		/* Otherwise use the statistics */
 		package_name = g_ptr_array_index (sources, i);
-		ret = get_review_stats (plugin, package_name, &rating, &count1, &count2, &count3, &count4, &count5, error);
+		ret = get_review_stats (plugin, package_name, &rating, review_ratings, error);
 		if (!ret)
 			return FALSE;
 		if (rating != -1) {
+			g_autoptr(GArray) ratings = NULL;
+
 			g_debug ("ubuntu-reviews setting rating on %s to %i%%",
 				 package_name, rating);
 			gs_app_set_rating (app, rating);
-			gs_app_set_rating_counts (app, count1, count2, count3, count4, count5);
+			ratings = g_array_sized_new (FALSE, FALSE, sizeof (gint), 6);
+			g_array_append_vals (ratings, review_ratings, 6);
+			gs_app_set_review_ratings (app, ratings);
 			if (rating > 80)
 				gs_app_add_kudo (app, GS_APP_KUDO_POPULAR);
 		}
@@ -677,7 +678,7 @@ gs_plugin_refine (GsPlugin *plugin,
 	for (l = *list; l != NULL; l = l->next) {
 		GsApp *app = GS_APP (l->data);
 
-		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING) != 0) {
+		if ((flags & (GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING | GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS)) != 0) {
 			if (!refine_rating (plugin, app, error))
 				return FALSE;
 		}
@@ -706,8 +707,8 @@ add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
 
 static void
 sign_message (SoupMessage *message, OAuthMethod method,
-              const gchar *consumer_key, const gchar *consumer_secret,
-              const gchar *token_key, const gchar *token_secret)
+	      const gchar *consumer_key, const gchar *consumer_secret,
+	      const gchar *token_key, const gchar *token_secret)
 {
 	g_autofree gchar *url = NULL, *oauth_authorization_parameters = NULL, *authorization_text = NULL;
 	gchar **url_parameters = NULL;
@@ -717,11 +718,11 @@ sign_message (SoupMessage *message, OAuthMethod method,
 
 	url_parameters_length = oauth_split_url_parameters(url, &url_parameters);
 	oauth_sign_array2_process (&url_parameters_length, &url_parameters,
-	                           NULL,
-	                           method,
-	                           message->method,
-	                           consumer_key, consumer_secret,
-	                           token_key, token_secret);
+				   NULL,
+				   method,
+				   message->method,
+				   consumer_key, consumer_secret,
+				   token_key, token_secret);
 	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
 	oauth_free_array (&url_parameters_length, &url_parameters);
 	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
@@ -741,9 +742,9 @@ set_request (SoupMessage *message, JsonBuilder *builder)
 
 static gboolean
 set_package_review (GsPlugin *plugin,
-                    GsReview *review,
-                    const gchar *package_name,
-                    GError **error)
+		    GsReview *review,
+		    const gchar *package_name,
+		    GError **error)
 {
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
@@ -784,11 +785,11 @@ set_package_review (GsPlugin *plugin,
 	set_request (msg, builder);
 	g_object_unref (builder);
 	sign_message (msg,
-	              OA_PLAINTEXT,
-	              priv->consumer_key,
-	              priv->consumer_secret,
-	              priv->token_key,
-	              priv->token_secret);
+		      OA_PLAINTEXT,
+		      priv->consumer_key,
+		      priv->consumer_secret,
+		      priv->token_key,
+		      priv->token_secret);
 
 	/* Send to the server */
 	status_code = soup_session_send_message (priv->session, msg);
@@ -829,21 +830,21 @@ show_login_dialog (gpointer user_data)
 	case GTK_RESPONSE_DELETE_EVENT:
 	case GTK_RESPONSE_CANCEL:
 		g_set_error (context->error,
-		             GS_PLUGIN_ERROR,
-		             GS_PLUGIN_ERROR_FAILED,
-		             "Unable to sign into Ubuntu One");
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to sign into Ubuntu One");
 
 		context->success = FALSE;
 		break;
 
 	case GTK_RESPONSE_OK:
 		g_object_get (dialog,
-		              "remember", &context->remember,
-		              "consumer-key", &priv->consumer_key,
-		              "consumer-secret", &priv->consumer_secret,
-		              "token-key", &priv->token_key,
-		              "token-secret", &priv->token_secret,
-		              NULL);
+			      "remember", &context->remember,
+			      "consumer-key", &priv->consumer_key,
+			      "consumer-secret", &priv->consumer_secret,
+			      "token-key", &priv->token_key,
+			      "token-secret", &priv->token_secret,
+			      NULL);
 
 		context->success = TRUE;
 		break;
@@ -861,7 +862,7 @@ show_login_dialog (gpointer user_data)
 
 static gboolean
 sign_into_ubuntu (GsPlugin  *plugin,
-                  GError   **error)
+		  GError   **error)
 {
 	GsPluginPrivate *priv = plugin->priv;
 	LoginContext context = { 0 };
@@ -896,21 +897,12 @@ sign_into_ubuntu (GsPlugin  *plugin,
 }
 
 gboolean
-gs_plugin_app_set_review (GsPlugin *plugin,
-			  GsApp *app,
-			  GCancellable *cancellable,
-			  GError **error)
+gs_plugin_review_submit (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
 {
-	GsReview *review;
-	GPtrArray *sources;
-	const gchar *package_name;
-	gboolean ret;
-	guint i;
-	g_autoptr(SoupMessage) msg = NULL;
-
-	review = gs_app_get_self_review (app);
-	g_return_val_if_fail (review != NULL, FALSE);
-
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
 		gboolean ret = load_database (plugin, error);
@@ -919,29 +911,14 @@ gs_plugin_app_set_review (GsPlugin *plugin,
 			return FALSE;
 	}
 
-	/* get the package name */
-	sources = gs_app_get_sources (app);
-	if (sources->len == 0) {
-		g_warning ("no package name for %s", gs_app_get_id (app));
-		return TRUE;
-	}
-
 	if (!setup_networking (plugin, error))
 		return FALSE;
 
 	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
 
-	/* set rating for each package */
-	for (i = 0; i < sources->len; i++) {
-		package_name = g_ptr_array_index (sources, i);
-		ret = set_package_review (plugin,
-		                          review,
-		                          package_name,
-		                          error);
-		if (!ret)
-			return FALSE;
-	}
-
-	return TRUE;
+	return set_package_review (plugin,
+				   review,
+				   gs_app_get_source_default (app),
+				   error);
 }

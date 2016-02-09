@@ -29,16 +29,16 @@
 
 typedef struct
 {
-	GtkWidget	*bar5;
-	GtkWidget	*bar4;
-	GtkWidget	*bar3;
-	GtkWidget	*bar2;
 	GtkWidget	*bar1;
-	GtkWidget	*label_count5;
-	GtkWidget	*label_count4;
-	GtkWidget	*label_count3;
-	GtkWidget	*label_count2;
+	GtkWidget	*bar2;
+	GtkWidget	*bar3;
+	GtkWidget	*bar4;
+	GtkWidget	*bar5;
 	GtkWidget	*label_count1;
+	GtkWidget	*label_count2;
+	GtkWidget	*label_count3;
+	GtkWidget	*label_count4;
+	GtkWidget	*label_count5;
 	GtkWidget	*label_total;
 } GsReviewHistogramPrivate;
 
@@ -48,7 +48,6 @@ static void
 set_label (GtkWidget *label, guint value)
 {
 	g_autofree gchar *text = NULL;
-
 	text = g_strdup_printf ("%u", value);
 	gtk_label_set_text (GTK_LABEL (label), text);
 }
@@ -58,36 +57,36 @@ set_label (GtkWidget *label, guint value)
  **/
 void
 gs_review_histogram_set_ratings (GsReviewHistogram *histogram,
-				 guint count1,
-				 guint count2,
-				 guint count3,
-				 guint count4,
-				 guint count5)
+				 GArray *review_ratings)
 {
 	GsReviewHistogramPrivate *priv;
 	gdouble max;
+	gint count[5];
+	guint i;
 
 	g_return_if_fail (GS_IS_REVIEW_HISTOGRAM (histogram));
 	priv = gs_review_histogram_get_instance_private (histogram);
 
 	/* Scale to maximum value */
-	max = count1;
-	max = count2 > max ? count2 : max;
-	max = count3 > max ? count3 : max;
-	max = count4 > max ? count4 : max;
-	max = count5 > max ? count5 : max;
+	for (i = 0; i < 5; i++)
+		count[i] = g_array_index (review_ratings, gint, i + 1);
+	max = count[0];
+	max = count[1] > max ? count[1] : max;
+	max = count[2] > max ? count[2] : max;
+	max = count[3] > max ? count[3] : max;
+	max = count[4] > max ? count[4] : max;
 
-	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar5), count5 / max);
-	set_label (priv->label_count5, count5);
-	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar4), count4 / max);
-	set_label (priv->label_count4, count4);
-	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar3), count3 / max);
-	set_label (priv->label_count3, count3);
-	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar2), count2 / max);
-	set_label (priv->label_count2, count2);
-	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar1), count1 / max);
-	set_label (priv->label_count1, count1);
-	set_label (priv->label_total, count1 + count2 + count3 + count4 + count5);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar5), count[4] / max);
+	set_label (priv->label_count5, count[4]);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar4), count[3] / max);
+	set_label (priv->label_count4, count[3]);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar3), count[2] / max);
+	set_label (priv->label_count3, count[2]);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar2), count[1] / max);
+	set_label (priv->label_count2, count[1]);
+	gs_review_bar_set_fraction (GS_REVIEW_BAR (priv->bar1), count[0] / max);
+	set_label (priv->label_count1, count[0]);
+	set_label (priv->label_total, count[0] + count[1] + count[2] + count[3] + count[4]);
 }
 
 static void
