@@ -556,10 +556,15 @@ get_rating_sqlite_cb (void *data,
 }
 
 static gboolean
-get_rating (GsPlugin *plugin,
-	    const gchar *package_name,
-	    gint *rating,
-	    GError **error)
+get_review_stats (GsPlugin *plugin,
+		  const gchar *package_name,
+		  gint *rating,
+		  guint *count1,
+		  guint *count2,
+		  guint *count3,
+		  guint *count4,
+		  guint *count5,
+		  GError **error)
 {
 	Histogram histogram = { 0, 0, 0, 0, 0 };
 	gchar *error_msg = NULL;
@@ -590,7 +595,11 @@ get_rating (GsPlugin *plugin,
 		*rating = -1;
 	else
 		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
-g_warning ("%s %zi %zi %zi %zi %zi / %d -> %d", package_name, histogram.one_star_count, histogram.two_star_count, histogram.three_star_count, histogram.four_star_count, histogram.five_star_count, n_ratings, *rating);
+	*count1 = histogram.one_star_count;
+	*count2 = histogram.two_star_count;
+	*count3 = histogram.three_star_count;
+	*count4 = histogram.four_star_count;
+	*count5 = histogram.five_star_count;
 
 	return TRUE;
 }

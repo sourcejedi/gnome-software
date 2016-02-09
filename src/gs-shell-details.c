@@ -607,6 +607,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	const gchar *tmp;
 	gboolean ret;
 	gchar **menu_path;
+	guint count1, count2, count3, count4, count5;
 	guint64 kudos;
 	guint64 updated;
 	guint64 user_integration_bf;
