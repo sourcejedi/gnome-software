@@ -1,10 +1,8 @@
 #include "ubuntu-login-dialog.h"
 
+#include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
 #include <libsoup/soup.h>
-
-/* XXX */
-#define _(x) (x)
 
 #define UBUNTU_LOGIN_HOST "https://login.ubuntu.com"
 
