@@ -922,3 +922,51 @@ gs_plugin_review_submit (GsPlugin *plugin,
 				   gs_app_get_source_default (app),
 				   error);
 }
+
+#if 0
+gboolean
+gs_plugin_review_report (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	return TRUE;
+}
+
+gboolean
+gs_plugin_review_upvote (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	return TRUE;
+}
+
+/**
+ * gs_plugin_review_downvote:
+ */
+gboolean
+gs_plugin_review_downvote (GsPlugin *plugin,
+			   GsApp *app,
+			   GsReview *review,
+			   GCancellable *cancellable,
+			   GError **error)
+{
+	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	return TRUE;
+}
+
+gboolean
+gs_plugin_review_remove (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	return TRUE;
+}
+#endif
