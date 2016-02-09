@@ -83,6 +83,12 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
+	gboolean		 have_rating_counts;
+	guint			 rating_count1;
+	guint			 rating_count2;
+	guint			 rating_count3;
+	guint			 rating_count4;
+	guint			 rating_count5;
 	guint			 review_count;
 	GsReview		*self_review;
 	GPtrArray		*reviews; /* of GsReview */
@@ -293,6 +299,8 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
 	if (app->rating != -1)
 		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+	if (app->have_rating_counts)
+		g_string_append_printf (str, "\trating-counts:\t[1:%u, 2:%u, 3:%u, 4:%u, 5:%u]\n", app->rating_count1, app->rating_count2, app->rating_count3, app->rating_count4, app->rating_count5);
 	if (app->review_count != 0)
 		g_string_append_printf (str, "\treview-count:\t%u\n", app->review_count);
 	if (app->self_review != NULL)
@@ -1644,6 +1652,39 @@ gs_app_set_rating (GsApp *app, gint rating)
 	g_return_if_fail (GS_IS_APP (app));
 	app->rating = rating;
 	gs_app_queue_notify (app, "rating");
+}
+
+/**
+ * gs_app_get_rating_counts:
+ */
+gboolean
+gs_app_get_rating_counts (GsApp *app, guint *count1, guint *count2, guint *count3, guint *count4, guint *count5)
+{
+	g_return_val_if_fail (GS_IS_APP (app), FALSE);
+	if (!app->have_rating_counts)
+		return FALSE;
+	*count1 = app->rating_count1;
+	*count2 = app->rating_count2;
+	*count3 = app->rating_count3;
+	*count4 = app->rating_count4;
+	*count5 = app->rating_count5;
+	return TRUE;
+}
+
+/**
+ * gs_app_set_rating_counts:
+ */
+void
+gs_app_set_rating_counts (GsApp *app, guint count1, guint count2, guint count3, guint count4, guint count5)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	app->have_rating_counts = TRUE;
+	app->rating_count1 = count1;
+	app->rating_count2 = count2;
+	app->rating_count3 = count3;
+	app->rating_count4 = count4;
+	app->rating_count5 = count5;
+	app->review_count = count1 + count2 + count3 + count4 + count5;
 }
 
 /**

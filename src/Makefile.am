@@ -38,6 +38,7 @@ UI_FILES =						\
 	gs-first-run-dialog.ui				\
 	gs-history-dialog.ui				\
 	gs-review-dialog.ui				\
+	gs-review-histogram.ui				\
 	gs-review-row.ui				\
 	gs-shell-category.ui				\
 	gs-shell-extras.ui				\
@@ -145,6 +146,8 @@ gnome_software_SOURCES =				\
 	gs-review.h					\
 	gs-review-dialog.c				\
 	gs-review-dialog.h				\
+	gs-review-histogram.c				\
+	gs-review-histogram.h				\
 	gs-review-row.c					\
 	gs-review-row.h					\
 	gs-screenshot-image.c				\

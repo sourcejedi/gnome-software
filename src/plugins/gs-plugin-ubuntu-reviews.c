@@ -201,12 +201,16 @@ static gboolean
 get_review_stats (GsPlugin *plugin,
 		  const gchar *package_name,
 		  gint *rating,
-		  gint *review_count,
+		  guint *count1,
+		  guint *count2,
+		  guint *count3,
+		  guint *count4,
+		  guint *count5,
 		  GError **error)
 {
 	Histogram histogram = { 0, 0, 0, 0, 0 };
 	gchar *error_msg = NULL;
-	gint result;
+	gint result, n_ratings;
 	g_autofree gchar *statement = NULL;
 
 	/* Get histogram from the database */
@@ -228,11 +232,16 @@ get_review_stats (GsPlugin *plugin,
 
 	/* Convert to a rating */
 	// FIXME: Convert to a Wilson score
-	*review_count = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
-	if (*review_count == 0)
+	n_ratings = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
+	if (n_ratings == 0)
 		*rating = -1;
 	else
-		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / *review_count;
+		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
+	*count1 = histogram.one_star_count;
+	*count2 = histogram.two_star_count;
+	*count3 = histogram.three_star_count;
+	*count4 = histogram.four_star_count;
+	*count5 = histogram.five_star_count;
 
 	return TRUE;
 }
@@ -601,7 +610,7 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 	for (i = 0; i < sources->len; i++) {
 		const gchar *package_name;
 		gint rating;
-		guint review_count;
+		guint count1, count2, count3, count4, count5, review_count;
 		gboolean ret;
 
 		/* If we have a local review, use that as the rating */
@@ -609,14 +618,14 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 
 		/* Otherwise use the statistics */
 		package_name = g_ptr_array_index (sources, i);
-		ret = get_review_stats (plugin, package_name, &rating, &review_count, error);
+		ret = get_review_stats (plugin, package_name, &rating, &count1, &count2, &count3, &count4, &count5, error);
 		if (!ret)
 			return FALSE;
 		if (rating != -1) {
 			g_debug ("ubuntu-reviews setting rating on %s to %i%%",
 				 package_name, rating);
 			gs_app_set_rating (app, rating);
-			gs_app_set_review_count (app, review_count);
+			gs_app_set_rating_counts (app, count1, count2, count3, count4, count5);
 			if (rating > 80)
 				gs_app_add_kudo (app, GS_APP_KUDO_POPULAR);
 		}

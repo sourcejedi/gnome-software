@@ -34,6 +34,7 @@
 #include "gs-screenshot-image.h"
 #include "gs-progress-button.h"
 #include "gs-star-widget.h"
+#include "gs-review-histogram.h"
 #include "gs-review-dialog.h"
 #include "gs-review-row.h"
 
@@ -92,6 +93,7 @@ struct _GsShellDetails
 	GtkWidget		*label_details_info_text;
 	GtkWidget		*list_box_addons;
 	GtkWidget		*box_reviews;
+	GtkWidget		*histogram;
 	GtkWidget		*button_review;
 	GtkWidget		*list_box_reviews;
 	GtkWidget		*scrolledwindow_details;
@@ -583,6 +585,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	const gchar *tmp;
 	gboolean ret;
 	gchar **menu_path;
+	guint count1, count2, count3, count4, count5;
 	guint64 kudos;
 	guint64 updated;
 	guint64 user_integration_bf;
@@ -733,6 +736,12 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 						   gs_app_get_rating (self->app));
 		} else {
 			gtk_widget_set_visible (self->star, FALSE);
+		}
+		if (gs_app_get_rating_counts (self->app, &count1, &count2, &count3, &count4, &count5)) {
+			gtk_widget_set_visible (self->histogram, TRUE);
+			gs_review_histogram_set_ratings (GS_REVIEW_HISTOGRAM (self->histogram), count1, count2, count3, count4, count5);
+		} else {
+			gtk_widget_set_visible (self->histogram, FALSE);
 		}
 		if (gs_app_get_review_count (self->app) != 0) {
 			g_autofree gchar *text = NULL;
@@ -1555,6 +1564,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_info_text);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_addons);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, box_reviews);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, histogram);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, button_review);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, list_box_reviews);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, scrolledwindow_details);
