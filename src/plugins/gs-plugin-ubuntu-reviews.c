@@ -803,14 +803,67 @@ set_package_review (GsPlugin *plugin,
 	return TRUE;
 }
 
+typedef struct
+{
+	GsPlugin *plugin;
+	GError **error;
+
+	GCond cond;
+	GMutex mutex;
+	gboolean done;
+	gboolean success;
+	gboolean remember;
+} LoginContext;
+
+static gboolean
+show_login_dialog (gpointer user_data)
+{
+	LoginContext *context = user_data;
+	GsPluginPrivate *priv = context->plugin->priv;
+	GtkWidget *dialog = ubuntu_login_dialog_new ();
+
+	g_object_set (dialog, "session", priv->session, NULL);
+
+	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
+	case GTK_RESPONSE_DELETE_EVENT:
+	case GTK_RESPONSE_CANCEL:
+		g_set_error (context->error,
+		             GS_PLUGIN_ERROR,
+		             GS_PLUGIN_ERROR_FAILED,
+		             "Unable to sign into Ubuntu One");
+
+		context->success = FALSE;
+		break;
+
+	case GTK_RESPONSE_OK:
+		g_object_get (dialog,
+		              "remember", &context->remember,
+		              "consumer-key", &priv->consumer_key,
+		              "consumer-secret", &priv->consumer_secret,
+		              "token-key", &priv->token_key,
+		              "token-secret", &priv->token_secret,
+		              NULL);
+
+		context->success = TRUE;
+		break;
+	}
+
+	gtk_widget_destroy (dialog);
+
+	g_mutex_lock (&context->mutex);
+	context->done = TRUE;
+	g_cond_signal (&context->cond);
+	g_mutex_unlock (&context->mutex);
+
+	return G_SOURCE_REMOVE;
+}
+
 static gboolean
 sign_into_ubuntu (GsPlugin  *plugin,
                   GError   **error)
 {
 	GsPluginPrivate *priv = plugin->priv;
-	GtkWidget *dialog;
-	gboolean remember;
-	gboolean success;
+	LoginContext context = { 0 };
 
 	if (priv->consumer_key != NULL &&
 	    priv->consumer_secret != NULL &&
@@ -823,35 +876,22 @@ sign_into_ubuntu (GsPlugin  *plugin,
 	g_clear_pointer (&priv->consumer_secret, g_free);
 	g_clear_pointer (&priv->consumer_key, g_free);
 
-	dialog = ubuntu_login_dialog_new ();
+	context.plugin = plugin;
+	context.error = error;
+	g_cond_init (&context.cond);
+	g_mutex_init (&context.mutex);
+	g_mutex_lock (&context.mutex);
 
-	g_object_set (dialog, "session", plugin->priv->session, NULL);
+	gdk_threads_add_idle (show_login_dialog, &context);
 
-	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
-	case GTK_RESPONSE_DELETE_EVENT:
-	case GTK_RESPONSE_CANCEL:
-		success = FALSE;
-		break;
+	while (!context.done)
+		g_cond_wait (&context.cond, &context.mutex);
 
-	case GTK_RESPONSE_OK:
-		g_object_get (dialog,
-		              "remember", &remember,
-		              "consumer-key", &priv->consumer_key,
-		              "consumer-secret", &priv->consumer_secret,
-		              "token-key", &priv->token_key,
-		              "token-secret", &priv->token_secret,
-		              NULL);
+	g_mutex_unlock (&context.mutex);
+	g_mutex_clear (&context.mutex);
+	g_cond_clear (&context.cond);
 
-		if (remember) {
-			/* FIXME: store credentials somewhere... */
-		}
-
-		success = TRUE;
-		break;
-	}
-
-	gtk_widget_destroy (dialog);
-	return success;
+	return context.success;
 }
 
 gboolean
