@@ -30,7 +30,7 @@
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
-#include "ubuntu-login-dialog.h"
+#include "gs-ubuntu-login-dialog.h"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
@@ -929,10 +929,11 @@ show_login_dialog (gpointer user_data)
 {
 	LoginContext *context = user_data;
 	GsPluginPrivate *priv = context->plugin->priv;
-	GtkWidget *dialog = ubuntu_login_dialog_new ();
+	GtkWidget *dialog;
 
 	g_object_set (dialog, "session", priv->session, NULL);
 
+	dialog = gs_ubuntu_login_dialog_new ();
 	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
 	case GTK_RESPONSE_DELETE_EVENT:
 	case GTK_RESPONSE_CANCEL:
