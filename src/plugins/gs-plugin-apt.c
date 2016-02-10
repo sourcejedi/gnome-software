@@ -362,6 +362,8 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		g_autoptr(GsApp) app = NULL;
 
 		app = gs_app_new (installed[i]);
+		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+		gs_app_set_management_plugin (app, "PackageKit");
 		gs_app_add_source (app, installed[i]);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_plugin_add_app (list, app);
@@ -507,6 +509,13 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 	return TRUE;
 }
 
+static gboolean
+app_is_ours (GsApp *app)
+{
+	// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+	return g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") == 0;
+}
+
 gboolean
 gs_plugin_app_install (GsPlugin *plugin,
 		       GsApp *app,
@@ -514,6 +523,9 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GError **error)
 {
 	//g_printerr ("APT: gs_plugin_app_install\n");
+
+	if (!app_is_ours (app))
+		return TRUE;
 
 	if (gs_app_get_source_default (app) == NULL)
 		return TRUE;
@@ -536,6 +548,9 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GError **error)
 {
 	//g_printerr ("APT: gs_plugin_app_remove\n");
+
+	if (!app_is_ours (app))
+		return TRUE;
 
 	if (gs_app_get_source_default (app) == NULL)
 		return TRUE;
@@ -606,6 +621,9 @@ gs_plugin_app_update (GsPlugin *plugin,
 {
 	g_printerr ("APT: gs_plugin_app_update\n");
 
+	if (!app_is_ours (app))
+		return TRUE;
+
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 	if (aptd_transaction (plugin, "UpgradePackages", app, error))
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
@@ -623,5 +641,8 @@ gs_plugin_launch (GsPlugin *plugin,
 		  GCancellable *cancellable,
 		  GError **error)
 {
+	if (!app_is_ours (app))
+		return TRUE;
+
 	return gs_plugin_app_launch (plugin, app, error);
 }
