@@ -117,7 +117,7 @@ gs_review_dialog_changed_cb (GsReviewDialog *dialog)
 	gtk_widget_set_tooltip_text (dialog->post_button, msg);
 
 	/* can the user submit this? */
-	gtk_widget_set_sensitive (dialog->post_button, TRUE);//all_okay);
+	gtk_widget_set_sensitive (dialog->post_button, all_okay);
 }
 
 static gboolean
