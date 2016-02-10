@@ -55,6 +55,7 @@ void		 gs_review_set_karma			(GsReview	*review,
 gint		 gs_review_get_score			(GsReview	*review);
 void		 gs_review_set_score			(GsReview	*review,
 							 gint		 score);
+
 const gchar	*gs_review_get_summary			(GsReview	*review);
 void		 gs_review_set_summary			(GsReview	*review,
 							 const gchar	*summary);
