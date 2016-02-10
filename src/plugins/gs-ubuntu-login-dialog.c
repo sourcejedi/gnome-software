@@ -275,13 +275,6 @@ update_widgets (GsUbuntuLoginDialog *self)
 	}
 }
 
-static void
-cancel_button_clicked_cb (GsUbuntuLoginDialog *self,
-			  GtkButton	 *button)
-{
-	gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_CANCEL);
-}
-
 typedef void (*ResponseCallback) (GsUbuntuLoginDialog *self,
 				  guint	      status,
 				  GVariant	  *response,
@@ -545,7 +538,6 @@ gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
 
-	g_signal_connect_swapped (self->cancel_button, "clicked", G_CALLBACK (cancel_button_clicked_cb), self);
 	g_signal_connect_swapped (self->next_button, "clicked", G_CALLBACK (next_button_clicked_cb), self);
 	g_signal_connect_swapped (self->login_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
 	g_signal_connect_swapped (self->register_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
