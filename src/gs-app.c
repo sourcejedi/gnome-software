@@ -83,6 +83,8 @@ struct _GsApp
 	AsUrgencyKind		 update_urgency;
 	gchar			*management_plugin;
 	gint			 rating;
+	GArray			*review_ratings;
+	GPtrArray		*reviews; /* of GsReview */
 	guint64			 size;
 	GsAppKind		 kind;
 	AsIdKind		 id_kind;
@@ -289,6 +291,15 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
 	if (app->rating != -1)
 		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+	if (app->review_ratings != NULL) {
+		for (i = 0; i < app->review_ratings->len; i++) {
+			gint rat = g_array_index (app->review_ratings, gint, i);
+			g_string_append_printf (str, "\treview-rating:\t[%i:%i]\n",
+						i, rat);
+		}
+	}
+	if (app->reviews != NULL)
+		g_string_append_printf (str, "\treviews:\t%i\n", app->reviews->len);
 	if (app->pixbuf != NULL)
 		g_string_append_printf (str, "\tpixbuf:\t%p\n", app->pixbuf);
 	if (app->install_date != 0) {
@@ -1637,6 +1648,48 @@ gs_app_set_rating (GsApp *app, gint rating)
 }
 
 /**
+ * gs_app_get_review_ratings:
+ */
+GArray *
+gs_app_get_review_ratings (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), FALSE);
+	return app->review_ratings;
+}
+
+/**
+ * gs_app_set_review_ratings:
+ */
+void
+gs_app_set_review_ratings (GsApp *app, GArray *review_ratings)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	if (app->review_ratings != NULL)
+		g_array_unref (app->review_ratings);
+	app->review_ratings = g_array_ref (review_ratings);
+}
+
+/**
+ * gs_app_get_reviews:
+ */
+GPtrArray *
+gs_app_get_reviews (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
+	return app->reviews;
+}
+
+/**
+ * gs_app_add_review:
+ */
+void
+gs_app_add_review (GsApp *app, GsReview *review)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	g_ptr_array_add (app->reviews, g_object_ref (review));
+}
+
+/**
  * gs_app_get_size:
  */
 guint64
@@ -2199,6 +2252,7 @@ gs_app_dispose (GObject *object)
 	g_clear_pointer (&app->history, g_ptr_array_unref);
 	g_clear_pointer (&app->related, g_ptr_array_unref);
 	g_clear_pointer (&app->screenshots, g_ptr_array_unref);
+	g_clear_pointer (&app->reviews, g_ptr_array_unref);
 
 	G_OBJECT_CLASS (gs_app_parent_class)->dispose (object);
 }
@@ -2349,6 +2403,7 @@ gs_app_init (GsApp *app)
 	app->related = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->history = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->screenshots = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+	app->reviews = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->metadata = g_hash_table_new_full (g_str_hash,
 	                                        g_str_equal,
 	                                        g_free,

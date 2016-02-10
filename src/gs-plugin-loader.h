@@ -209,6 +209,16 @@ void		 gs_plugin_loader_app_action_async	(GsPluginLoader	*plugin_loader,
 gboolean	 gs_plugin_loader_app_action_finish	(GsPluginLoader	*plugin_loader,
 							 GAsyncResult	*res,
 							 GError		**error);
+void		 gs_plugin_loader_review_action_async	(GsPluginLoader	*plugin_loader,
+							 GsApp		*app,
+							 GsReview	*review,
+							 GsReviewAction	 action,
+							 GCancellable	*cancellable,
+							 GAsyncReadyCallback callback,
+							 gpointer	 user_data);
+gboolean	 gs_plugin_loader_review_action_finish	(GsPluginLoader	*plugin_loader,
+							 GAsyncResult	*res,
+							 GError		**error);
 gboolean	 gs_plugin_loader_refresh_finish	(GsPluginLoader	*plugin_loader,
 							 GAsyncResult	*res,
 							 GError		**error);
@@ -223,6 +233,8 @@ GsApp		*gs_plugin_loader_dedupe		(GsPluginLoader	*plugin_loader,
 							 GsApp		*app);
 void		 gs_plugin_loader_set_network_status    (GsPluginLoader *plugin_loader,
 							 gboolean        online);
+gboolean	 gs_plugin_loader_get_plugin_supported	(GsPluginLoader	*plugin_loader,
+							 const gchar	*plugin_func);
 
 G_END_DECLS
 

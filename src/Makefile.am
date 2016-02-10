@@ -37,6 +37,9 @@ UI_FILES =						\
 	gs-app-row.ui					\
 	gs-first-run-dialog.ui				\
 	gs-history-dialog.ui				\
+	gs-review-dialog.ui				\
+	gs-review-histogram.ui				\
+	gs-review-row.ui				\
 	gs-shell-category.ui				\
 	gs-shell-extras.ui				\
 	gs-shell-details.ui				\
@@ -77,6 +80,7 @@ noinst_PROGRAMS =					\
 
 gnome_software_cmd_SOURCES =				\
 	gs-app.c					\
+	gs-review.c					\
 	gs-cmd.c					\
 	gs-utils.c					\
 	gs-os-release.c					\
@@ -139,6 +143,16 @@ gnome_software_SOURCES =				\
 	gs-plugin.h					\
 	gs-progress-button.c				\
 	gs-progress-button.h				\
+	gs-review.c					\
+	gs-review.h					\
+	gs-review-bar.c					\
+	gs-review-bar.h					\
+	gs-review-dialog.c				\
+	gs-review-dialog.h				\
+	gs-review-histogram.c				\
+	gs-review-histogram.h				\
+	gs-review-row.c					\
+	gs-review-row.h					\
 	gs-screenshot-image.c				\
 	gs-screenshot-image.h				\
 	gs-shell.c					\
@@ -265,6 +279,7 @@ gs_self_test_SOURCES =						\
 	gs-plugin-loader-sync.c					\
 	gs-plugin-loader.c					\
 	gs-plugin.c						\
+	gs-review.c						\
 	gs-utils.c						\
 	gs-self-test.c
 
