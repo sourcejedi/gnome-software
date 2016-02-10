@@ -616,3 +616,12 @@ gs_plugin_app_update (GsPlugin *plugin,
 
 	return TRUE;
 }
+
+gboolean
+gs_plugin_launch (GsPlugin *plugin,
+		  GsApp *app,
+		  GCancellable *cancellable,
+		  GError **error)
+{
+	return gs_plugin_app_launch (plugin, app, error);
+}
