@@ -580,6 +580,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 {
 	GPtrArray *history;
 	GArray *review_ratings;
+	gint n_reviews;
 	GdkPixbuf *pixbuf = NULL;
 	GList *addons;
 	GtkWidget *widget;
@@ -745,11 +746,8 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 		} else {
 			gtk_widget_set_visible (self->histogram, FALSE);
 		}
+		n_reviews = 0;
 		if (review_ratings != NULL || gs_app_get_reviews (self->app) != NULL) {
-			g_autofree gchar *text = NULL;
-			gint n_reviews = 0;
-
-			gtk_widget_set_visible (self->label_review_count, TRUE);
 			if (review_ratings != NULL) {
 				guint i;
 				for (i = 0; i < review_ratings->len; i++)
@@ -757,6 +755,10 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			} else  {
 				n_reviews = gs_app_get_reviews (self->app)->len;
 			}
+		}
+		if (n_reviews > 0) {
+			g_autofree gchar *text = NULL;
+			gtk_widget_set_visible (self->label_review_count, TRUE);
 			text = g_strdup_printf ("(%u)", n_reviews);
 			gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
 		} else {
