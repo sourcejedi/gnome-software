@@ -233,23 +233,6 @@ refine (GsPlugin *plugin,
 	gboolean known_apps = FALSE;
 	g_autofree gchar **dpkg_argv = NULL, **cache_argv = NULL, *dpkg_stdout = NULL, *cache_stdout = NULL, *dpkg_stderr = NULL, *cache_stderr = NULL;
 
-	/*g_printerr ("APT: gs_plugin_refine");
-	for (link = *list; link; link = link->next) {
-		GsApp *app = GS_APP (link->data);
-		g_printerr (" %s", gs_app_get_id (app));
-	}
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
-		g_printerr (" LICENCE");
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0)
-		g_printerr (" SIZE");
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0)
-		g_printerr (" VERSION");
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_HISTORY) != 0)
-		g_printerr (" HISTORY");
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0)
-		g_printerr (" UPDATE_DETAILS");
-	g_printerr ("\n");*/
-
 	// Get the information from the cache
 	dpkg_argv_array = g_ptr_array_new ();
 	g_ptr_array_add (dpkg_argv_array, (gpointer) "dpkg");
@@ -351,8 +334,6 @@ gs_plugin_add_installed (GsPlugin *plugin,
 {
 	gchar **installed;
 	int i;
-
-	//g_printerr ("APT: gs_plugin_add_installed\n");
 
 	installed = get_installed (error);
 	if (installed == NULL)
@@ -522,8 +503,6 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
-	//g_printerr ("APT: gs_plugin_app_install\n");
-
 	if (!app_is_ours (app))
 		return TRUE;
 
@@ -547,8 +526,6 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	//g_printerr ("APT: gs_plugin_app_remove\n");
-
 	if (!app_is_ours (app))
 		return TRUE;
 
@@ -573,8 +550,6 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GCancellable *cancellable,
 		   GError **error)
 {
-	//g_printerr ("APT: gs_plugin_refresh\n");
-
 	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
 		return TRUE;
 
@@ -588,8 +563,6 @@ gs_plugin_add_updates (GsPlugin *plugin,
                        GError **error)
 {
 	GList *installed = NULL, *link;
-
-	g_printerr ("APT: gs_plugin_add_updates\n");
 
 	// Get the version of everything installed
 	// FIXME: Checks all the packages we don't have appstream data for (so inefficient)
@@ -619,8 +592,6 @@ gs_plugin_app_update (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	g_printerr ("APT: gs_plugin_app_update\n");
-
 	if (!app_is_ours (app))
 		return TRUE;
 
