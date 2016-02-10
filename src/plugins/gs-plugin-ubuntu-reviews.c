@@ -522,6 +522,7 @@ parse_review (JsonNode *node)
 	if (star_rating > 0)
 		gs_review_set_rating (review, star_rating * 20);
 	gs_review_set_date (review, parse_date_time (json_object_get_string_member (object, "date_created")));
+	gs_review_add_metadata (review, "ubuntu-id", json_object_get_string_member (object, "id"));
 
 	return review;
 }
@@ -805,6 +806,112 @@ set_package_review (GsPlugin *plugin,
 	return TRUE;
 }
 
+static gboolean
+set_review_usefulness (GsPlugin *plugin,
+		       const gchar *review_id,
+		       gboolean is_useful,
+		       GError **error)
+{
+	GsPluginPrivate *priv = plugin->priv;
+	g_autofree gchar *uri;
+	g_autoptr(SoupMessage) msg;
+	guint status_code;
+
+	/* Create message for reviews.ubuntu.com */
+	uri = g_strdup_printf ("%s/api/1.0/reviews/%s/recommendations/?useful=%s", UBUNTU_REVIEWS_SERVER, review_id, is_useful ? "True" : "False");
+	msg = soup_message_new (SOUP_METHOD_POST, uri);
+	sign_message (msg,
+		      OA_PLAINTEXT,
+		      priv->consumer_key,
+		      priv->consumer_secret,
+		      priv->token_key,
+		      priv->token_secret);
+
+	/* Send to the server */
+	status_code = soup_session_send_message (priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to set review usefulness: %s",
+			     soup_status_get_phrase (status_code));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static gboolean
+report_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       const gchar *reason,
+	       const gchar *text,
+	       GError **error)
+{
+	GsPluginPrivate *priv = plugin->priv;
+	g_autofree gchar *uri;
+	g_autoptr(SoupMessage) msg;
+	guint status_code;
+
+	/* Create message for reviews.ubuntu.com */
+	// FIXME: escape reason / text properly
+	uri = g_strdup_printf ("%s/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", UBUNTU_REVIEWS_SERVER, review_id, reason, text);
+	msg = soup_message_new (SOUP_METHOD_POST, uri);
+	sign_message (msg,
+		      OA_PLAINTEXT,
+		      priv->consumer_key,
+		      priv->consumer_secret,
+		      priv->token_key,
+		      priv->token_secret);
+
+	/* Send to the server */
+	status_code = soup_session_send_message (priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to set report review: %s",
+			     soup_status_get_phrase (status_code));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static gboolean
+remove_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       GError **error)
+{
+	GsPluginPrivate *priv = plugin->priv;
+	g_autofree gchar *uri;
+	g_autoptr(SoupMessage) msg;
+	guint status_code;
+
+	/* Create message for reviews.ubuntu.com */
+	uri = g_strdup_printf ("%s/api/1.0/reviews/delete/%s/", UBUNTU_REVIEWS_SERVER, review_id);
+	msg = soup_message_new (SOUP_METHOD_POST, uri);
+	sign_message (msg,
+		      OA_PLAINTEXT,
+		      priv->consumer_key,
+		      priv->consumer_secret,
+		      priv->token_key,
+		      priv->token_secret);
+
+	/* Send to the server */
+	status_code = soup_session_send_message (priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to set delete review: %s",
+			     soup_status_get_phrase (status_code));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 typedef struct
 {
 	GsPlugin *plugin;
@@ -923,7 +1030,6 @@ gs_plugin_review_submit (GsPlugin *plugin,
 				   error);
 }
 
-#if 0
 gboolean
 gs_plugin_review_report (GsPlugin *plugin,
 			 GsApp *app,
@@ -931,6 +1037,15 @@ gs_plugin_review_report (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", error))
+		return FALSE;
 	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
 	return TRUE;
 }
@@ -942,13 +1057,19 @@ gs_plugin_review_upvote (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!set_review_usefulness (plugin, review_id, TRUE, error))
+		return FALSE;
 	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
 	return TRUE;
 }
 
-/**
- * gs_plugin_review_downvote:
- */
 gboolean
 gs_plugin_review_downvote (GsPlugin *plugin,
 			   GsApp *app,
@@ -956,6 +1077,15 @@ gs_plugin_review_downvote (GsPlugin *plugin,
 			   GCancellable *cancellable,
 			   GError **error)
 {
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!set_review_usefulness (plugin, review_id, FALSE, error))
+		return FALSE;
 	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
 	return TRUE;
 }
@@ -967,6 +1097,12 @@ gs_plugin_review_remove (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	return TRUE;
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	return remove_review (plugin, review_id, error);
 }
-#endif
