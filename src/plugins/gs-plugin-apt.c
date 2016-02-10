@@ -199,7 +199,7 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, 
 			continue;
 
 		if (g_str_has_prefix (lines[i], status_prefix)) {
-			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed"))
+			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed") && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
 				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		} else if (g_str_has_prefix (lines[i], installed_size_prefix) && (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0) {
 			if (gs_app_get_size (app) == 0)
@@ -209,8 +209,12 @@ parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, 
 
 			if (gs_app_get_version (app) == NULL)
 				gs_app_set_version (app, version);
-			if (gs_app_get_state (app) == AS_APP_STATE_INSTALLED && version_newer (gs_app_get_update_version (app), version))
+			if ((gs_app_get_state (app) == AS_APP_STATE_INSTALLED ||gs_app_get_state (app) == AS_APP_STATE_UPDATABLE_LIVE) && version_newer (gs_app_get_update_version (app), version)) {
+				if (gs_app_get_state (app) == AS_APP_STATE_INSTALLED)
+					gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
+				gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 				gs_app_set_update_version (app, version);
+			}
 		}
 	}
 
@@ -588,6 +592,25 @@ gs_plugin_add_updates (GsPlugin *plugin,
 			gs_plugin_add_app (list, app);
 	}
 	g_list_free_full (installed, g_object_unref);
+
+	return TRUE;
+}
+
+gboolean
+gs_plugin_app_update (GsPlugin *plugin,
+		      GsApp *app,
+		      GCancellable *cancellable,
+		      GError **error)
+{
+	g_printerr ("APT: gs_plugin_app_update\n");
+
+	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
+	if (aptd_transaction ("UpgradePackages", app, error))
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	else {
+		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+		return FALSE;
+	}
 
 	return TRUE;
 }
