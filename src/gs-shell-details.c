@@ -580,6 +580,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 {
 	GPtrArray *history;
 	GArray *review_ratings;
+	gint n_reviews;
 	GdkPixbuf *pixbuf = NULL;
 	GList *addons;
 	GtkWidget *widget;
@@ -589,6 +590,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	guint64 kudos;
 	guint64 updated;
 	guint64 user_integration_bf;
+	guint i;
 	g_autoptr(GError) error = NULL;
 
 	/* change widgets */
@@ -745,10 +747,17 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 		} else {
 			gtk_widget_set_visible (self->histogram, FALSE);
 		}
-		if (gs_app_get_reviews (self->app) != NULL) {
+		n_reviews = 0;
+		if (review_ratings != NULL) {
+			for (i = 0; i < review_ratings->len; i++)
+				n_reviews += g_array_index (review_ratings, gint, i);
+		} else if (gs_app_get_reviews (self->app) != NULL) {
+			n_reviews = gs_app_get_reviews (self->app)->len;
+		}
+		if (n_reviews > 0) {
 			g_autofree gchar *text = NULL;
 			gtk_widget_set_visible (self->label_review_count, TRUE);
-			text = g_strdup_printf ("(%u)", gs_app_get_reviews (self->app)->len);
+			text = g_strdup_printf ("(%u)", n_reviews);
 			gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
 		} else {
 			gtk_widget_set_visible (self->label_review_count, FALSE);
@@ -971,6 +980,8 @@ gs_shell_details_refresh_addons (GsShellDetails *self)
 	}
 }
 
+static void gs_shell_details_refresh_reviews (GsShellDetails *self);
+
 /**
  * gs_shell_details_app_set_review_cb:
  **/
@@ -986,7 +997,9 @@ gs_shell_details_app_set_review_cb (GObject *source,
 	if (!gs_plugin_loader_app_action_finish (plugin_loader, res, &error)) {
 		g_warning ("failed to set review %s: %s",
 			   gs_app_get_id (self->app), error->message);
+		return;
 	}
+	gs_shell_details_refresh_reviews (self);
 }
 
 static void
@@ -1007,6 +1020,7 @@ static void
 gs_shell_details_refresh_reviews (GsShellDetails *self)
 {
 	GPtrArray *reviews;
+	gboolean show_review_button = TRUE;
 	guint i;
 	guint64 possible_actions = 0;
 	struct {
@@ -1044,8 +1058,9 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 
 		g_signal_connect (row, "button-clicked",
 				  G_CALLBACK (gs_shell_details_review_button_clicked_cb), self);
-		if (gs_review_get_state (review) & GS_REVIEW_STATE_SELF) {
+		if (gs_review_get_flags (review) & GS_REVIEW_FLAG_SELF) {
 			actions = possible_actions & 1 << GS_REVIEW_ACTION_REMOVE;
+			show_review_button = FALSE;
 		} else {
 			actions = possible_actions & ~(1 << GS_REVIEW_ACTION_REMOVE);
 		}
@@ -1054,8 +1069,8 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 		gtk_widget_show (row);
 	}
 
-	/* FIXME: show the button only if the user never reviewed */
-	gtk_widget_set_visible (self->button_review, TRUE);
+	/* show the button only if the user never reviewed */
+	gtk_widget_set_visible (self->button_review, show_review_button);
 }
 
 /**

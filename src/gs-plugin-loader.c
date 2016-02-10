@@ -272,8 +272,12 @@ gs_plugin_loader_run_refine (GsPluginLoader *plugin_loader,
 							  flags,
 							  cancellable,
 							  error);
-		if (!ret)
+		if (!ret) {
+			g_prefix_error (error,
+					"failed to run plugin '%s': ",
+					plugin->name);
 			goto out;
+		}
 	}
 
 	/* refine addons one layer deep */
@@ -2485,6 +2489,14 @@ gs_plugin_loader_review_action_thread_cb (GTask *task,
 			     state->function_name);
 		g_task_return_error (task, error);
 	}
+
+	/* add this to the app */
+	if (g_strcmp0 (state->function_name, "gs_plugin_review_submit") == 0)
+		gs_app_add_review (state->app, state->review);
+
+	/* remove this from the app */
+	if (g_strcmp0 (state->function_name, "gs_plugin_review_remove") == 0)
+		gs_app_remove_review (state->app, state->review);
 
 	g_task_return_boolean (task, TRUE);
 }
