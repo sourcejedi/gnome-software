@@ -561,5 +561,7 @@ gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 GtkWidget *
 gs_ubuntu_login_dialog_new (void)
 {
-	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTU_LOGIN_DIALOG, NULL));
+	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTU_LOGIN_DIALOG,
+					 "use-header-bar", TRUE,
+					 NULL));
 }
