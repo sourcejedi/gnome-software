@@ -31,7 +31,6 @@ struct _UbuntuLoginDialog
 {
 	GtkDialog parent_instance;
 
-	GtkBuilder *builder;
 	GtkWidget *content_box;
 	GtkWidget *cancel_button;
 	GtkWidget *next_button;
@@ -69,16 +68,6 @@ enum
 };
 
 G_DEFINE_TYPE (UbuntuLoginDialog, ubuntu_login_dialog, GTK_TYPE_DIALOG)
-
-static void
-ubuntu_login_dialog_dispose (GObject *object)
-{
-	UbuntuLoginDialog *self = UBUNTU_LOGIN_DIALOG (object);
-
-	g_clear_object (&self->builder);
-
-	G_OBJECT_CLASS (ubuntu_login_dialog_parent_class)->dispose (object);
-}
 
 static void
 ubuntu_login_dialog_finalize (GObject *object)
@@ -163,12 +152,29 @@ static void
 ubuntu_login_dialog_class_init (UbuntuLoginDialogClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 	GParamFlags param_flags;
 
-	object_class->dispose = ubuntu_login_dialog_dispose;
 	object_class->finalize = ubuntu_login_dialog_finalize;
 	object_class->get_property = ubuntu_login_dialog_get_property;
 	object_class->set_property = ubuntu_login_dialog_set_property;
+
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/ubuntu-login-dialog.ui");
+
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, content_box);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, cancel_button);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, next_button);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_stack);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_image);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_label);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, page_stack);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, login_radio);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, register_radio);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, reset_radio);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, email_entry);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, password_entry);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, remember_check);
+	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, passcode_entry);
 
 	param_flags = G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB;
 
@@ -521,7 +527,7 @@ radio_button_toggled_cb (UbuntuLoginDialog *self,
 
 static void
 entry_edited_cb (UbuntuLoginDialog *self,
-		 GParamSpec	*pspec,
+		 GParamSpec	   *pspec,
 		 GObject	   *object)
 {
 	update_widgets (self);
@@ -537,21 +543,7 @@ remember_check_toggled_cb (UbuntuLoginDialog *self,
 static void
 ubuntu_login_dialog_init (UbuntuLoginDialog *self)
 {
-	self->builder = gtk_builder_new_from_resource ("/org/gnome/Software/plugins/ubuntu-login-dialog.ui");
-	self->content_box = GTK_WIDGET (gtk_builder_get_object (self->builder, "content-box"));
-	self->cancel_button = GTK_WIDGET (gtk_builder_get_object (self->builder, "cancel-button"));
-	self->next_button = GTK_WIDGET (gtk_builder_get_object (self->builder, "next-button"));
-	self->status_stack = GTK_WIDGET (gtk_builder_get_object (self->builder, "status-stack"));
-	self->status_image = GTK_WIDGET (gtk_builder_get_object (self->builder, "status-image"));
-	self->status_label = GTK_WIDGET (gtk_builder_get_object (self->builder, "status-label"));
-	self->page_stack = GTK_WIDGET (gtk_builder_get_object (self->builder, "page-stack"));
-	self->login_radio = GTK_WIDGET (gtk_builder_get_object (self->builder, "login-radio"));
-	self->register_radio = GTK_WIDGET (gtk_builder_get_object (self->builder, "register-radio"));
-	self->reset_radio = GTK_WIDGET (gtk_builder_get_object (self->builder, "reset-radio"));
-	self->email_entry = GTK_WIDGET (gtk_builder_get_object (self->builder, "email-entry"));
-	self->password_entry = GTK_WIDGET (gtk_builder_get_object (self->builder, "password-entry"));
-	self->remember_check = GTK_WIDGET (gtk_builder_get_object (self->builder, "remember-check"));
-	self->passcode_entry = GTK_WIDGET (gtk_builder_get_object (self->builder, "passcode-entry"));
+	gtk_widget_init_template (GTK_WIDGET (self));
 
 	g_signal_connect_swapped (self->cancel_button, "clicked", G_CALLBACK (cancel_button_clicked_cb), self);
 	g_signal_connect_swapped (self->next_button, "clicked", G_CALLBACK (next_button_clicked_cb), self);
