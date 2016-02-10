@@ -1046,7 +1046,7 @@ gs_plugin_review_report (GsPlugin *plugin,
 
 	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", error))
 		return FALSE;
-	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
 }
 
@@ -1066,7 +1066,7 @@ gs_plugin_review_upvote (GsPlugin *plugin,
 
 	if (!set_review_usefulness (plugin, review_id, TRUE, error))
 		return FALSE;
-	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
 }
 
@@ -1086,7 +1086,7 @@ gs_plugin_review_downvote (GsPlugin *plugin,
 
 	if (!set_review_usefulness (plugin, review_id, FALSE, error))
 		return FALSE;
-	gs_review_set_state (review, GS_REVIEW_STATE_VOTED);
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
 }
 
