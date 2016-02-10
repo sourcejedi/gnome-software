@@ -373,6 +373,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 
 typedef struct
 {
+	GsPlugin *plugin;
 	GMainLoop *loop;
 	GsApp *app;
 	gchar **result;
@@ -393,7 +394,7 @@ transaction_property_changed_cb (GDBusConnection *connection,
 
 	g_variant_get (parameters, "(&sv)", &name, &value);
 	if (data->app && strcmp (name, "Progress") == 0)
-		gs_app_set_progress (data->app, g_variant_get_int32 (value));
+		gs_plugin_progress_update (data->plugin, data->app, g_variant_get_int32 (value));
 }
 
 static void
@@ -413,7 +414,7 @@ transaction_finished_cb (GDBusConnection *connection,
 }
 
 static gboolean
-aptd_transaction (const gchar *method, GsApp *app, GError **error)
+aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **error)
 {
 	g_autoptr(GDBusConnection) conn = NULL;
 	GVariant *parameters;
@@ -453,6 +454,7 @@ aptd_transaction (const gchar *method, GsApp *app, GError **error)
 
 	loop = g_main_loop_new (NULL, FALSE);
 
+	data.plugin = plugin;
 	data.app = app;
 	data.loop = loop;
 	data.result = &transaction_result;
@@ -517,7 +519,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (aptd_transaction ("InstallPackages", app, error))
+	if (aptd_transaction (plugin, "InstallPackages", app, error))
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
@@ -539,7 +541,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	if (aptd_transaction ("RemovePackages", app, error))
+	if (aptd_transaction (plugin, "RemovePackages", app, error))
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
@@ -561,7 +563,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
 		return TRUE;
 
-	return aptd_transaction ("UpdateCache", NULL, error);
+	return aptd_transaction (plugin, "UpdateCache", NULL, error);
 }
 
 gboolean
@@ -605,7 +607,7 @@ gs_plugin_app_update (GsPlugin *plugin,
 	g_printerr ("APT: gs_plugin_app_update\n");
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (aptd_transaction ("UpgradePackages", app, error))
+	if (aptd_transaction (plugin, "UpgradePackages", app, error))
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
