@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "ubuntu-login-dialog.h"
+#include "gs-ubuntu-login-dialog.h"
 
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
@@ -27,7 +27,7 @@
 
 #define UBUNTU_LOGIN_HOST "https://login.ubuntu.com"
 
-struct _UbuntuLoginDialog
+struct _GsUbuntuLoginDialog
 {
 	GtkDialog parent_instance;
 
@@ -67,28 +67,28 @@ enum
 	PROP_TOKEN_SECRET
 };
 
-G_DEFINE_TYPE (UbuntuLoginDialog, ubuntu_login_dialog, GTK_TYPE_DIALOG)
+G_DEFINE_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GTK_TYPE_DIALOG)
 
 static void
-ubuntu_login_dialog_finalize (GObject *object)
+gs_ubuntu_login_dialog_finalize (GObject *object)
 {
-	UbuntuLoginDialog *self = UBUNTU_LOGIN_DIALOG (object);
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
 
 	g_clear_pointer (&self->token_secret, g_free);
 	g_clear_pointer (&self->token_key, g_free);
 	g_clear_pointer (&self->consumer_secret, g_free);
 	g_clear_pointer (&self->consumer_key, g_free);
 
-	G_OBJECT_CLASS (ubuntu_login_dialog_parent_class)->finalize (object);
+	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->finalize (object);
 }
 
 static void
-ubuntu_login_dialog_get_property (GObject    *object,
-				  guint       property_id,
-				  GValue     *value,
-				  GParamSpec *pspec)
+gs_ubuntu_login_dialog_get_property (GObject    *object,
+				     guint       property_id,
+				     GValue     *value,
+				     GParamSpec *pspec)
 {
-	UbuntuLoginDialog *self = UBUNTU_LOGIN_DIALOG (object);
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
 
 	switch (property_id) {
 	case PROP_SESSION:
@@ -126,12 +126,12 @@ ubuntu_login_dialog_get_property (GObject    *object,
 }
 
 static void
-ubuntu_login_dialog_set_property (GObject      *object,
-				  guint	 property_id,
-				  const GValue *value,
-				  GParamSpec   *pspec)
+gs_ubuntu_login_dialog_set_property (GObject      *object,
+				     guint	 property_id,
+				     const GValue *value,
+				     GParamSpec   *pspec)
 {
-	UbuntuLoginDialog *self = UBUNTU_LOGIN_DIALOG (object);
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
 
 	switch (property_id) {
 	case PROP_SESSION:
@@ -149,32 +149,32 @@ ubuntu_login_dialog_set_property (GObject      *object,
 }
 
 static void
-ubuntu_login_dialog_class_init (UbuntuLoginDialogClass *klass)
+gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 	GParamFlags param_flags;
 
-	object_class->finalize = ubuntu_login_dialog_finalize;
-	object_class->get_property = ubuntu_login_dialog_get_property;
-	object_class->set_property = ubuntu_login_dialog_set_property;
+	object_class->finalize = gs_ubuntu_login_dialog_finalize;
+	object_class->get_property = gs_ubuntu_login_dialog_get_property;
+	object_class->set_property = gs_ubuntu_login_dialog_set_property;
 
-	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/ubuntu-login-dialog.ui");
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntu-login-dialog.ui");
 
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, content_box);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, cancel_button);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, next_button);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_stack);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_image);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, status_label);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, page_stack);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, login_radio);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, register_radio);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, reset_radio);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, email_entry);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, password_entry);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, remember_check);
-	gtk_widget_class_bind_template_child (widget_class, UbuntuLoginDialog, passcode_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, content_box);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, cancel_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, next_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_image);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_label);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, page_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, login_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, register_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, reset_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, email_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, password_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, remember_check);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, passcode_entry);
 
 	param_flags = G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB;
 
@@ -197,45 +197,45 @@ ubuntu_login_dialog_class_init (UbuntuLoginDialogClass *klass)
  							      param_flags |
  							      G_PARAM_WRITABLE |
  							      G_PARAM_CONSTRUCT));
-  g_object_class_install_property (object_class,
-				   PROP_REMEMBER,
-				   g_param_spec_boolean ("remember",
-							 "remember",
-							 "remember",
-							 FALSE,
-							 param_flags));
+	g_object_class_install_property (object_class,
+					 PROP_REMEMBER,
+					 g_param_spec_boolean ("remember",
+							       "remember",
+							       "remember",
+							       FALSE,
+							       param_flags));
 
-  g_object_class_install_property (object_class,
-				   PROP_CONSUMER_KEY,
-				   g_param_spec_string ("consumer-key",
-							"consumer key",
-							"consumer key",
-							NULL,
-							param_flags));
+	g_object_class_install_property (object_class,
+					 PROP_CONSUMER_KEY,
+					 g_param_spec_string ("consumer-key",
+							      "consumer key",
+							      "consumer key",
+							      NULL,
+							      param_flags));
 
-  g_object_class_install_property (object_class,
-				   PROP_CONSUMER_SECRET,
-				   g_param_spec_string ("consumer-secret",
-							"consumer secret",
-							"consumer secret",
-							NULL,
-							param_flags));
+	g_object_class_install_property (object_class,
+					 PROP_CONSUMER_SECRET,
+					 g_param_spec_string ("consumer-secret",
+							      "consumer secret",
+							      "consumer secret",
+							      NULL,
+							      param_flags));
 
-  g_object_class_install_property (object_class,
-				   PROP_TOKEN_KEY,
-				   g_param_spec_string ("token-key",
-							"token key",
-							"token key",
-							NULL,
-							param_flags));
+	g_object_class_install_property (object_class,
+					 PROP_TOKEN_KEY,
+					 g_param_spec_string ("token-key",
+							      "token key",
+							      "token key",
+							      NULL,
+							      param_flags));
 
-  g_object_class_install_property (object_class,
-				   PROP_TOKEN_SECRET,
-				   g_param_spec_string ("token-secret",
-							"token secret",
-							"token secret",
-							NULL,
-							param_flags));
+	g_object_class_install_property (object_class,
+					 PROP_TOKEN_SECRET,
+					 g_param_spec_string ("token-secret",
+							      "token secret",
+							      "token secret",
+							      NULL,
+							      param_flags));
 }
 
 static gboolean
@@ -255,7 +255,7 @@ is_email_address (const gchar *text)
 }
 
 static void
-update_widgets (UbuntuLoginDialog *self)
+update_widgets (GsUbuntuLoginDialog *self)
 {
 	if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-0")) {
 		gtk_widget_set_sensitive (self->next_button,
@@ -276,20 +276,20 @@ update_widgets (UbuntuLoginDialog *self)
 }
 
 static void
-cancel_button_clicked_cb (UbuntuLoginDialog *self,
+cancel_button_clicked_cb (GsUbuntuLoginDialog *self,
 			  GtkButton	 *button)
 {
 	gtk_dialog_response (GTK_DIALOG (self), GTK_RESPONSE_CANCEL);
 }
 
-typedef void (*ResponseCallback) (UbuntuLoginDialog *self,
+typedef void (*ResponseCallback) (GsUbuntuLoginDialog *self,
 				  guint	      status,
 				  GVariant	  *response,
 				  gpointer	   user_data);
 
 typedef struct
 {
-	UbuntuLoginDialog *dialog;
+	GsUbuntuLoginDialog *dialog;
 	ResponseCallback callback;
 	gpointer user_data;
 } RequestInfo;
@@ -324,12 +324,12 @@ response_received_cb (SoupSession *session,
 }
 
 static void
-send_request (UbuntuLoginDialog *self,
-	      const gchar       *method,
-	      const gchar       *uri,
-	      GVariant	  *request,
-	      ResponseCallback   callback,
-	      gpointer	   user_data)
+send_request (GsUbuntuLoginDialog *self,
+	      const gchar         *method,
+	      const gchar         *uri,
+	      GVariant	          *request,
+	      ResponseCallback     callback,
+	      gpointer	           user_data)
 {
 	RequestInfo *info;
 	SoupMessage *message;
@@ -353,10 +353,10 @@ send_request (UbuntuLoginDialog *self,
 }
 
 static void
-receive_login_response_cb (UbuntuLoginDialog *self,
-			   guint	      status,
-			   GVariant	  *response,
-			   gpointer	   user_data)
+receive_login_response_cb (GsUbuntuLoginDialog *self,
+			   guint	       status,
+			   GVariant	      *response,
+			   gpointer	       user_data)
 {
 	PangoAttrList *attributes;
 	const gchar *code;
@@ -444,7 +444,7 @@ receive_login_response_cb (UbuntuLoginDialog *self,
 }
 
 static void
-send_login_request (UbuntuLoginDialog *self)
+send_login_request (GsUbuntuLoginDialog *self)
 {
 	PangoAttrList *attributes;
 
@@ -500,8 +500,8 @@ send_login_request (UbuntuLoginDialog *self)
 }
 
 static void
-next_button_clicked_cb (UbuntuLoginDialog *self,
-			GtkButton	 *button)
+next_button_clicked_cb (GsUbuntuLoginDialog *self,
+			GtkButton	    *button)
 {
 	if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-0")) {
 		if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->login_radio))) {
@@ -519,29 +519,29 @@ next_button_clicked_cb (UbuntuLoginDialog *self,
 }
 
 static void
-radio_button_toggled_cb (UbuntuLoginDialog *self,
+radio_button_toggled_cb (GsUbuntuLoginDialog *self,
 			 GtkToggleButton   *toggle)
 {
 	update_widgets (self);
 }
 
 static void
-entry_edited_cb (UbuntuLoginDialog *self,
-		 GParamSpec	   *pspec,
-		 GObject	   *object)
+entry_edited_cb (GsUbuntuLoginDialog *self,
+		 GParamSpec	     *pspec,
+		 GObject	     *object)
 {
 	update_widgets (self);
 }
 
 static void
-remember_check_toggled_cb (UbuntuLoginDialog *self,
-			   GtkToggleButton   *toggle)
+remember_check_toggled_cb (GsUbuntuLoginDialog *self,
+			   GtkToggleButton     *toggle)
 {
 	g_object_notify (G_OBJECT (self), "remember");
 }
 
 static void
-ubuntu_login_dialog_init (UbuntuLoginDialog *self)
+gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
 
@@ -555,13 +555,11 @@ ubuntu_login_dialog_init (UbuntuLoginDialog *self)
 	g_signal_connect_swapped (self->password_entry, "notify::text", G_CALLBACK (entry_edited_cb), self);
 	g_signal_connect_swapped (self->passcode_entry, "notify::text", G_CALLBACK (entry_edited_cb), self);
 
-	gtk_container_add (GTK_CONTAINER (gtk_dialog_get_content_area (GTK_DIALOG (self))), self->content_box);
-
 	update_widgets (self);
 }
 
 GtkWidget *
-ubuntu_login_dialog_new (void)
+gs_ubuntu_login_dialog_new (void)
 {
-	return g_object_new (UBUNTU_TYPE_LOGIN_DIALOG, NULL);
+	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTU_LOGIN_DIALOG, NULL));
 }
