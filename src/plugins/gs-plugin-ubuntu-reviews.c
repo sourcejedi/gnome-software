@@ -752,7 +752,7 @@ set_package_review (GsPlugin *plugin,
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
-	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL;
+	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	gchar *c;
 	g_autoptr(SoupMessage) msg;
 	JsonBuilder *builder;
@@ -784,6 +784,9 @@ set_package_review (GsPlugin *plugin,
 	if (c)
 		*c = '\0';
 
+	// FIXME: Need to get Apt::Architecture configuration value from APT
+	architecture = g_strdup ("amd64");
+
 	/* Create message for reviews.ubuntu.com */
 	uri = g_strdup_printf ("%s/api/1.0/reviews/", UBUNTU_REVIEWS_SERVER);
 	msg = soup_message_new (SOUP_METHOD_POST, uri);
@@ -797,7 +800,7 @@ set_package_review (GsPlugin *plugin,
 	add_string_member (builder, "distroseries", os_ubuntu_codename);
 	add_string_member (builder, "version", gs_review_get_version (review));
 	add_int_member (builder, "rating", n_stars);
-	add_string_member (builder, "arch_tag", "amd64"); // FIXME
+	add_string_member (builder, "arch_tag", architecture);
 	json_builder_end_object (builder);
 	set_request (msg, builder);
 	g_object_unref (builder);
