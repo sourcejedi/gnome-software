@@ -735,10 +735,13 @@ sign_message (SoupMessage *message, OAuthMethod method,
 static void
 set_request (SoupMessage *message, JsonBuilder *builder)
 {
-	JsonGenerator *generator = json_generator_new ();
-	json_generator_set_root (generator, json_builder_get_root (builder));
+	JsonGenerator *generator;
+	gchar *data;
 	gsize length;
-	gchar *data = json_generator_to_data (generator, &length);
+
+	generator = json_generator_new ();
+	json_generator_set_root (generator, json_builder_get_root (builder));
+	data = json_generator_to_data (generator, &length);
 	soup_message_set_request (message, "application/json", SOUP_MEMORY_TAKE, data, length);
 	g_object_unref (generator);
 }
