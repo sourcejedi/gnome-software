@@ -43,6 +43,7 @@ struct _GsReviewDialog
 	GtkWidget	*summary_entry;
 	GtkWidget	*post_button;
 	GtkWidget	*text_view;
+	GtkSpellChecker	*spell_checker;
 	guint		 timer_id;
 };
 
@@ -175,7 +176,8 @@ gs_review_dialog_init (GsReviewDialog *dialog)
 	gs_star_widget_set_icon_size (GS_STAR_WIDGET (dialog->star), 32);
 
 	/* allow checking spelling */
-	gtk_spell_checker_attach (gtk_spell_checker_new (),
+	dialog->spell_checker = gtk_spell_checker_new ();
+	gtk_spell_checker_attach (dialog->spell_checker,
 				  GTK_TEXT_VIEW (dialog->text_view));
 
 	/* require the user to spend at least 30 seconds on writing a review */
