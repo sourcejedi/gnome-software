@@ -867,34 +867,6 @@ gs_plugin_refine (GsPlugin *plugin,
 	return ret;
 }
 
-static void
-add_string_member (JsonBuilder *builder, const gchar *name, const gchar *value)
-{
-	json_builder_set_member_name (builder, name);
-	json_builder_add_string_value (builder, value);
-}
-
-static void
-add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
-{
-	json_builder_set_member_name (builder, name);
-	json_builder_add_int_value (builder, value);
-}
-
-static void
-set_request (SoupMessage *message, JsonBuilder *builder)
-{
-	JsonGenerator *generator;
-	gchar *data;
-	gsize length;
-
-	generator = json_generator_new ();
-	json_generator_set_root (generator, json_builder_get_root (builder));
-	data = json_generator_to_data (generator, &length);
-	soup_message_set_request (message, "application/json", SOUP_MEMORY_TAKE, data, length);
-	g_object_unref (generator);
-}
-
 static gboolean
 set_package_review (GsPlugin *plugin,
 		    GsReview *review,
@@ -904,10 +876,8 @@ set_package_review (GsPlugin *plugin,
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
-	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
+	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	gchar *c;
-	g_autoptr(SoupMessage) msg;
-	JsonBuilder *builder;
 	guint status_code;
 
 	/* Ubuntu reviews require a summary and description - just make one up for now */
@@ -939,33 +909,42 @@ set_package_review (GsPlugin *plugin,
 	// FIXME: Need to get Apt::Architecture configuration value from APT
 	architecture = g_strdup ("amd64");
 
-	/* Create message for reviews.ubuntu.com */
-	uri = g_strdup_printf ("%s/api/1.0/reviews/", UBUNTU_REVIEWS_SERVER);
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	builder = json_builder_new ();
-	json_builder_begin_object (builder);
-	add_string_member (builder, "package_name", package_name);
-	add_string_member (builder, "summary", gs_review_get_summary (review));
-	add_string_member (builder, "review_text", gs_review_get_text (review));
-	add_string_member (builder, "language", language);
-	add_string_member (builder, "origin", os_id);
-	add_string_member (builder, "distroseries", os_ubuntu_codename);
-	add_string_member (builder, "version", gs_review_get_version (review));
-	add_int_member (builder, "rating", n_stars);
-	add_string_member (builder, "arch_tag", architecture);
-	json_builder_end_object (builder);
-	set_request (msg, builder);
-	g_object_unref (builder);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
+	/* Send message to reviews server */
+	status_code = send_signed_request (priv->session,
+					   UBUNTU_REVIEWS_SERVER,
+					   SOUP_METHOD_POST,
+					   "/api/1.0/reviews/",
+					   g_variant_new_parsed ("{"
+								 "  'package_name' : <%s>,"
+								 "  'summary' : <%s>,"
+								 "  'review_text' : <%s>,"
+								 "  'language' : <%s>,"
+								 "  'origin' : <%s>,"
+								 "  'distroseries' : <%s>,"
+								 "  'version' : <%s>,"
+								 "  'rating' : <%i>,"
+								 "  'arch_tag' : <%s>"
+								 "}",
+								 package_name,
+								 gs_review_get_summary (review),
+								 gs_review_get_text (review),
+								 language,
+								 os_id,
+								 os_ubuntu_codename,
+								 gs_review_get_version (review),
+								 n_stars,
+								 architecture),
+					   NULL,
+					   OA_PLAINTEXT,
+					   priv->consumer_key,
+					   priv->consumer_secret,
+					   priv->token_key,
+					   priv->token_secret,
+					   error);
 
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
+	if (error != NULL && *error != NULL) {
+		return FALSE;
+	} else if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
