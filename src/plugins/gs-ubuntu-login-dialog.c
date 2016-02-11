@@ -285,10 +285,10 @@ send_login_request (GsUbuntuLoginDialog *self)
 			      SOUP_METHOD_POST,
 			      "/api/v2/tokens/oauth",
 			      g_variant_new_parsed ("{"
-						    "  'token_name' : 'GNOME Software',"
-						    "  'email' : %s,"
-						    "  'password' : %s,"
-						    "  'otp' : %s"
+						    "  'token_name' : <'GNOME Software'>,"
+						    "  'email' : <%s>,"
+						    "  'password' : <%s>,"
+						    "  'otp' : <%s>"
 						    "}",
 						    gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
 						    gtk_entry_get_text (GTK_ENTRY (self->password_entry)),
@@ -300,9 +300,9 @@ send_login_request (GsUbuntuLoginDialog *self)
 			      SOUP_METHOD_POST,
 			      "/api/v2/tokens/oauth",
 			      g_variant_new_parsed ("{"
-						    "  'token_name' : 'GNOME Software',"
-						    "  'email' : %s,"
-						    "  'password' : %s"
+						    "  'token_name' : <'GNOME Software'>,"
+						    "  'email' : <%s>,"
+						    "  'password' : <%s>"
 						    "}",
 						    gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
 						    gtk_entry_get_text (GTK_ENTRY (self->password_entry))),
