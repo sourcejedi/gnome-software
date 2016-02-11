@@ -859,89 +859,58 @@ out:
 }
 
 static gboolean
-parse_review_entry (JsonNode *node, const gchar **package_name, Histogram *histogram)
-{
-	JsonObject *object;
-	const gchar *name = NULL, *histogram_text = NULL;
-
-	if (!JSON_NODE_HOLDS_OBJECT (node))
-		return FALSE;
-
-	object = json_node_get_object (node);
-
-	name = json_object_get_string_member (object, "package_name");
-	histogram_text = json_object_get_string_member (object, "histogram");
-	if (!name || !histogram_text)
-		return FALSE;
-
-	if (!parse_histogram (histogram_text, histogram))
-		return FALSE;
-	*package_name = name;
-
-	return TRUE;
-}
-
-static gboolean
-parse_review_entries (GsPlugin *plugin, const gchar *text, GError **error)
-{
-	JsonParser *parser = NULL;
-	JsonArray *array;
-	gint i;
-	gboolean result = FALSE;
-
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, text, -1, error))
-		goto out;
-	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
-		goto out;
-	array = json_node_get_array (json_parser_get_root (parser));
-	for (i = 0; i < json_array_get_length (array); i++) {
-		const gchar *package_name;
-		Histogram histogram;
-
-		/* Read in from JSON... (skip bad entries) */
-		if (!parse_review_entry (json_array_get_element (array, i), &package_name, &histogram))
-			continue;
-
-		/* ...write into the database (abort everything if can't write) */
-		if (!set_package_stats (plugin, package_name, &histogram, error))
-			goto out;
-	}
-	result = TRUE;
-
-out:
-	g_clear_object (&parser);
-
-	return result;
-}
-
-static gboolean
 download_review_stats (GsPlugin *plugin, GError **error)
 {
 	guint status_code;
-	g_autofree gchar *uri = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
-	g_auto(GStrv) split = NULL;
+	GVariant *response;
+	GVariantIter i;
+	GVariant *variant;
+	Histogram histogram;
+	const gchar *package_name;
+	const gchar *histogram_text;
 
-	/* Get the review stats using HTTP */
-	uri = g_strdup_printf ("%s/api/1.0/review-stats/any/any/",
-			       UBUNTU_REVIEWS_SERVER);
-	msg = soup_message_new (SOUP_METHOD_GET, uri);
 	if (!setup_networking (plugin, error))
 		return FALSE;
-	status_code = soup_session_send_message (plugin->priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
+
+	status_code = send_request (plugin->priv->session,
+				    UBUNTU_REVIEWS_SERVER,
+				    SOUP_METHOD_GET,
+				    "/api/1.0/review-stats/any/any/",
+				    NULL,
+				    &response,
+				    error);
+
+	if (error != NULL && *error != NULL) {
+		g_clear_pointer (&response, g_variant_unref);
+		return FALSE;
+	} else if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
 			     "Failed to download Ubuntu reviews dump: %s",
 			     soup_status_get_phrase (status_code));
+		g_clear_pointer (&response, g_variant_unref);
 		return FALSE;
 	}
 
 	/* Extract the stats from the data */
-	if (!parse_review_entries (plugin, msg->response_body->data, error))
-		return FALSE;
+	g_variant_iter_init (&i, response);
+	while (g_variant_iter_loop (&i, "@a{sv}", &variant)) {
+		g_variant_lookup (variant, "package_name", "&s", &package_name);
+		g_variant_lookup (variant, "histogram", "&s", &histogram_text);
+
+		if (package_name == NULL || !parse_histogram (histogram_text, &histogram))
+			continue;
+
+		/* ...write into the database (abort everything if can't write) */
+		if (!set_package_stats (plugin, package_name, &histogram, error)) {
+			g_clear_pointer (&variant, g_variant_unref);
+			g_clear_pointer (&response, g_variant_unref);
+			return FALSE;
+		}
+	}
+
+	g_clear_pointer (&response, g_variant_unref);
 
 	/* Record the time we downloaded it */
 	return set_timestamp (plugin, "stats_mtime", error);
