@@ -113,7 +113,7 @@ setup_networking (GsPlugin *plugin, GError **error)
 
 	/* set up a session */
 	plugin->priv->session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
-							       "gnome-software",
+							       gs_user_agent (),
 							       NULL);
 	if (plugin->priv->session == NULL) {
 		g_set_error (error,
