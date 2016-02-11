@@ -20,6 +20,7 @@
  */
 
 #include "gs-ubuntu-login-dialog.h"
+#include "gs-utils.h"
 
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
@@ -48,7 +49,6 @@ struct _GsUbuntuLoginDialog
 
 	SoupSession *session;
 
-	gchar *host;
 	gchar *consumer_key;
 	gchar *consumer_secret;
 	gchar *token_key;
@@ -59,7 +59,6 @@ enum
 {
 	PROP_0,
 	PROP_SESSION,
-	PROP_HOST,
 	PROP_REMEMBER,
 	PROP_CONSUMER_KEY,
 	PROP_CONSUMER_SECRET,
@@ -68,6 +67,16 @@ enum
 };
 
 G_DEFINE_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GTK_TYPE_DIALOG)
+
+static void
+gs_ubuntu_login_dialog_dispose (GObject *object)
+{
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+
+	g_clear_object (&self->session);
+
+	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->dispose (object);
+}
 
 static void
 gs_ubuntu_login_dialog_finalize (GObject *object)
@@ -91,14 +100,6 @@ gs_ubuntu_login_dialog_get_property (GObject    *object,
 	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
 
 	switch (property_id) {
-	case PROP_SESSION:
-		g_value_set_object (value, self->session);
-		break;
-
-	case PROP_HOST:
-		g_value_set_string (value, self->host);
-		break;
-
 	case PROP_REMEMBER:
 		g_value_set_boolean (value, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->remember_check)));
 		break;
@@ -126,38 +127,15 @@ gs_ubuntu_login_dialog_get_property (GObject    *object,
 }
 
 static void
-gs_ubuntu_login_dialog_set_property (GObject      *object,
-				     guint	 property_id,
-				     const GValue *value,
-				     GParamSpec   *pspec)
-{
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
-
-	switch (property_id) {
-	case PROP_SESSION:
-		self->session = g_value_dup_object (value);
-		break;
-
-	case PROP_HOST:
-		self->host = g_value_dup_string (value);
-		break;
-
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-		break;
-	}
-}
-
-static void
 gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 	GParamFlags param_flags;
 
+	object_class->dispose = gs_ubuntu_login_dialog_dispose;
 	object_class->finalize = gs_ubuntu_login_dialog_finalize;
 	object_class->get_property = gs_ubuntu_login_dialog_get_property;
-	object_class->set_property = gs_ubuntu_login_dialog_set_property;
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntu-login-dialog.ui");
 
@@ -178,25 +156,6 @@ gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
 
 	param_flags = G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB;
 
-	g_object_class_install_property (object_class,
-					 PROP_SESSION,
-					 g_param_spec_object ("session",
- 							      "session",
- 							      "session",
- 							      SOUP_TYPE_SESSION,
- 							      param_flags |
- 							      G_PARAM_WRITABLE |
- 							      G_PARAM_CONSTRUCT));
-
- 	g_object_class_install_property (object_class,
- 					 PROP_HOST,
- 					 g_param_spec_string ("host",
- 							      "host",
- 							      "host",
- 							      UBUNTU_LOGIN_HOST,
- 							      param_flags |
- 							      G_PARAM_WRITABLE |
- 							      G_PARAM_CONSTRUCT));
 	g_object_class_install_property (object_class,
 					 PROP_REMEMBER,
 					 g_param_spec_boolean ("remember",
@@ -330,10 +289,15 @@ send_request (GsUbuntuLoginDialog *self,
 	gsize length;
 	g_autofree gchar *url = NULL;
 
+	if (self->session == NULL)
+		self->session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
+							       gs_user_agent (),
+							       NULL);
+
 	body = json_gvariant_serialize_data (g_variant_ref_sink (request), &length);
 	g_variant_unref (request);
 
-	url = g_strdup_printf ("%s%s", self->host, uri);
+	url = g_strdup_printf ("%s%s", UBUNTU_LOGIN_HOST, uri);
 	message = soup_message_new (method, url);
 
 	info = g_new0 (RequestInfo, 1);
