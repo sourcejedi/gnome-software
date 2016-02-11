@@ -1044,19 +1044,24 @@ remove_review (GsPlugin *plugin,
 	g_autoptr(SoupMessage) msg;
 	guint status_code;
 
-	/* Create message for reviews.ubuntu.com */
-	uri = g_strdup_printf ("%s/api/1.0/reviews/delete/%s/", UBUNTU_REVIEWS_SERVER, review_id);
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
+	/* Send message to reviews server */
+	uri = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
+	send_signed_request (priv->session,
+			     UBUNTU_REVIEWS_SERVER,
+			     SOUP_METHOD_POST,
+			     uri,
+			     NULL,
+			     NULL,
+			     OA_PLAINTEXT,
+			     priv->consumer_key,
+			     priv->consumer_secret,
+			     priv->token_key,
+			     priv->token_secret,
+			     error);
 
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
+	if (error != NULL && *error != NULL) {
+		return FALSE;
+	} else if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
