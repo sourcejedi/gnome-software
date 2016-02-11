@@ -171,9 +171,9 @@ send_request (GsUbuntuLoginDialog *self,
 
 static void
 receive_login_response_cb (GsUbuntuLoginDialog *self,
-			   guint	       status,
-			   GVariant	      *response,
-			   gpointer	       user_data)
+			   guint	        status,
+			   GVariant	       *response,
+			   gpointer	        user_data)
 {
 	PangoAttrList *attributes;
 	const gchar *code;
