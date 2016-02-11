@@ -205,11 +205,6 @@ receive_login_response_cb (GsUbuntuLoginDialog *self,
 		g_variant_lookup (response, "token_key", "s", &self->token_key);
 		g_variant_lookup (response, "token_secret", "s", &self->token_secret);
 
-		g_object_notify (G_OBJECT (self), "consumer-key");
-		g_object_notify (G_OBJECT (self), "consumer-secret");
-		g_object_notify (G_OBJECT (self), "token-key");
-		g_object_notify (G_OBJECT (self), "token-secret");
-
 		gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
 		update_widgets (self);
 		break;
@@ -354,7 +349,6 @@ static void
 remember_check_toggled_cb (GsUbuntuLoginDialog *self,
 			   GtkToggleButton     *toggle)
 {
-	g_object_notify (G_OBJECT (self), "remember");
 }
 
 static void
