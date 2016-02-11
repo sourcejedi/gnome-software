@@ -478,6 +478,230 @@ load_database (GsPlugin *plugin, GError **error)
 	return TRUE;
 }
 
+typedef void (*RequestCallback) (guint     status,
+				 GVariant *response,
+				 GError   *error,
+				 gpointer  user_data);
+
+typedef struct {
+	RequestCallback callback;
+	gpointer user_data;
+} RequestInfo;
+
+static GVariant *
+get_response (SoupMessage  *message,
+	      guint        *status,
+	      GError      **error)
+{
+	GVariant *response;
+	GBytes *bytes;
+	gpointer body;
+	gsize length;
+
+	if (status != NULL)
+		g_object_get (message, SOUP_MESSAGE_STATUS_CODE, status, NULL);
+
+	g_object_get (message, SOUP_MESSAGE_RESPONSE_BODY_DATA, &bytes, NULL);
+	body = g_bytes_unref_to_data (bytes, &length);
+	response = json_gvariant_deserialize_data (body, length, NULL, error);
+	g_free (body);
+
+	return response;
+}
+
+static void
+response_received_cb (SoupSession *session,
+		      SoupMessage *message,
+		      gpointer     user_data)
+{
+	RequestInfo *info = user_data;
+	GVariant *response;
+	guint status;
+	GError *error = NULL;
+
+	response = get_response (message, &status, &error);
+
+	if (response != NULL)
+		g_variant_ref_sink (response);
+
+	info->callback (status, response, error, info->user_data);
+	g_clear_pointer (&response, g_variant_unref);
+	g_clear_error (&error);
+	g_free (info);
+}
+
+static SoupMessage *
+create_message (SoupSession *session,
+		const gchar *host,
+		const gchar *method,
+		const gchar *uri,
+		GVariant    *request)
+{
+	SoupMessage *message;
+	gchar *url;
+	gchar *body;
+	gsize length;
+
+	url = g_strdup_printf ("%s%s", host, uri);
+	message = soup_message_new (method, url);
+	g_free (url);
+
+	if (request != NULL) {
+		body = json_gvariant_serialize_data (g_variant_ref_sink (request), &length);
+
+		soup_message_set_request (message,
+					  "application/json",
+					  SOUP_MEMORY_TAKE,
+					  body,
+					  length);
+
+		g_clear_pointer (&request, g_variant_unref);
+	}
+
+	return message;
+}
+
+static void
+sign_message (SoupMessage *message,
+	      OAuthMethod  method,
+	      const gchar *consumer_key,
+	      const gchar *consumer_secret,
+	      const gchar *token_key,
+	      const gchar *token_secret)
+{
+	g_autofree gchar *url = NULL, *oauth_authorization_parameters = NULL, *authorization_text = NULL;
+	gchar **url_parameters = NULL;
+	int url_parameters_length;
+
+	if (consumer_key == NULL || consumer_secret == NULL || token_key == NULL || token_secret == NULL)
+		return;
+
+	url = soup_uri_to_string (soup_message_get_uri (message), FALSE);
+
+	url_parameters_length = oauth_split_url_parameters(url, &url_parameters);
+	oauth_sign_array2_process (&url_parameters_length, &url_parameters,
+				   NULL,
+				   method,
+				   message->method,
+				   consumer_key, consumer_secret,
+				   token_key, token_secret);
+	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
+	oauth_free_array (&url_parameters_length, &url_parameters);
+	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
+	soup_message_headers_append (message->request_headers, "Authorization", authorization_text);
+}
+
+static void
+send_signed_request_async (SoupSession     *session,
+			   const gchar     *host,
+			   const gchar     *http_method,
+			   const gchar     *uri,
+			   GVariant        *request,
+			   OAuthMethod      oauth_method,
+			   const gchar     *consumer_key,
+			   const gchar     *consumer_secret,
+			   const gchar     *token_key,
+			   const gchar     *token_secret,
+			   RequestCallback  callback,
+			   gpointer         user_data)
+{
+	SoupMessage *message;
+	RequestInfo *info;
+
+	message = create_message (session, host, http_method, uri, request);
+	sign_message (message, oauth_method, consumer_key, consumer_secret, token_key, token_secret);
+
+	if (callback != NULL) {
+		info = g_new (RequestInfo, 1);
+		info->callback = callback;
+		info->user_data = user_data;
+
+		soup_session_queue_message (session, message, response_received_cb, info);
+	} else {
+		soup_session_queue_message (session, message, NULL, NULL);
+	}
+}
+
+static void
+send_request_async (SoupSession     *session,
+		    const gchar     *host,
+		    const gchar     *http_method,
+		    const gchar     *uri,
+		    GVariant        *request,
+		    RequestCallback  callback,
+		    gpointer         user_data)
+{
+	send_signed_request_async (session,
+				   host,
+				   http_method,
+				   uri,
+				   request,
+				   0,
+				   NULL,
+				   NULL,
+				   NULL,
+				   NULL,
+				   callback,
+				   user_data);
+}
+
+static guint
+send_signed_request (SoupSession  *session,
+		     const gchar  *host,
+		     const gchar  *http_method,
+		     const gchar  *uri,
+		     GVariant     *request,
+		     GVariant    **response,
+		     OAuthMethod   oauth_method,
+		     const gchar  *consumer_key,
+		     const gchar  *consumer_secret,
+		     const gchar  *token_key,
+		     const gchar  *token_secret,
+		     GError      **error)
+{
+	SoupMessage *message;
+	GVariant *variant;
+	guint status;
+
+	message = create_message (session, host, http_method, uri, request);
+	sign_message (message, oauth_method, consumer_key, consumer_secret, token_key, token_secret);
+	status = soup_session_send_message (session, message);
+	variant = get_response (message, NULL, error);
+
+	if (variant != NULL)
+		g_variant_ref_sink (variant);
+
+	if (response != NULL)
+		*response = variant;
+	else
+		g_clear_pointer (&variant, g_variant_unref);
+
+	return status;
+}
+
+static guint
+send_request (SoupSession  *session,
+	      const gchar  *host,
+	      const gchar  *http_method,
+	      const gchar  *uri,
+	      GVariant     *request,
+	      GVariant    **response,
+	      GError      **error)
+{
+	send_signed_request (session,
+			     host,
+			     http_method,
+			     uri,
+			     request,
+			     response,
+			     0,
+			     NULL,
+			     NULL,
+			     NULL,
+			     NULL,
+			     error);
+}
+
 static gint
 get_timestamp_sqlite_cb (void *data, gint argc,
 			 gchar **argv, gchar **col_name)
