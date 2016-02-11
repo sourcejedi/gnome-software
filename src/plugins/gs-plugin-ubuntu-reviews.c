@@ -21,6 +21,7 @@
 
 #include <config.h>
 
+#include <string.h>
 #include <math.h>
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
@@ -751,7 +752,8 @@ set_package_review (GsPlugin *plugin,
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
-	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL;
+	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL;
+	gchar *c;
 	g_autoptr(SoupMessage) msg;
 	JsonBuilder *builder;
 	guint status_code;
@@ -776,6 +778,12 @@ set_package_review (GsPlugin *plugin,
 	if (os_ubuntu_codename == NULL)
 		return FALSE;
 
+	/* Convert locale into language */
+	language = g_strdup (plugin->locale);
+	c = strchr (language, '_');
+	if (c)
+		*c = '\0';
+
 	/* Create message for reviews.ubuntu.com */
 	uri = g_strdup_printf ("%s/api/1.0/reviews/", UBUNTU_REVIEWS_SERVER);
 	msg = soup_message_new (SOUP_METHOD_POST, uri);
@@ -784,7 +792,7 @@ set_package_review (GsPlugin *plugin,
 	add_string_member (builder, "package_name", package_name);
 	add_string_member (builder, "summary", gs_review_get_summary (review));
 	add_string_member (builder, "review_text", gs_review_get_text (review));
-	add_string_member (builder, "language", "en"); // FIXME
+	add_string_member (builder, "language", language);
 	add_string_member (builder, "origin", os_id);
 	add_string_member (builder, "distroseries", os_ubuntu_codename);
 	add_string_member (builder, "version", gs_review_get_version (review));
