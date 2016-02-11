@@ -950,8 +950,6 @@ show_login_dialog (gpointer user_data)
 	GsPluginPrivate *priv = context->plugin->priv;
 	GtkWidget *dialog;
 
-	g_object_set (dialog, "session", priv->session, NULL);
-
 	dialog = gs_ubuntu_login_dialog_new ();
 	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
 	case GTK_RESPONSE_DELETE_EVENT:
