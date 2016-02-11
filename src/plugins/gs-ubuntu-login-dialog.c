@@ -68,135 +68,6 @@ enum
 
 G_DEFINE_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GTK_TYPE_DIALOG)
 
-static void
-gs_ubuntu_login_dialog_dispose (GObject *object)
-{
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
-
-	g_clear_object (&self->session);
-
-	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->dispose (object);
-}
-
-static void
-gs_ubuntu_login_dialog_finalize (GObject *object)
-{
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
-
-	g_clear_pointer (&self->token_secret, g_free);
-	g_clear_pointer (&self->token_key, g_free);
-	g_clear_pointer (&self->consumer_secret, g_free);
-	g_clear_pointer (&self->consumer_key, g_free);
-
-	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->finalize (object);
-}
-
-static void
-gs_ubuntu_login_dialog_get_property (GObject    *object,
-				     guint       property_id,
-				     GValue     *value,
-				     GParamSpec *pspec)
-{
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
-
-	switch (property_id) {
-	case PROP_REMEMBER:
-		g_value_set_boolean (value, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->remember_check)));
-		break;
-
-	case PROP_CONSUMER_KEY:
-		g_value_set_string (value, self->consumer_key);
-		break;
-
-	case PROP_CONSUMER_SECRET:
-		g_value_set_string (value, self->consumer_secret);
-		break;
-
-	case PROP_TOKEN_KEY:
-		g_value_set_string (value, self->token_key);
-		break;
-
-	case PROP_TOKEN_SECRET:
-		g_value_set_string (value, self->token_secret);
-		break;
-
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-		break;
-	}
-}
-
-static void
-gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
-{
-	GObjectClass *object_class = G_OBJECT_CLASS (klass);
-	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
-	GParamFlags param_flags;
-
-	object_class->dispose = gs_ubuntu_login_dialog_dispose;
-	object_class->finalize = gs_ubuntu_login_dialog_finalize;
-	object_class->get_property = gs_ubuntu_login_dialog_get_property;
-
-	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntu-login-dialog.ui");
-
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, content_box);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, cancel_button);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, next_button);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_stack);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_image);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_label);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, page_stack);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, login_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, register_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, reset_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, email_entry);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, password_entry);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, remember_check);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, passcode_entry);
-
-	param_flags = G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB;
-
-	g_object_class_install_property (object_class,
-					 PROP_REMEMBER,
-					 g_param_spec_boolean ("remember",
-							       "remember",
-							       "remember",
-							       FALSE,
-							       param_flags));
-
-	g_object_class_install_property (object_class,
-					 PROP_CONSUMER_KEY,
-					 g_param_spec_string ("consumer-key",
-							      "consumer key",
-							      "consumer key",
-							      NULL,
-							      param_flags));
-
-	g_object_class_install_property (object_class,
-					 PROP_CONSUMER_SECRET,
-					 g_param_spec_string ("consumer-secret",
-							      "consumer secret",
-							      "consumer secret",
-							      NULL,
-							      param_flags));
-
-	g_object_class_install_property (object_class,
-					 PROP_TOKEN_KEY,
-					 g_param_spec_string ("token-key",
-							      "token key",
-							      "token key",
-							      NULL,
-							      param_flags));
-
-	g_object_class_install_property (object_class,
-					 PROP_TOKEN_SECRET,
-					 g_param_spec_string ("token-secret",
-							      "token secret",
-							      "token secret",
-							      NULL,
-							      param_flags));
-}
-
 static gboolean
 is_email_address (const gchar *text)
 {
@@ -514,6 +385,135 @@ gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 	update_widgets (self);
 }
 
+static void
+gs_ubuntu_login_dialog_dispose (GObject *object)
+{
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+
+	g_clear_object (&self->session);
+
+	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->dispose (object);
+}
+
+static void
+gs_ubuntu_login_dialog_finalize (GObject *object)
+{
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+
+	g_clear_pointer (&self->token_secret, g_free);
+	g_clear_pointer (&self->token_key, g_free);
+	g_clear_pointer (&self->consumer_secret, g_free);
+	g_clear_pointer (&self->consumer_key, g_free);
+
+	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->finalize (object);
+}
+
+static void
+gs_ubuntu_login_dialog_get_property (GObject    *object,
+				     guint       property_id,
+				     GValue     *value,
+				     GParamSpec *pspec)
+{
+	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+
+	switch (property_id) {
+	case PROP_REMEMBER:
+		g_value_set_boolean (value, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->remember_check)));
+		break;
+
+	case PROP_CONSUMER_KEY:
+		g_value_set_string (value, self->consumer_key);
+		break;
+
+	case PROP_CONSUMER_SECRET:
+		g_value_set_string (value, self->consumer_secret);
+		break;
+
+	case PROP_TOKEN_KEY:
+		g_value_set_string (value, self->token_key);
+		break;
+
+	case PROP_TOKEN_SECRET:
+		g_value_set_string (value, self->token_secret);
+		break;
+
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+	GParamFlags param_flags;
+
+	object_class->dispose = gs_ubuntu_login_dialog_dispose;
+	object_class->finalize = gs_ubuntu_login_dialog_finalize;
+	object_class->get_property = gs_ubuntu_login_dialog_get_property;
+
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntu-login-dialog.ui");
+
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, content_box);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, cancel_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, next_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_image);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_label);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, page_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, login_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, register_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, reset_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, email_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, password_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, remember_check);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, passcode_entry);
+
+	param_flags = G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB;
+
+	g_object_class_install_property (object_class,
+					 PROP_REMEMBER,
+					 g_param_spec_boolean ("remember",
+							       "remember",
+							       "remember",
+							       FALSE,
+							       param_flags));
+
+	g_object_class_install_property (object_class,
+					 PROP_CONSUMER_KEY,
+					 g_param_spec_string ("consumer-key",
+							      "consumer key",
+							      "consumer key",
+							      NULL,
+							      param_flags));
+
+	g_object_class_install_property (object_class,
+					 PROP_CONSUMER_SECRET,
+					 g_param_spec_string ("consumer-secret",
+							      "consumer secret",
+							      "consumer secret",
+							      NULL,
+							      param_flags));
+
+	g_object_class_install_property (object_class,
+					 PROP_TOKEN_KEY,
+					 g_param_spec_string ("token-key",
+							      "token key",
+							      "token key",
+							      NULL,
+							      param_flags));
+
+	g_object_class_install_property (object_class,
+					 PROP_TOKEN_SECRET,
+					 g_param_spec_string ("token-secret",
+							      "token secret",
+							      "token secret",
+							      NULL,
+							      param_flags));
+}
+
 GtkWidget *
 gs_ubuntu_login_dialog_new (void)
 {
@@ -521,3 +521,5 @@ gs_ubuntu_login_dialog_new (void)
 					 "use-header-bar", TRUE,
 					 NULL));
 }
+
+/* vim: set noexpandtab: */
