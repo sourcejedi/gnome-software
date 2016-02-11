@@ -31,6 +31,7 @@
 #include <gs-utils.h>
 
 #include "gs-ubuntu-login-dialog.h"
+#include "gs-os-release.h"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
@@ -750,7 +751,7 @@ set_package_review (GsPlugin *plugin,
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
-	g_autofree gchar *uri;
+	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL;
 	g_autoptr(SoupMessage) msg;
 	JsonBuilder *builder;
 	guint status_code;
@@ -768,6 +769,13 @@ set_package_review (GsPlugin *plugin,
 	else
 		n_stars = 1;
 
+	os_id = gs_os_release_get_id (error);
+	if (os_id == NULL)
+		return FALSE;
+	os_ubuntu_codename = gs_os_release_get ("UBUNTU_CODENAME", error);
+	if (os_ubuntu_codename == NULL)
+		return FALSE;
+
 	/* Create message for reviews.ubuntu.com */
 	uri = g_strdup_printf ("%s/api/1.0/reviews/", UBUNTU_REVIEWS_SERVER);
 	msg = soup_message_new (SOUP_METHOD_POST, uri);
@@ -777,8 +785,8 @@ set_package_review (GsPlugin *plugin,
 	add_string_member (builder, "summary", gs_review_get_summary (review));
 	add_string_member (builder, "review_text", gs_review_get_text (review));
 	add_string_member (builder, "language", "en"); // FIXME
-	add_string_member (builder, "origin", "ubuntu"); // FIXME gs_app_get_origin (app));
-	add_string_member (builder, "distroseries", "xenial"); // FIXME
+	add_string_member (builder, "origin", os_id);
+	add_string_member (builder, "distroseries", os_ubuntu_codename);
 	add_string_member (builder, "version", gs_review_get_version (review));
 	add_int_member (builder, "rating", n_stars);
 	add_string_member (builder, "arch_tag", "amd64"); // FIXME
