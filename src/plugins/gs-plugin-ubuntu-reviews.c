@@ -963,14 +963,11 @@ show_login_dialog (gpointer user_data)
 		break;
 
 	case GTK_RESPONSE_OK:
-		g_object_get (dialog,
-			      "remember", &context->remember,
-			      "consumer-key", &priv->consumer_key,
-			      "consumer-secret", &priv->consumer_secret,
-			      "token-key", &priv->token_key,
-			      "token-secret", &priv->token_secret,
-			      NULL);
-
+		context->remember = gs_ubuntu_login_dialog_get_do_remember (GS_UBUNTU_LOGIN_DIALOG (dialog));
+		priv->consumer_key = g_strdup (gs_ubuntu_login_dialog_get_consumer_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->consumer_secret = g_strdup (gs_ubuntu_login_dialog_get_consumer_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->token_key = g_strdup (gs_ubuntu_login_dialog_get_token_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->token_secret = g_strdup (gs_ubuntu_login_dialog_get_token_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
 		context->success = TRUE;
 		break;
 	}

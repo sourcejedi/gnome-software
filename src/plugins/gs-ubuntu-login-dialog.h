@@ -30,7 +30,12 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GS, UBUNTU_LOGIN_DIALOG, GtkDialog)
 
-GtkWidget *gs_ubuntu_login_dialog_new (void);
+GtkWidget	*gs_ubuntu_login_dialog_new			(void);
+gboolean	 gs_ubuntu_login_dialog_get_do_remember		(GsUbuntuLoginDialog *dialog);
+const gchar	*gs_ubuntu_login_dialog_get_consumer_key	(GsUbuntuLoginDialog *dialog);
+const gchar	*gs_ubuntu_login_dialog_get_consumer_secret	(GsUbuntuLoginDialog *dialog);
+const gchar	*gs_ubuntu_login_dialog_get_token_key		(GsUbuntuLoginDialog *dialog);
+const gchar	*gs_ubuntu_login_dialog_get_token_secret	(GsUbuntuLoginDialog *dialog);
 
 G_END_DECLS
 
