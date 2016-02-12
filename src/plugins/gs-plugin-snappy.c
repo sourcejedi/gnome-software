@@ -312,6 +312,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
 		gs_app_set_provenance (app, TRUE);
+		gs_app_set_id_kind (app, AS_ID_KIND_DESKTOP);
 		icon_url = json_object_get_string_member (package, "icon");
 		if (g_str_has_prefix (icon_url, "/")) {
 			g_autoptr(GSocket) icon_socket = NULL;
