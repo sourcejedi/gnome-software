@@ -696,74 +696,94 @@ parse_date_time (const gchar *text)
 	return g_date_time_new_utc (values[0], values[1], values[2], values[3], values[4], values[5]);
 }
 
+static GsReview *
+parse_review (JsonNode *node)
+{
+	GsReview *review;
+	JsonObject *object;
+	gint64 star_rating;
+
+	if (!JSON_NODE_HOLDS_OBJECT (node))
+		return NULL;
+
+	object = json_node_get_object (node);
+
+	review = gs_review_new ();
+	gs_review_set_reviewer (review, json_object_get_string_member (object, "reviewer_displayname"));
+	gs_review_set_summary (review, json_object_get_string_member (object, "summary"));
+	gs_review_set_text (review, json_object_get_string_member (object, "review_text"));
+	gs_review_set_version (review, json_object_get_string_member (object, "version"));
+	star_rating = json_object_get_int_member (object, "rating");
+	if (star_rating > 0)
+		gs_review_set_rating (review, star_rating * 20);
+	gs_review_set_date (review, parse_date_time (json_object_get_string_member (object, "date_created")));
+	gs_review_add_metadata (review, "ubuntu-id", json_object_get_string_member (object, "id"));
+
+	return review;
+}
+
+static gboolean
+parse_reviews (GsPlugin *plugin, const gchar *text, GsApp *app, GError **error)
+{
+	JsonParser *parser = NULL;
+	JsonArray *array;
+	gint i;
+	gboolean result = FALSE;
+
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, text, -1, error))
+		goto out;
+	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
+		goto out;
+	array = json_node_get_array (json_parser_get_root (parser));
+	for (i = 0; i < json_array_get_length (array); i++) {
+		GsReview *review;
+
+		/* Read in from JSON... (skip bad entries) */
+		review = parse_review (json_array_get_element (array, i));
+		if (!review)
+			continue;
+
+		gs_app_add_review (app, review);
+		g_object_unref (review);
+	}
+	result = TRUE;
+
+out:
+	g_clear_object (&parser);
+
+	return result;
+}
+
 static gboolean
 download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, GError **error)
 {
-	g_autofree gchar *uri;
 	guint status_code;
-	GVariant *response;
-	GVariant *object;
-	GsReview *review;
-	gint64 rating;
-	GDateTime *date;
-	const gchar *string;
-	GVariantIter i;
-
-	if (!setup_networking (plugin, error))
-		return FALSE;
+	g_autofree gchar *uri = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
+	g_auto(GStrv) split = NULL;
 
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
-	uri = g_strdup_printf ("/api/1.0/reviews/filter/any/any/any/any/%s/", package_name);
-	status_code = send_request (plugin->priv->session,
-				    UBUNTU_REVIEWS_SERVER,
-				    SOUP_METHOD_GET,
-				    uri,
-				    NULL,
-				    &response,
-				    error);
-
-	if (error != NULL && *error != NULL) {
-		g_clear_pointer (&response, g_variant_unref);
+	uri = g_strdup_printf ("%s/api/1.0/reviews/filter/any/any/any/any/%s/",
+			       UBUNTU_REVIEWS_SERVER, package_name);
+	msg = soup_message_new (SOUP_METHOD_GET, uri);
+	if (!setup_networking (plugin, error))
 		return FALSE;
-	} else if (status_code != SOUP_STATUS_OK) {
+	status_code = soup_session_send_message (plugin->priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
 			     "Failed to download Ubuntu reviews for %s: %s",
 			     package_name, soup_status_get_phrase (status_code));
-		g_clear_pointer (&response, g_variant_unref);
 		return FALSE;
 	}
 
 	/* Extract the stats from the data */
-	g_variant_iter_init (&i, response);
-	while (g_variant_iter_loop (&i, "@a{sv}", &object)) {
-		review = gs_review_new ();
+	if (!parse_reviews (plugin, msg->response_body->data, app, error))
+		return FALSE;
 
-		if (g_variant_lookup (object, "reviewer_displayname", "&s", &string))
-			gs_review_set_reviewer (review, string);
-		if (g_variant_lookup (object, "summary", "&s", &string))
-			gs_review_set_summary (review, string);
-		if (g_variant_lookup (object, "review_text", "&s", &string))
-			gs_review_set_text (review, string);
-		if (g_variant_lookup (object, "version", "&s", &string))
-			gs_review_set_version (review, string);
-		if (g_variant_lookup (object, "rating", "&x", &rating))
-			gs_review_set_rating (review, MAX (0, rating * 20));
-		if (g_variant_lookup (object, "id", "&s", &string))
-			gs_review_add_metadata (review, "ubuntu-id", string);
-		if (g_variant_lookup (object, "date_created", "&s", &string)) {
-			date = parse_date_time (string);
-			gs_review_set_date (review, date);
-			g_date_time_unref (date);
-		}
-
-		gs_app_add_review (app, review);
-		g_object_unref (review);
-	}
-
-	g_clear_pointer (&response, g_variant_unref);
 	return TRUE;
 }
 
