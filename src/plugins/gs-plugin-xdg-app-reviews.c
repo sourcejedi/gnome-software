@@ -729,6 +729,8 @@ gs_plugin_refine (GsPlugin *plugin,
 				continue;
 			if (gs_app_get_id (app) == NULL)
 				continue;
+			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
+				continue;
 			if (!gs_plugin_refine_reviews (plugin, app,
 						       cancellable,
 						       &error_local)) {
@@ -746,6 +748,8 @@ gs_plugin_refine (GsPlugin *plugin,
 			if (gs_app_get_review_ratings(app) != NULL)
 				continue;
 			if (gs_app_get_id (app) == NULL)
+				continue;
+			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
 				continue;
 			if (!gs_plugin_refine_ratings (plugin, app,
 						       cancellable,
@@ -770,6 +774,29 @@ xdg_app_review_sanitize_version (const gchar *version)
 		return g_strdup ("unknown");
 	g_strdelimit (tmp, "-", '\0');
 	return tmp;
+}
+
+/**
+ * gs_plugin_xdg_app_reviews_invalidate_cache:
+ */
+static gboolean
+gs_plugin_xdg_app_reviews_invalidate_cache (GsReview *review, GError **error)
+{
+	g_autofree gchar *cachedir = NULL;
+	g_autofree gchar *cachefn = NULL;
+	g_autoptr(GFile) cachefn_file = NULL;
+
+	/* look in the cache */
+	cachedir = gs_utils_get_cachedir ("reviews", error);
+	if (cachedir == NULL)
+		return FALSE;
+	cachefn = g_strdup_printf ("%s/%s.json",
+				   cachedir,
+				   gs_review_get_metadata_item (review, "app_id"));
+	cachefn_file = g_file_new_for_path (cachefn);
+	if (!g_file_query_exists (cachefn_file, NULL))
+		return TRUE;
+	return g_file_delete (cachefn_file, NULL, error);
 }
 
 /**
@@ -830,33 +857,14 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	json_generator_set_root (json_generator, json_root);
 	data = json_generator_to_data (json_generator, NULL);
 
+	/* clear cache */
+	if (!gs_plugin_xdg_app_reviews_invalidate_cache (review, error))
+		return FALSE;
+
 	/* POST */
 	uri = g_strdup_printf ("%s/submit", plugin->priv->review_server);
 	return gs_plugin_xdg_app_reviews_json_post (plugin->priv->session,
 						    uri, data, error);
-}
-
-/**
- * gs_plugin_xdg_app_reviews_invalidate_cache:
- */
-static gboolean
-gs_plugin_xdg_app_reviews_invalidate_cache (GsReview *review, GError **error)
-{
-	g_autofree gchar *cachedir = NULL;
-	g_autofree gchar *cachefn = NULL;
-	g_autoptr(GFile) cachefn_file = NULL;
-
-	/* look in the cache */
-	cachedir = gs_utils_get_cachedir ("reviews", error);
-	if (cachedir == NULL)
-		return FALSE;
-	cachefn = g_strdup_printf ("%s/%s.json",
-				   cachedir,
-				   gs_review_get_metadata_item (review, "app_id"));
-	cachefn_file = g_file_new_for_path (cachefn);
-	if (!g_file_query_exists (cachefn_file, NULL))
-		return TRUE;
-	return g_file_delete (cachefn_file, NULL, error);
 }
 
 /**

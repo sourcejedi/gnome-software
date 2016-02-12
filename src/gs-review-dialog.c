@@ -31,8 +31,8 @@
 #define DESCRIPTION_LENGTH_MAX		3000	/* chars */
 #define DESCRIPTION_LENGTH_MIN		60	/* chars */
 #define SUMMARY_LENGTH_MAX		70	/* chars */
-#define SUMMARY_LENGTH_MIN		15	/* chars */
-#define WRITING_TIME_MIN		20	/* seconds */
+#define SUMMARY_LENGTH_MIN		10	/* chars */
+#define WRITING_TIME_MIN		5	/* seconds */
 
 struct _GsReviewDialog
 {
@@ -165,7 +165,6 @@ gs_review_row_dispose (GObject *object)
 	GsReviewDialog *dialog = GS_REVIEW_DIALOG (object);
 	if (dialog->timer_id > 0)
 		g_source_remove (dialog->timer_id);
-	gtk_widget_destroy (GTK_WIDGET (dialog->spell_checker));
 	G_OBJECT_CLASS (gs_review_dialog_parent_class)->dispose (object);
 }
 
