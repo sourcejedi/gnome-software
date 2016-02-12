@@ -1004,24 +1004,22 @@ report_review (GsPlugin *plugin,
 {
 	GsPluginPrivate *priv = plugin->priv;
 	g_autofree gchar *uri;
+	g_autoptr(SoupMessage) msg;
 	guint status_code;
 
-	/* Send message to reviews server */
-	uri = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
-	uri = soup_uri_encode (uri, NULL);
-	send_signed_request (priv->session,
-			     UBUNTU_REVIEWS_SERVER,
-			     SOUP_METHOD_POST,
-			     uri,
-			     NULL,
-			     NULL,
-			     OA_PLAINTEXT,
-			     priv->consumer_key,
-			     priv->consumer_secret,
-			     priv->token_key,
-			     priv->token_secret,
-			     error);
+	/* Create message for reviews.ubuntu.com */
+	// FIXME: escape reason / text properly
+	uri = g_strdup_printf ("%s/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", UBUNTU_REVIEWS_SERVER, review_id, reason, text);
+	msg = soup_message_new (SOUP_METHOD_POST, uri);
+	sign_message (msg,
+		      OA_PLAINTEXT,
+		      priv->consumer_key,
+		      priv->consumer_secret,
+		      priv->token_key,
+		      priv->token_secret);
 
+	/* Send to the server */
+	status_code = soup_session_send_message (priv->session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
