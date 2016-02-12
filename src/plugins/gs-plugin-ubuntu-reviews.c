@@ -303,18 +303,13 @@ parse_review_entry (JsonNode *node, const gchar **package_name, Histogram *histo
 }
 
 static gboolean
-parse_review_entries (GsPlugin *plugin, const gchar *text, GError **error)
+parse_review_entries (GsPlugin *plugin, JsonParser *parser, GError **error)
 {
-	JsonParser *parser = NULL;
 	JsonArray *array;
 	gint i;
-	gboolean result = FALSE;
 
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, text, -1, error))
-		goto out;
 	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
-		goto out;
+		return FALSE;
 	array = json_node_get_array (json_parser_get_root (parser));
 	for (i = 0; i < json_array_get_length (array); i++) {
 		const gchar *package_name;
@@ -326,14 +321,104 @@ parse_review_entries (GsPlugin *plugin, const gchar *text, GError **error)
 
 		/* ...write into the database (abort everything if can't write) */
 		if (!set_package_stats (plugin, package_name, &histogram, error))
-			goto out;
+			return FALSE;
 	}
-	result = TRUE;
 
-out:
-	g_clear_object (&parser);
+	return TRUE;
+}
 
-	return result;
+static void
+sign_message (SoupMessage *message, OAuthMethod method,
+	      const gchar *consumer_key, const gchar *consumer_secret,
+	      const gchar *token_key, const gchar *token_secret)
+{
+	g_autofree gchar *url = NULL, *oauth_authorization_parameters = NULL, *authorization_text = NULL;
+	gchar **url_parameters = NULL;
+	int url_parameters_length;
+
+	url = soup_uri_to_string (soup_message_get_uri (message), FALSE);
+
+	url_parameters_length = oauth_split_url_parameters(url, &url_parameters);
+	oauth_sign_array2_process (&url_parameters_length, &url_parameters,
+				   NULL,
+				   method,
+				   message->method,
+				   consumer_key, consumer_secret,
+				   token_key, token_secret);
+	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
+	oauth_free_array (&url_parameters_length, &url_parameters);
+	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
+	soup_message_headers_append (message->request_headers, "Authorization", authorization_text);
+}
+
+static gboolean
+send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, JsonBuilder *request, gboolean do_sign, JsonParser **result, GError **error)
+{
+	GsPluginPrivate *priv = plugin->priv;
+	g_autofree gchar *uri = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
+	guint status_code;
+
+	if (!setup_networking (plugin, error))
+		return FALSE;
+
+	uri = g_strdup_printf ("%s%s",
+			       UBUNTU_REVIEWS_SERVER, path);
+	msg = soup_message_new (method, uri);
+
+	if (request != NULL) {
+		JsonGenerator *generator;
+		gchar *data;
+		gsize length;
+
+		generator = json_generator_new ();
+		json_generator_set_root (generator, json_builder_get_root (request));
+		data = json_generator_to_data (generator, &length);
+		soup_message_set_request (msg, "application/json", SOUP_MEMORY_TAKE, data, length);
+		g_object_unref (generator);
+	}
+
+	if (do_sign)
+		sign_message (msg,
+			      OA_PLAINTEXT,
+			      priv->consumer_key,
+			      priv->consumer_secret,
+			      priv->token_key,
+			      priv->token_secret);
+
+	status_code = soup_session_send_message (plugin->priv->session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Got status code %s from reviews.ubuntu.com",
+			     soup_status_get_phrase (status_code));
+		return FALSE;
+	}
+
+	if (result != NULL) {
+		JsonParser *parser;
+		const gchar *content_type;
+
+		content_type = soup_message_headers_get_content_type (msg->response_headers, NULL);
+		if (g_strcmp0 (content_type, "application/json") != 0) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "Got unknown content type %s from reviews.ubuntu.com",
+				     content_type);
+			return FALSE;
+		}
+
+		parser = json_parser_new ();
+		if (!json_parser_load_from_data (parser, msg->response_body->data, -1, error)) {
+			g_object_unref (parser);
+			return FALSE;
+		}
+		*result = parser;
+	}
+
+	return TRUE;
 }
 
 static gboolean
@@ -342,26 +427,16 @@ download_review_stats (GsPlugin *plugin, GError **error)
 	guint status_code;
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
-	g_auto(GStrv) split = NULL;
+	JsonParser *result;
+	gboolean ret;
 
-	/* Get the review stats using HTTP */
-	uri = g_strdup_printf ("%s/api/1.0/review-stats/any/any/",
-			       UBUNTU_REVIEWS_SERVER);
-	msg = soup_message_new (SOUP_METHOD_GET, uri);
-	if (!setup_networking (plugin, error))
+	if (!send_review_request (plugin, SOUP_METHOD_GET, "/api/1.0/review-stats/any/any/", NULL, FALSE, &result, error))
 		return FALSE;
-	status_code = soup_session_send_message (plugin->priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to download Ubuntu reviews dump: %s",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
 
 	/* Extract the stats from the data */
-	if (!parse_review_entries (plugin, msg->response_body->data, error))
+	ret = parse_review_entries (plugin, result, error);
+	g_object_unref (result);
+	if (!ret)
 		return FALSE;
 
 	/* Record the time we downloaded it */
@@ -530,18 +605,13 @@ parse_review (JsonNode *node)
 }
 
 static gboolean
-parse_reviews (GsPlugin *plugin, const gchar *text, GsApp *app, GError **error)
+parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 {
-	JsonParser *parser = NULL;
 	JsonArray *array;
 	gint i;
-	gboolean result = FALSE;
 
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, text, -1, error))
-		goto out;
 	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
-		goto out;
+		return FALSE;
 	array = json_node_get_array (json_parser_get_root (parser));
 	for (i = 0; i < json_array_get_length (array); i++) {
 		GsReview *review;
@@ -554,44 +624,28 @@ parse_reviews (GsPlugin *plugin, const gchar *text, GsApp *app, GError **error)
 		gs_app_add_review (app, review);
 		g_object_unref (review);
 	}
-	result = TRUE;
 
-out:
-	g_clear_object (&parser);
-
-	return result;
+	return TRUE;
 }
 
 static gboolean
 download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, GError **error)
 {
-	guint status_code;
-	g_autofree gchar *uri = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
-	g_auto(GStrv) split = NULL;
+	g_autofree gchar *path = NULL;
+	JsonParser *result;
+	gboolean ret;
 
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
-	uri = g_strdup_printf ("%s/api/1.0/reviews/filter/any/any/any/any/%s/",
-			       UBUNTU_REVIEWS_SERVER, package_name);
-	msg = soup_message_new (SOUP_METHOD_GET, uri);
-	if (!setup_networking (plugin, error))
+	path = g_strdup_printf ("/api/1.0/reviews/filter/any/any/any/any/%s/", package_name);
+	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, FALSE, &result, error))
 		return FALSE;
-	status_code = soup_session_send_message (plugin->priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to download Ubuntu reviews for %s: %s",
-			     package_name, soup_status_get_phrase (status_code));
-		return FALSE;
-	}
 
 	/* Extract the stats from the data */
-	if (!parse_reviews (plugin, msg->response_body->data, app, error))
-		return FALSE;
+	ret = parse_reviews (plugin, result, app, error);
+	g_object_unref (result);
 
-	return TRUE;
+	return ret;
 }
 
 static gboolean
@@ -708,44 +762,6 @@ add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
 	json_builder_add_int_value (builder, value);
 }
 
-static void
-sign_message (SoupMessage *message, OAuthMethod method,
-	      const gchar *consumer_key, const gchar *consumer_secret,
-	      const gchar *token_key, const gchar *token_secret)
-{
-	g_autofree gchar *url = NULL, *oauth_authorization_parameters = NULL, *authorization_text = NULL;
-	gchar **url_parameters = NULL;
-	int url_parameters_length;
-
-	url = soup_uri_to_string (soup_message_get_uri (message), FALSE);
-
-	url_parameters_length = oauth_split_url_parameters(url, &url_parameters);
-	oauth_sign_array2_process (&url_parameters_length, &url_parameters,
-				   NULL,
-				   method,
-				   message->method,
-				   consumer_key, consumer_secret,
-				   token_key, token_secret);
-	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
-	oauth_free_array (&url_parameters_length, &url_parameters);
-	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
-	soup_message_headers_append (message->request_headers, "Authorization", authorization_text);
-}
-
-static void
-set_request (SoupMessage *message, JsonBuilder *builder)
-{
-	JsonGenerator *generator;
-	gchar *data;
-	gsize length;
-
-	generator = json_generator_new ();
-	json_generator_set_root (generator, json_builder_get_root (builder));
-	data = json_generator_to_data (generator, &length);
-	soup_message_set_request (message, "application/json", SOUP_MEMORY_TAKE, data, length);
-	g_object_unref (generator);
-}
-
 static gboolean
 set_package_review (GsPlugin *plugin,
 		    GsReview *review,
@@ -755,11 +771,10 @@ set_package_review (GsPlugin *plugin,
 	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
-	g_autofree gchar *uri = NULL, *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
+	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	gchar *c;
-	g_autoptr(SoupMessage) msg;
-	JsonBuilder *builder;
-	guint status_code;
+	JsonBuilder *request;
+	gboolean ret;
 
 	/* Ubuntu reviews require a summary and description - just make one up for now */
 	rating = gs_review_get_rating (review);
@@ -791,41 +806,22 @@ set_package_review (GsPlugin *plugin,
 	architecture = g_strdup ("amd64");
 
 	/* Create message for reviews.ubuntu.com */
-	uri = g_strdup_printf ("%s/api/1.0/reviews/", UBUNTU_REVIEWS_SERVER);
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	builder = json_builder_new ();
-	json_builder_begin_object (builder);
-	add_string_member (builder, "package_name", package_name);
-	add_string_member (builder, "summary", gs_review_get_summary (review));
-	add_string_member (builder, "review_text", gs_review_get_text (review));
-	add_string_member (builder, "language", language);
-	add_string_member (builder, "origin", os_id);
-	add_string_member (builder, "distroseries", os_ubuntu_codename);
-	add_string_member (builder, "version", gs_review_get_version (review));
-	add_int_member (builder, "rating", n_stars);
-	add_string_member (builder, "arch_tag", architecture);
-	json_builder_end_object (builder);
-	set_request (msg, builder);
-	g_object_unref (builder);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
+	request = json_builder_new ();
+	json_builder_begin_object (request);
+	add_string_member (request, "package_name", package_name);
+	add_string_member (request, "summary", gs_review_get_summary (review));
+	add_string_member (request, "review_text", gs_review_get_text (review));
+	add_string_member (request, "language", language);
+	add_string_member (request, "origin", os_id);
+	add_string_member (request, "distroseries", os_ubuntu_codename);
+	add_string_member (request, "version", gs_review_get_version (review));
+	add_int_member (request, "rating", n_stars);
+	add_string_member (request, "arch_tag", architecture);
+	json_builder_end_object (request);
+	ret = send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/", request, TRUE, NULL, error);
+	g_object_unref (request);
 
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to post review: %s",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
-
-	return TRUE;
+	return ret;
 }
 
 static gboolean
@@ -834,33 +830,11 @@ set_review_usefulness (GsPlugin *plugin,
 		       gboolean is_useful,
 		       GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
-	g_autofree gchar *uri;
-	g_autoptr(SoupMessage) msg;
-	guint status_code;
+	g_autofree gchar *path;
 
 	/* Create message for reviews.ubuntu.com */
-	uri = g_strdup_printf ("%s/api/1.0/reviews/%s/recommendations/?useful=%s", UBUNTU_REVIEWS_SERVER, review_id, is_useful ? "True" : "False");
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
-
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to set review usefulness: %s",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
-
-	return TRUE;
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
 }
 
 static gboolean
@@ -870,34 +844,12 @@ report_review (GsPlugin *plugin,
 	       const gchar *text,
 	       GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
-	g_autofree gchar *uri;
-	g_autoptr(SoupMessage) msg;
-	guint status_code;
+	g_autofree gchar *path;
 
 	/* Create message for reviews.ubuntu.com */
 	// FIXME: escape reason / text properly
-	uri = g_strdup_printf ("%s/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", UBUNTU_REVIEWS_SERVER, review_id, reason, text);
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
-
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to set report review: %s",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
-
-	return TRUE;
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
 }
 
 static gboolean
@@ -905,33 +857,11 @@ remove_review (GsPlugin *plugin,
 	       const gchar *review_id,
 	       GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
-	g_autofree gchar *uri;
-	g_autoptr(SoupMessage) msg;
-	guint status_code;
+	g_autofree gchar *path;
 
 	/* Create message for reviews.ubuntu.com */
-	uri = g_strdup_printf ("%s/api/1.0/reviews/delete/%s/", UBUNTU_REVIEWS_SERVER, review_id);
-	msg = soup_message_new (SOUP_METHOD_POST, uri);
-	sign_message (msg,
-		      OA_PLAINTEXT,
-		      priv->consumer_key,
-		      priv->consumer_secret,
-		      priv->token_key,
-		      priv->token_secret);
-
-	/* Send to the server */
-	status_code = soup_session_send_message (priv->session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Failed to set delete review: %s",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
-
-	return TRUE;
+	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
 }
 
 typedef struct
