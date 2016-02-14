@@ -38,7 +38,6 @@ struct GsPluginPrivate {
 	gchar		*db_path;
 	sqlite3		*db;
 	gsize		 db_loaded;
-	SoupSession	*session;
 	gchar		*consumer_key;
 	gchar		*consumer_secret;
 	gchar		*token_key;
@@ -101,29 +100,6 @@ gs_plugin_destroy (GsPlugin *plugin)
 	g_clear_pointer (&priv->consumer_secret, g_free);
 	g_clear_pointer (&priv->consumer_key, g_free);
 	g_clear_pointer (&priv->db, sqlite3_close);
-	g_clear_object (&priv->session);
-}
-
-static gboolean
-setup_networking (GsPlugin *plugin, GError **error)
-{
-	/* already set up */
-	if (plugin->priv->session != NULL)
-		return TRUE;
-
-	/* set up a session */
-	plugin->priv->session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
-							       gs_user_agent (),
-							       NULL);
-	if (plugin->priv->session == NULL) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "%s: failed to setup networking",
-			     plugin->name);
-		return FALSE;
-	}
-	return TRUE;
 }
 
 static gint
@@ -359,9 +335,6 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
 
-	if (!setup_networking (plugin, error))
-		return FALSE;
-
 	uri = g_strdup_printf ("%s%s",
 			       UBUNTU_REVIEWS_SERVER, path);
 	msg = soup_message_new (method, uri);
@@ -386,7 +359,7 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 			      priv->token_key,
 			      priv->token_secret);
 
-	status_code = soup_session_send_message (plugin->priv->session, msg);
+	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
@@ -965,9 +938,6 @@ gs_plugin_review_submit (GsPlugin *plugin,
 		if (!ret)
 			return FALSE;
 	}
-
-	if (!setup_networking (plugin, error))
-		return FALSE;
 
 	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
