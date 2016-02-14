@@ -714,9 +714,6 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
 
-	if (!setup_networking (plugin, error))
-		return FALSE;
-
 	uri = g_strdup_printf ("%s%s",
 			       UBUNTU_REVIEWS_SERVER, path);
 	msg = soup_message_new (method, uri);
@@ -741,7 +738,7 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 			      priv->token_key,
 			      priv->token_secret);
 
-	status_code = soup_session_send_message (plugin->priv->session, msg);
+	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
