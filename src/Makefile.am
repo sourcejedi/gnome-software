@@ -44,6 +44,7 @@ UI_FILES =						\
 	gs-shell-extras.ui				\
 	gs-shell-details.ui				\
 	gs-shell-installed.ui				\
+	gs-shell-moderate.ui				\
 	gs-shell-overview.ui				\
 	gs-shell-search.ui				\
 	gs-shell-updates.ui				\
@@ -95,6 +96,7 @@ gnome_software_cmd_SOURCES =				\
 
 gnome_software_cmd_LDADD =				\
 	$(APPSTREAM_LIBS)				\
+	$(SOUP_LIBS)					\
 	$(GLIB_LIBS)					\
 	$(GTK_LIBS)
 
@@ -171,6 +173,8 @@ gnome_software_SOURCES =				\
 	gs-shell-extras.h				\
 	gs-shell-installed.c				\
 	gs-shell-installed.h				\
+	gs-shell-moderate.c				\
+	gs-shell-moderate.h				\
 	gs-shell-overview.c				\
 	gs-shell-overview.h				\
 	gs-shell-updates.c				\
@@ -289,6 +293,7 @@ gs_self_test_SOURCES =						\
 
 gs_self_test_LDADD =						\
 	$(APPSTREAM_LIBS)					\
+	$(SOUP_LIBS)						\
 	$(GLIB_LIBS)						\
 	$(GTK_LIBS)
 
