@@ -253,7 +253,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_string_append (path, fields);
 	}
 	g_ptr_array_free (query_fields, TRUE);
-	g_printerr ("'%s'\n", path->str);
 	if (!send_snapd_request (socket, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
@@ -355,7 +354,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 			g_autoptr(SoupMessage) message = NULL;
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
-			g_printerr ("'%s'\n", icon_url);
 			message = soup_message_new (SOUP_METHOD_GET, icon_url);
 			if (message != NULL) {
 				soup_session_send_message (plugin->soup_session, message);
