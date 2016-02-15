@@ -356,16 +356,15 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 			g_autoptr(SoupMessage) message = NULL;
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
-			session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
-								 "gnome-software",
-								 NULL);
 			g_printerr ("'%s'\n", icon_url);
 			message = soup_message_new (SOUP_METHOD_GET, icon_url);
-			soup_session_send_message (session, message);
-			loader = gdk_pixbuf_loader_new ();
-			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
-			gdk_pixbuf_loader_close (loader, NULL);
-			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
+			if (message != NULL) {
+				soup_session_send_message (session, message);
+				loader = gdk_pixbuf_loader_new ();
+				gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
+				gdk_pixbuf_loader_close (loader, NULL);
+				icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
+			}
 		}
 
 		if (icon_pixbuf)
