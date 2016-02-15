@@ -352,14 +352,13 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 				g_printerr ("Failed to get icon\n");
 		}
 		else {
-			g_autoptr(SoupSession) session = NULL;
 			g_autoptr(SoupMessage) message = NULL;
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			g_printerr ("'%s'\n", icon_url);
 			message = soup_message_new (SOUP_METHOD_GET, icon_url);
 			if (message != NULL) {
-				soup_session_send_message (session, message);
+				soup_session_send_message (plugin->soup_session, message);
 				loader = gdk_pixbuf_loader_new ();
 				gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
 				gdk_pixbuf_loader_close (loader, NULL);
