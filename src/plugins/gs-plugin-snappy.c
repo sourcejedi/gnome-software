@@ -219,11 +219,13 @@ send_snapd_request (GSocket *socket,
 }
 
 static gboolean
-get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
+get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
-	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
+	GPtrArray *query_fields;
+	g_autoptr (GString) path = NULL;
+	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
@@ -234,14 +236,25 @@ get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc fi
 		return FALSE;
 
 	/* Get all the apps */
-	if (search_terms) {
+	query_fields = g_ptr_array_new_with_free_func (g_free);
+	if (sources != NULL)
+		g_ptr_array_add (query_fields, g_strdup_printf ("sources=%s", sources));
+	if (search_terms != NULL) {
 		g_autofree gchar *query = NULL;
 		query = g_strjoinv ("+", search_terms);
-		path = g_strdup_printf ("/2.0/snaps?q=%s", query);
-	} else {
-		path = g_strdup ("/2.0/snaps");
+		g_ptr_array_add (query_fields, g_strdup_printf ("q=%s", query));
 	}
-	if (!send_snapd_request (socket, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	g_ptr_array_add (query_fields, NULL);
+	path = g_string_new ("/2.0/snaps");
+	if (query_fields->len > 1) {
+		g_autofree gchar *fields = NULL;
+		g_string_append (path, "?");
+		fields = g_strjoinv ("&", (gchar **) query_fields->pdata);
+		g_string_append (path, fields);
+	}
+	g_ptr_array_free (query_fields, TRUE);
+	g_printerr ("'%s'\n", path->str);
+	if (!send_snapd_request (socket, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -346,6 +359,7 @@ get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc fi
 			session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT,
 								 "gnome-software",
 								 NULL);
+			g_printerr ("'%s'\n", icon_url);
 			message = soup_message_new (SOUP_METHOD_GET, icon_url);
 			soup_session_send_message (session, message);
 			loader = gdk_pixbuf_loader_new ();
@@ -377,10 +391,10 @@ gs_plugin_destroy (GsPlugin *plugin)
 }
 
 static gboolean
-is_installed (const gchar *id, JsonObject *object, gpointer data)
+is_active (const gchar *id, JsonObject *object, gpointer data)
 {
 	const gchar *status = json_object_get_string_member (object, "status");
-	return status && (strcmp (status, "installed") == 0 || strcmp (status, "active") == 0);
+	return g_strcmp0 (status, "active") == 0;
 }
 
 gboolean
@@ -389,7 +403,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	return get_apps (plugin, NULL, list, is_installed, NULL, error);
+	return get_apps (plugin, "local", NULL, list, is_active, NULL, error);
 }
 
 gboolean
@@ -399,7 +413,7 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	return get_apps (plugin, values, list, NULL, values, error);
+	return get_apps (plugin, NULL, values, list, NULL, values, error);
 }
 
 static gboolean
