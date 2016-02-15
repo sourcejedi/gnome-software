@@ -219,11 +219,11 @@ send_snapd_request (GSocket *socket,
 }
 
 static gboolean
-get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
+get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
-	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
+	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	JsonParser *parser;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
@@ -234,7 +234,14 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		return FALSE;
 
 	/* Get all the apps */
-	if (!send_snapd_request (socket, "GET", "/2.0/snaps", NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (search_terms) {
+		g_autofree gchar *query = NULL;
+		query = g_strjoinv ("+", search_terms);
+		path = g_strdup_printf ("/2.0/snaps?q=%s", query);
+	} else {
+		path = g_strdup ("/2.0/snaps");
+	}
+	if (!send_snapd_request (socket, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -287,7 +294,7 @@ get_apps (GsPlugin *plugin, GList **list, AppFilterFunc filter_func, gpointer us
 		g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
 
 		package = json_object_get_object_member (packages, id);
-		if (!filter_func (id, package, user_data))
+		if (filter_func != NULL && !filter_func (id, package, user_data))
 			continue;
 
 		app = gs_app_new (id);
@@ -382,36 +389,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	g_printerr ("SNAPPY: gs_plugin_add_installed\n");
-	return get_apps (plugin, list, is_installed, NULL, error);
-}
-
-static gboolean
-string_contains (const gchar *string, const gchar *fragment)
-{
-	gint i, j;
-
-	for (i = 0; string[i]; i++) {
-		for (j = 0; fragment[j] && string[i+j] && tolower (string[i+j]) == tolower (fragment[j]); j++);
-		if (fragment[j] == '\0')
-			return TRUE;
-	}
-
-	return FALSE;
-}
-
-static gboolean
-matches_search (const gchar *id, JsonObject *object, gpointer data)
-{
-	gchar **search_terms = data;
-	gint i;
-
-	for (i = 0; search_terms[i]; i++)
-		if (string_contains (json_object_get_string_member (object, "name"), search_terms[i]) ||
-		    string_contains (json_object_get_string_member (object, "description"), search_terms[i]))
-			return TRUE;
-
-	return FALSE;
+	return get_apps (plugin, NULL, list, is_installed, NULL, error);
 }
 
 gboolean
@@ -421,8 +399,7 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	g_printerr ("SNAPPY: gs_plugin_add_search\n");
-	return get_apps (plugin, list, matches_search, values, error);
+	return get_apps (plugin, values, list, NULL, values, error);
 }
 
 static gboolean
