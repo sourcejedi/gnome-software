@@ -450,8 +450,6 @@ gs_plugin_app_install (GsPlugin *plugin,
 {
 	gboolean result;
 
-	g_printerr ("SNAPPY: gs_plugin_app_install\n");
-
 	/* We can only install apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
 		return TRUE;
@@ -470,8 +468,6 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GError **error)
 {
 	gboolean result;
-
-	g_printerr ("SNAPPY: gs_plugin_app_remove\n");
 
 	/* We can only remove apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
