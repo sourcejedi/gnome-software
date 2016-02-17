@@ -23,7 +23,6 @@
 
 #include <gs-plugin.h>
 #include <json-glib/json-glib.h>
-#include <libsoup/soup.h>
 #include <string.h>
 
 #include "gs-app.h"
@@ -49,7 +48,6 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonGenerator, g_object_unref)
 
 struct GsPluginPrivate {
 	GSettings		*settings;
-	SoupSession		*session;
 	gchar			*distro;
 	gchar			*user_hash;
 	gchar			*review_server;
@@ -72,7 +70,6 @@ gs_plugin_initialize (GsPlugin *plugin)
 {
 	g_autoptr(GError) error = NULL;
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
-	plugin->priv->session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT, gs_user_agent (), NULL);
 	plugin->priv->settings = g_settings_new ("org.gnome.software");
 	plugin->priv->review_server = g_settings_get_string (plugin->priv->settings,
 							     "review-server");
@@ -114,7 +111,6 @@ gs_plugin_destroy (GsPlugin *plugin)
 {
 	g_free (plugin->priv->user_hash);
 	g_free (plugin->priv->distro);
-	g_object_unref (plugin->priv->session);
 	g_object_unref (plugin->priv->settings);
 }
 
@@ -321,47 +317,6 @@ xdg_app_review_parse_success (const gchar *data,
 	return TRUE;
 }
 
-#if 0
-/**
- * xdg_app_review_get_moderate:
- */
-static GPtrArray *
-xdg_app_review_get_moderate (SoupSession *session,
-			     const gchar *user_hash,
-			     GError **error)
-{
-	guint status_code;
-	g_autofree gchar *uri = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
-	g_autoptr(GFile) cachefn_file = NULL;
-	g_autoptr(GPtrArray) reviews = NULL;
-
-	/* create the GET data *with* the machine hash so we can later
-	 * review the application ourselves */
-	uri = g_strdup_printf ("%s/moderate/%s",
-			       plugin->priv->review_server,
-			       user_hash);
-	msg = soup_message_new (SOUP_METHOD_GET, uri);
-	status_code = soup_session_send_message (session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		if (!xdg_app_review_parse_success (msg->response_body->data,
-						   msg->response_body->length,
-						   error))
-			return NULL;
-		/* not sure what to do here */
-		g_set_error_literal (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "status code invalid");
-		return NULL;
-	}
-	g_debug ("xdg-app-review returned: %s", msg->response_body->data);
-	return xdg_app_review_parse_reviews (msg->response_body->data,
-					     msg->response_body->length,
-					     error);
-}
-#endif
-
 /**
  * gs_plugin_xdg_app_reviews_json_post:
  */
@@ -495,7 +450,7 @@ xdg_app_review_get_ratings (GsPlugin *plugin, GsApp *app, GError **error)
 			       plugin->priv->review_server,
 			       gs_app_get_id (app));
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
-	status_code = soup_session_send_message (plugin->priv->session, msg);
+	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		if (!xdg_app_review_parse_success (msg->response_body->data,
 						   msg->response_body->length,
@@ -633,7 +588,7 @@ xdg_app_review_fetch_for_app (GsPlugin *plugin, GsApp *app, GError **error)
 	msg = soup_message_new (SOUP_METHOD_POST, uri);
 	soup_message_set_request (msg, "application/json",
 				  SOUP_MEMORY_COPY, data, strlen (data));
-	status_code = soup_session_send_message (plugin->priv->session, msg);
+	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		if (!xdg_app_review_parse_success (msg->response_body->data,
 						   msg->response_body->length,
@@ -729,6 +684,8 @@ gs_plugin_refine (GsPlugin *plugin,
 				continue;
 			if (gs_app_get_id (app) == NULL)
 				continue;
+			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
+				continue;
 			if (!gs_plugin_refine_reviews (plugin, app,
 						       cancellable,
 						       &error_local)) {
@@ -746,6 +703,8 @@ gs_plugin_refine (GsPlugin *plugin,
 			if (gs_app_get_review_ratings(app) != NULL)
 				continue;
 			if (gs_app_get_id (app) == NULL)
+				continue;
+			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
 				continue;
 			if (!gs_plugin_refine_ratings (plugin, app,
 						       cancellable,
@@ -770,6 +729,29 @@ xdg_app_review_sanitize_version (const gchar *version)
 		return g_strdup ("unknown");
 	g_strdelimit (tmp, "-", '\0');
 	return tmp;
+}
+
+/**
+ * gs_plugin_xdg_app_reviews_invalidate_cache:
+ */
+static gboolean
+gs_plugin_xdg_app_reviews_invalidate_cache (GsReview *review, GError **error)
+{
+	g_autofree gchar *cachedir = NULL;
+	g_autofree gchar *cachefn = NULL;
+	g_autoptr(GFile) cachefn_file = NULL;
+
+	/* look in the cache */
+	cachedir = gs_utils_get_cachedir ("reviews", error);
+	if (cachedir == NULL)
+		return FALSE;
+	cachefn = g_strdup_printf ("%s/%s.json",
+				   cachedir,
+				   gs_review_get_metadata_item (review, "app_id"));
+	cachefn_file = g_file_new_for_path (cachefn);
+	if (!g_file_query_exists (cachefn_file, NULL))
+		return TRUE;
+	return g_file_delete (cachefn_file, NULL, error);
 }
 
 /**
@@ -830,33 +812,14 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	json_generator_set_root (json_generator, json_root);
 	data = json_generator_to_data (json_generator, NULL);
 
+	/* clear cache */
+	if (!gs_plugin_xdg_app_reviews_invalidate_cache (review, error))
+		return FALSE;
+
 	/* POST */
 	uri = g_strdup_printf ("%s/submit", plugin->priv->review_server);
-	return gs_plugin_xdg_app_reviews_json_post (plugin->priv->session,
+	return gs_plugin_xdg_app_reviews_json_post (plugin->soup_session,
 						    uri, data, error);
-}
-
-/**
- * gs_plugin_xdg_app_reviews_invalidate_cache:
- */
-static gboolean
-gs_plugin_xdg_app_reviews_invalidate_cache (GsReview *review, GError **error)
-{
-	g_autofree gchar *cachedir = NULL;
-	g_autofree gchar *cachefn = NULL;
-	g_autoptr(GFile) cachefn_file = NULL;
-
-	/* look in the cache */
-	cachedir = gs_utils_get_cachedir ("reviews", error);
-	if (cachedir == NULL)
-		return FALSE;
-	cachefn = g_strdup_printf ("%s/%s.json",
-				   cachedir,
-				   gs_review_get_metadata_item (review, "app_id"));
-	cachefn_file = g_file_new_for_path (cachefn);
-	if (!g_file_query_exists (cachefn_file, NULL))
-		return TRUE;
-	return g_file_delete (cachefn_file, NULL, error);
 }
 
 /**
@@ -907,7 +870,7 @@ gs_plugin_xdg_app_reviews_vote (GsPlugin *plugin, GsReview *review,
 		return FALSE;
 
 	/* send to server */
-	if (!gs_plugin_xdg_app_reviews_json_post (plugin->priv->session,
+	if (!gs_plugin_xdg_app_reviews_json_post (plugin->soup_session,
 						  uri, data, error))
 		return FALSE;
 
@@ -964,6 +927,21 @@ gs_plugin_review_downvote (GsPlugin *plugin,
 }
 
 /**
+ * gs_plugin_review_dismiss:
+ */
+gboolean
+gs_plugin_review_dismiss (GsPlugin *plugin,
+			  GsApp *app,
+			  GsReview *review,
+			  GCancellable *cancellable,
+			  GError **error)
+{
+	g_autofree gchar *uri = NULL;
+	uri = g_strdup_printf ("%s/dismiss", plugin->priv->review_server);
+	return gs_plugin_xdg_app_reviews_vote (plugin, review, uri, error);
+}
+
+/**
  * gs_plugin_review_remove:
  */
 gboolean
@@ -976,4 +954,68 @@ gs_plugin_review_remove (GsPlugin *plugin,
 	g_autofree gchar *uri = NULL;
 	uri = g_strdup_printf ("%s/remove", plugin->priv->review_server);
 	return gs_plugin_xdg_app_reviews_vote (plugin, review, uri, error);
+}
+
+/**
+ * gs_plugin_add_unvoted_reviews:
+ */
+gboolean
+gs_plugin_add_unvoted_reviews (GsPlugin *plugin,
+			       GList **list,
+			       GCancellable *cancellable,
+			       GError **error)
+{
+	const gchar *app_id_last = NULL;
+	guint status_code;
+	guint i;
+	g_autofree gchar *uri = NULL;
+	g_autoptr(GFile) cachefn_file = NULL;
+	g_autoptr(GPtrArray) reviews = NULL;
+	g_autoptr(GsApp) app_current = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
+
+	/* create the GET data *with* the machine hash so we can later
+	 * review the application ourselves */
+	uri = g_strdup_printf ("%s/moderate/%s",
+			       plugin->priv->review_server,
+			       plugin->priv->user_hash);
+	msg = soup_message_new (SOUP_METHOD_GET, uri);
+	status_code = soup_session_send_message (plugin->soup_session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		if (!xdg_app_review_parse_success (msg->response_body->data,
+						   msg->response_body->length,
+						   error))
+			return FALSE;
+		/* not sure what to do here */
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "status code invalid");
+		return FALSE;
+	}
+	g_debug ("xdg-app-review returned: %s", msg->response_body->data);
+	reviews = xdg_app_review_parse_reviews (msg->response_body->data,
+						msg->response_body->length,
+						error);
+	if (reviews == NULL)
+		return FALSE;
+
+	/* look at all the reviews; faking application objects */
+	for (i = 0; i < reviews->len; i++) {
+		GsReview *review;
+		const gchar *app_id;
+
+		/* same app? */
+		review = g_ptr_array_index (reviews, i);
+		app_id = gs_review_get_metadata_item (review, "app_id");
+		if (g_strcmp0 (app_id, app_id_last) != 0) {
+			g_clear_object (&app_current);
+			app_current = gs_app_new (app_id);
+			gs_plugin_add_app (list, app_current);
+			app_id_last = app_id;
+		}
+		gs_app_add_review (app_current, review);
+	}
+
+	return TRUE;
 }

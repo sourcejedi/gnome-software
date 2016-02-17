@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2016 Kalev Lember <klember@redhat.com>
+ * Copyright (C) 2013 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -19,35 +19,33 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef GS_UPGRADE_BANNER_H
-#define GS_UPGRADE_BANNER_H
+#ifndef __GS_SHELL_MODERATE_H
+#define __GS_SHELL_MODERATE_H
 
+#include <glib-object.h>
 #include <gtk/gtk.h>
 
-#include "gs-app.h"
+#include "gs-page.h"
+#include "gs-plugin-loader.h"
 
 G_BEGIN_DECLS
 
-#define GS_TYPE_UPGRADE_BANNER (gs_upgrade_banner_get_type ())
+#define GS_TYPE_SHELL_MODERATE (gs_shell_moderate_get_type ())
 
-G_DECLARE_DERIVABLE_TYPE (GsUpgradeBanner, gs_upgrade_banner, GS, UPGRADE_BANNER, GtkBin)
+G_DECLARE_FINAL_TYPE (GsShellModerate, gs_shell_moderate, GS, SHELL_MODERATE, GsPage)
 
-struct _GsUpgradeBannerClass
-{
-	GtkBinClass	 parent_class;
-
-	void		(*download_button_clicked)	(GsUpgradeBanner	*self);
-	void		(*install_button_clicked)	(GsUpgradeBanner	*self);
-	void		(*learn_more_button_clicked)	(GsUpgradeBanner	*self);
-};
-
-GtkWidget	*gs_upgrade_banner_new			(void);
-void		 gs_upgrade_banner_set_app		(GsUpgradeBanner	*self,
-							 GsApp			*app);
-GsApp		*gs_upgrade_banner_get_app		(GsUpgradeBanner	*self);
+GsShellModerate	*gs_shell_moderate_new		(void);
+void		 gs_shell_moderate_switch_to	(GsShellModerate	*self,
+						 gboolean		scroll_up);
+void		 gs_shell_moderate_reload	(GsShellModerate	*self);
+void		 gs_shell_moderate_setup	(GsShellModerate	*self,
+						 GsShell		*shell,
+						 GsPluginLoader		*plugin_loader,
+						 GtkBuilder		*builder,
+						 GCancellable		*cancellable);
 
 G_END_DECLS
 
-#endif /* GS_UPGRADE_BANNER_H */
+#endif /* __GS_SHELL_MODERATE_H */
 
 /* vim: set noexpandtab: */

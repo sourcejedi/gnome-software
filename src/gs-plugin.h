@@ -27,6 +27,7 @@
 #include <gmodule.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
+#include <libsoup/soup.h>
 
 #include "gs-app.h"
 #include "gs-category.h"
@@ -75,6 +76,7 @@ struct GsPlugin {
 	GsPluginUpdatesChanged	 updates_changed_fn;
 	gpointer		 updates_changed_user_data;
 	AsProfile		*profile;
+	SoupSession		*soup_session;
 };
 
 typedef enum {
@@ -249,6 +251,10 @@ gboolean	 gs_plugin_add_featured			(GsPlugin	*plugin,
 							 GList		**list,
 							 GCancellable	*cancellable,
 							 GError		**error);
+gboolean	 gs_plugin_add_unvoted_reviews		(GsPlugin	*plugin,
+							 GList		**list,
+							 GCancellable	*cancellable,
+							 GError		**error);
 gboolean	 gs_plugin_refine			(GsPlugin	*plugin,
 							 GList		**list,
 							 GsPluginRefineFlags flags,
@@ -282,6 +288,10 @@ gboolean	 gs_plugin_app_upgrade_download		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GCancellable	*cancellable,
 							 GError		**error);
+gboolean	 gs_plugin_app_upgrade_trigger		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GCancellable	*cancellable,
+							 GError		**error);
 gboolean	 gs_plugin_review_submit		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GsReview	*review,
@@ -303,6 +313,11 @@ gboolean	 gs_plugin_review_report		(GsPlugin	*plugin,
 							 GCancellable	*cancellable,
 							 GError		**error);
 gboolean	 gs_plugin_review_remove		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsReview	*review,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_review_dismiss		(GsPlugin	*plugin,
 							 GsApp		*app,
 							 GsReview	*review,
 							 GCancellable	*cancellable,

@@ -216,8 +216,13 @@ get_upgrades_finished_cb (GObject *object,
 		g_debug ("no upgrades; withdrawing upgrades-available notification");
 		g_application_withdraw_notification (monitor->application,
 						     "upgrades-available");
-		if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+		if (g_error_matches (error,
+		                     GS_PLUGIN_LOADER_ERROR,
+		                     GS_PLUGIN_LOADER_ERROR_NO_RESULTS)) {
+			g_debug ("no upgrades to show");
+		} else if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
 			g_warning ("failed to get upgrades: %s", error->message);
+		}
 		return;
 	}
 
@@ -453,7 +458,8 @@ get_updates_historical_cb (GObject *object, GAsyncResult *res, gpointer data)
 
 	notification = g_notification_new (title);
 	g_notification_set_body (notification, message);
-	g_notification_add_button_with_target (notification, _("Review"), "app.set-mode", "s", "updated");
+	/* TRANSLATORS: to look at the updates that were installed */
+	g_notification_add_button_with_target (notification, C_("updates", "Review"), "app.set-mode", "s", "updated");
 	g_notification_set_default_action_and_target (notification, "app.set-mode", "s", "updated");
 	g_application_send_notification (monitor->application, "offline-updates", notification);
 

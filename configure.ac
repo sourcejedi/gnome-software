@@ -1,7 +1,7 @@
 # Copyright (C) 2010-2015 Richard Hughes <richard@hughsie.com>
 AC_PREREQ(2.63)
 
-AC_INIT([gnome-software],[3.19.5],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
+AC_INIT([gnome-software],[3.19.91],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
 AC_CONFIG_SRCDIR(src)
 AM_INIT_AUTOMAKE([1.11 no-dist-gzip dist-xz tar-ustar serial-tests foreign])
 AC_CONFIG_HEADERS([config.h])
@@ -96,7 +96,7 @@ AC_ARG_ENABLE(packagekit,
               enable_packagekit=maybe)
 AS_IF([test "x$enable_packagekit" != "xno"], [
     PKG_CHECK_MODULES(PACKAGEKIT,
-                      [packagekit-glib2 >= 1.0.11],
+                      [packagekit-glib2 >= 1.1.0],
                       [have_packagekit=yes],
                       [have_packagekit=no])
 ], [

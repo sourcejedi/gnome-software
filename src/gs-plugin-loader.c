@@ -27,6 +27,7 @@
 
 #include "gs-plugin-loader.h"
 #include "gs-plugin.h"
+#include "gs-utils.h"
 
 #define GS_PLUGIN_LOADER_UPDATES_CHANGED_DELAY	3	/* s */
 
@@ -37,6 +38,7 @@ typedef struct
 	gchar			*locale;
 	GsPluginStatus		 status_last;
 	AsProfile		*profile;
+	SoupSession		*soup_session;
 
 	GMutex			 pending_apps_mutex;
 	GPtrArray		*pending_apps;
@@ -106,8 +108,8 @@ G_DEFINE_QUARK (gs-plugin-loader-error-quark, gs_plugin_loader_error)
 static gint
 gs_plugin_loader_app_sort_cb (gconstpointer a, gconstpointer b)
 {
-	return g_strcmp0 (gs_app_get_name (GS_APP (a)),
-			  gs_app_get_name (GS_APP (b)));
+	return g_strcmp0 (gs_app_get_name (GS_APP ((gpointer) a)),
+			  gs_app_get_name (GS_APP ((gpointer) b)));
 }
 
 /**
@@ -989,6 +991,89 @@ gs_plugin_loader_get_distro_upgrades_async (GsPluginLoader *plugin_loader,
  **/
 GList *
 gs_plugin_loader_get_distro_upgrades_finish (GsPluginLoader *plugin_loader,
+					     GAsyncResult *res,
+					     GError **error)
+{
+	g_return_val_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader), NULL);
+	g_return_val_if_fail (G_IS_TASK (res), NULL);
+	g_return_val_if_fail (g_task_is_valid (res, plugin_loader), NULL);
+	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+	return g_task_propagate_pointer (G_TASK (res), error);
+}
+
+/******************************************************************************/
+
+/**
+ * gs_plugin_loader_get_unvoted_reviews_thread_cb:
+ **/
+static void
+gs_plugin_loader_get_unvoted_reviews_thread_cb (GTask *task,
+						gpointer object,
+						gpointer task_data,
+						GCancellable *cancellable)
+{
+	GsPluginLoaderAsyncState *state = (GsPluginLoaderAsyncState *) task_data;
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (object);
+	GError *error = NULL;
+
+	state->list = gs_plugin_loader_run_results (plugin_loader,
+						    "gs_plugin_add_unvoted_reviews",
+						    state->flags,
+						    cancellable,
+						    &error);
+	if (error != NULL) {
+		g_task_return_error (task, error);
+		return;
+	}
+
+	/* filter package list */
+	gs_plugin_list_filter_duplicates (&state->list);
+
+	/* dedupe applications we already know about */
+	gs_plugin_loader_list_dedupe (plugin_loader, state->list);
+
+	/* success */
+	g_task_return_pointer (task, gs_plugin_list_copy (state->list), (GDestroyNotify) gs_plugin_list_free);
+}
+
+/**
+ * gs_plugin_loader_get_unvoted_reviews_async:
+ *
+ * This method calls all plugins that implement the gs_plugin_add_unvoted_reviews()
+ * function.
+ **/
+void
+gs_plugin_loader_get_unvoted_reviews_async (GsPluginLoader *plugin_loader,
+					    GsPluginRefineFlags flags,
+					    GCancellable *cancellable,
+					    GAsyncReadyCallback callback,
+					    gpointer user_data)
+{
+	GsPluginLoaderAsyncState *state;
+	g_autoptr(GTask) task = NULL;
+
+	g_return_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader));
+	g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+
+	/* save state */
+	state = g_slice_new0 (GsPluginLoaderAsyncState);
+	state->flags = flags;
+
+	/* run in a thread */
+	task = g_task_new (plugin_loader, cancellable, callback, user_data);
+	g_task_set_task_data (task, state, (GDestroyNotify) gs_plugin_loader_free_async_state);
+	g_task_set_return_on_cancel (task, TRUE);
+	g_task_run_in_thread (task, gs_plugin_loader_get_unvoted_reviews_thread_cb);
+}
+
+/**
+ * gs_plugin_loader_get_unvoted_reviews_finish:
+ *
+ * Return value: (element-type GsApp) (transfer full): A list of applications
+ **/
+GList *
+gs_plugin_loader_get_unvoted_reviews_finish (GsPluginLoader *plugin_loader,
 					     GAsyncResult *res,
 					     GError **error)
 {
@@ -1956,8 +2041,8 @@ gs_plugin_loader_search_what_provides_finish (GsPluginLoader *plugin_loader,
 static gint
 gs_plugin_loader_category_sort_cb (gconstpointer a, gconstpointer b)
 {
-	return g_strcmp0 (gs_category_get_name (GS_CATEGORY (a)),
-			  gs_category_get_name (GS_CATEGORY (b)));
+	return g_strcmp0 (gs_category_get_name (GS_CATEGORY ((gpointer) a)),
+			  gs_category_get_name (GS_CATEGORY ((gpointer) b)));
 }
 
 /**
@@ -2721,8 +2806,8 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 		break;
 	case GS_PLUGIN_LOADER_ACTION_UPGRADE_DOWNLOAD:
 		state->function_name = "gs_plugin_app_upgrade_download";
-		state->state_success = AS_APP_STATE_UNKNOWN;
-		state->state_failure = AS_APP_STATE_UNKNOWN;
+		state->state_success = AS_APP_STATE_AVAILABLE;
+		state->state_failure = AS_APP_STATE_UPDATABLE;
 		break;
 	case GS_PLUGIN_LOADER_ACTION_UPGRADE_TRIGGER:
 		state->function_name = "gs_plugin_app_upgrade_trigger";
@@ -2790,6 +2875,9 @@ gs_plugin_loader_review_action_async (GsPluginLoader *plugin_loader,
 		break;
 	case GS_REVIEW_ACTION_REMOVE:
 		state->function_name = "gs_plugin_review_remove";
+		break;
+	case GS_REVIEW_ACTION_DISMISS:
+		state->function_name = "gs_plugin_review_dismiss";
 		break;
 	default:
 		g_assert_not_reached ();
@@ -3033,6 +3121,7 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	plugin->updates_changed_fn = gs_plugin_loader_updates_changed_cb;
 	plugin->updates_changed_user_data = plugin_loader;
 	plugin->profile = g_object_ref (priv->profile);
+	plugin->soup_session = g_object_ref (priv->soup_session);
 	plugin->scale = gs_plugin_loader_get_scale (plugin_loader);
 	g_debug ("opened plugin %s: %s", filename, plugin->name);
 
@@ -3247,6 +3336,7 @@ gs_plugin_loader_plugin_free (GsPlugin *plugin)
 	g_free (plugin->priv);
 	g_free (plugin->name);
 	g_object_unref (plugin->profile);
+	g_object_unref (plugin->soup_session);
 	g_module_close (plugin->module);
 	g_slice_free (GsPlugin, plugin);
 }
@@ -3269,6 +3359,7 @@ gs_plugin_loader_dispose (GObject *object)
 		g_source_remove (priv->updates_changed_id);
 		priv->updates_changed_id = 0;
 	}
+	g_clear_object (&priv->soup_session);
 	g_clear_object (&priv->profile);
 	g_clear_object (&priv->settings);
 	g_clear_pointer (&priv->app_cache, g_hash_table_unref);
@@ -3351,6 +3442,12 @@ gs_plugin_loader_init (GsPluginLoader *plugin_loader)
 								g_str_equal,
 								g_free,
 								(GFreeFunc) g_object_unref);
+
+	/* share a soup session (also disable the double-compression) */
+	priv->soup_session = soup_session_new_with_options (SOUP_SESSION_USER_AGENT, gs_user_agent (),
+							    NULL);
+	soup_session_remove_feature_by_type (priv->soup_session,
+					     SOUP_TYPE_CONTENT_DECODER);
 
 	/* get the locale without the UTF-8 suffix */
 	priv->locale = g_strdup (setlocale (LC_MESSAGES, NULL));
