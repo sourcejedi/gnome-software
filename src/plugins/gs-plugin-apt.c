@@ -106,11 +106,11 @@ compare_version (const char *v0, const char *v1)
 
 		// Compare non-digits based on ordering rules
 		while ((valid_char (*v0) && !isdigit (*v0)) || (valid_char (*v1) && !isdigit (*v1))) {
-			int ac = order (*v0);
-			int bc = order (*v1);
+			int o0 = order (*v0);
+			int o1 = order (*v1);
 
-			if (ac != bc)
-				return ac - bc;
+			if (o0 != o1)
+				return o0 - o1;
 
 			v0++;
 			v1++;
@@ -122,7 +122,7 @@ compare_version (const char *v0, const char *v1)
 		while (*v1 == '0')
 			v1++;
 
-		// Compare numbers - longest wins, otherwise compare next digit
+		// Compare numbers - longest wins, otherwise compare first digit
 		while (isdigit (*v0) && isdigit (*v1)) {
 			if (first_diff == 0)
 				first_diff = *v0 - *v1;
