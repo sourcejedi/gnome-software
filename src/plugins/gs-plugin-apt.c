@@ -24,11 +24,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
 #include <gs-plugin.h>
+#include <gs-utils.h>
+
+typedef struct {
+	gchar *name;
+	gchar *installed_version;
+	gchar *update_version;
+	gint installed_size;
+} PackageInfo;
+
 
 struct GsPluginPrivate {
-	gboolean cache_loaded;
-	GList *dpkg_cache;
+	gsize		 loaded;
+	GHashTable	*package_info;
+	GList 		*installed_packages;
+	GList 		*updatable_packages;
 };
 
 const gchar *
@@ -37,29 +49,29 @@ gs_plugin_get_name (void)
 	return "apt";
 }
 
+static void
+free_package_info (gpointer data)
+{
+	PackageInfo *info = data;
+	g_free (info->name);
+	g_free (info->installed_version);
+	g_free (info->update_version);
+	g_free (info);
+}
+
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
+	plugin->priv->package_info = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, free_package_info);
 }
 
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-}
-
-static GsApp *
-find_app (GList **list, const gchar *source)
-{
-	GList *link;
-
-	for (link = *list; link; link = link->next) {
-		GsApp *app = GS_APP (link->data);
-		if (g_strcmp0 (gs_app_get_source_default (app), source) == 0)
-			return app;
-	}
-
-	return NULL;
+	g_hash_table_unref (plugin->priv->package_info);
+	g_list_free (plugin->priv->installed_packages);
+	g_list_free (plugin->priv->updatable_packages);
 }
 
 // Ordering of symbols in dpkg ~, 0-9, A-Z, a-z, everything else (ASCII ordering)
@@ -175,100 +187,167 @@ version_newer (const gchar *v0, const gchar *v1)
 	return v0 ? compare_dpkg_version (v0, v1) < 0 : TRUE;
 }
 
+typedef gboolean (*PackageFileFunc) (const gchar *name, gsize name_length, const gchar *value, gsize value_length, gpointer user_data, GError **error);
+
 static void
-parse_package_info (const gchar *info, GsPluginRefineFlags flags, GList **list, gboolean mark_available)
+skip_to_eol (gchar *data, gsize data_length, gsize *offset)
 {
-	gchar **lines;
-	gint i;
-	GsApp *app = NULL;
-	const gchar *package_prefix = "Package: ";
-	const gchar *status_prefix = "Status: ";
-	const gchar *installed_size_prefix = "Installed-Size: ";
-	const gchar *version_prefix = "Version: ";
-
-	lines = g_strsplit (info, "\n", -1);
-	for (app = NULL, i = 0; lines[i]; i++) {
-		if (g_str_has_prefix (lines[i], package_prefix)) {
-			app = find_app (list, lines[i] + strlen (package_prefix));
-			if (app && mark_available && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
-				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		}
-
-		// Skip other fields until we find an app we know
-		if (app == NULL)
-			continue;
-
-		if (g_str_has_prefix (lines[i], status_prefix)) {
-			if (g_str_has_suffix (lines[i] + strlen (status_prefix), " installed") && gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
-				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-		} else if (g_str_has_prefix (lines[i], installed_size_prefix) && (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0) {
-			if (gs_app_get_size (app) == 0)
-				gs_app_set_size (app, atoi (lines[i] + strlen (installed_size_prefix)) * 1024);
-		} else if (g_str_has_prefix (lines[i], version_prefix) && (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
-			const gchar *version = lines[i] + strlen (version_prefix);
-
-			if (gs_app_get_version (app) == NULL)
-				gs_app_set_version (app, version);
-			if ((gs_app_get_state (app) == AS_APP_STATE_INSTALLED ||gs_app_get_state (app) == AS_APP_STATE_UPDATABLE_LIVE) && version_newer (gs_app_get_update_version (app), version)) {
-				if (gs_app_get_state (app) == AS_APP_STATE_INSTALLED)
-					gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
-				gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
-				gs_app_set_update_version (app, version);
-			}
-		}
-	}
-
-	g_strfreev (lines);
+	while (*offset < data_length && data[*offset] != '\n')
+		(*offset)++;
+	if (*offset >= data_length)
+		return;
+	(*offset)++;
 }
 
 static gboolean
-refine (GsPlugin *plugin,
-        GList **list,
-        GsPluginRefineFlags flags,
-        GCancellable *cancellable,
-        GError **error)
+parse_package_file_data (gchar *data, gsize data_length, PackageFileFunc callback, gpointer user_data, GError **error)
 {
-	GList *link;
-	GPtrArray *dpkg_argv_array, *cache_argv_array;
-	gboolean known_apps = FALSE;
-	g_autofree gchar **dpkg_argv = NULL, **cache_argv = NULL, *dpkg_stdout = NULL, *cache_stdout = NULL, *dpkg_stderr = NULL, *cache_stderr = NULL;
+	gsize offset;
 
-	// Get the information from the cache
-	dpkg_argv_array = g_ptr_array_new ();
-	g_ptr_array_add (dpkg_argv_array, (gpointer) "dpkg");
-	g_ptr_array_add (dpkg_argv_array, (gpointer) "--status");
-	cache_argv_array = g_ptr_array_new ();
-	g_ptr_array_add (cache_argv_array, (gpointer) "apt-cache");
-	g_ptr_array_add (cache_argv_array, (gpointer) "show");
-	for (link = *list; link; link = link->next) {
-		GsApp *app = GS_APP (link->data);
-		const gchar *source;
+	for (offset = 0; offset < data_length; ) {
+		gsize name_start, name_end, name_length;
+		gsize value_start, value_end, value_length;
 
-		source = gs_app_get_source_default (app);
-		if (source == NULL)
+		// Entry divided by empty space
+		if (data[offset] == '\n') {
+			offset++;
 			continue;
+		}
 
-		known_apps = TRUE;
-		g_ptr_array_add (dpkg_argv_array, (gpointer) source);
-		g_ptr_array_add (cache_argv_array, (gpointer) source);
+		// Line continuations start with a space
+		if (data[offset] == ' ') {
+			skip_to_eol (data, data_length, &offset);
+			continue;
+		}
+
+		// Find the field in the form "name: value"
+		name_start = offset;
+		name_end = name_start + 1;
+		while (name_end < data_length && !(data[name_end] == ':' || data[name_end] == '\n'))
+			name_end++;
+		if ((name_end + 1) >= data_length)
+			return TRUE;
+		if (data[name_end] != ':') {
+			offset = name_end;
+			skip_to_eol (data, data_length, &offset);
+		}
+		value_start = name_end + 1;
+		while (value_start < data_length && data[value_start] == ' ')
+			value_start++;
+		value_end = value_start + 1;
+		while (value_end < data_length && data[value_end] != '\n')
+			value_end++;
+		if (value_end >= data_length)
+			return TRUE;
+		name_length = name_end - name_start;
+		value_length = value_end - value_start;
+
+		if (!callback (data + name_start, name_length, data + value_start, value_length, user_data, error))
+			return FALSE;
+		offset = value_end + 1;
 	}
-	g_ptr_array_add (dpkg_argv_array, NULL);
-	dpkg_argv = (gchar **) g_ptr_array_free (dpkg_argv_array, FALSE);
-	g_ptr_array_add (cache_argv_array, NULL);
-	cache_argv = (gchar **) g_ptr_array_free (cache_argv_array, FALSE);
-
-	if (!known_apps)
-		return TRUE;
-
-	if (!g_spawn_sync (NULL, dpkg_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_stdout, &dpkg_stderr, NULL, error))
-		return FALSE;
-	if (!g_spawn_sync (NULL, cache_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &cache_stdout, &cache_stderr, NULL, error))
-		return FALSE;
-
-	parse_package_info (dpkg_stdout, flags, list, FALSE);
-	parse_package_info (cache_stdout, flags, list, TRUE);
 
 	return TRUE;
+}
+
+static gboolean
+parse_package_file (const gchar *filename, PackageFileFunc callback, gpointer user_data, GError **error)
+{
+	g_autoptr(GMappedFile) f = NULL;
+
+	f = g_mapped_file_new (filename, FALSE, NULL);
+	if (f == NULL)
+		return FALSE;
+	return parse_package_file_data (g_mapped_file_get_contents (f), g_mapped_file_get_length (f), callback, user_data, error);
+}
+
+typedef struct {
+	GsPlugin *plugin;
+	PackageInfo *current_info;
+	gboolean current_installed;
+} FieldData;
+
+static gboolean
+field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_length, gpointer user_data, GError **error)
+{
+	FieldData *data = user_data;
+
+	if (strncmp (name, "Package", name_length) == 0) {
+		gchar *id = g_strndup (value, value_length);
+		data->current_info = g_hash_table_lookup (data->plugin->priv->package_info, id);
+		if (data->current_info == NULL) {
+			data->current_info = g_slice_new0 (PackageInfo);
+			data->current_installed = FALSE;
+			data->current_info->name = id;
+			g_hash_table_insert (data->plugin->priv->package_info, data->current_info->name, data->current_info);
+		} else
+			g_free (id);
+		return TRUE;
+	}
+
+	if (data->current_info == NULL)
+		return TRUE;
+
+	if (strncmp (name, "Status", name_length) == 0) {
+		if (strncmp (value, "install ok installed", value_length) == 0) {
+			data->current_installed = TRUE;
+			data->plugin->priv->installed_packages = g_list_append (data->plugin->priv->installed_packages, data->current_info);
+		}
+	} else if (strncmp (name, "Installed-Size", name_length) == 0) {
+		data->current_info->installed_size = atoi (value);
+	} else if (strncmp (name, "Version", name_length) == 0) {
+		gchar *version = g_strndup (value, value_length);
+		if (data->current_installed) {
+			g_free (data->current_info->installed_version);
+			data->current_info->installed_version = version;
+		} else if (version_newer (data->current_info->installed_version, version) && version_newer (data->current_info->update_version, version)) {
+			if (data->current_info->installed_version && data->current_info->update_version == NULL)
+				data->plugin->priv->updatable_packages = g_list_append (data->plugin->priv->updatable_packages, data->current_info);
+			g_free (data->current_info->update_version);
+			data->current_info->update_version = version;
+		} else
+			g_free (version);
+	}
+
+	return TRUE;
+}
+
+static gboolean
+load_db (GsPlugin *plugin, GError **error)
+{
+	GPtrArray *lists;
+	GDir *dir;
+	guint i;
+	gboolean result = FALSE;
+
+	// Find the package lists to load
+	lists = g_ptr_array_new ();
+	g_ptr_array_set_free_func (lists, g_free);
+	g_ptr_array_add (lists, g_strdup ("/var/lib/dpkg/status"));
+	dir = g_dir_open ("/var/lib/apt/lists", 0, NULL);
+	while (TRUE) {
+		const gchar *name = g_dir_read_name (dir);
+		if (name == NULL)
+			break;
+		if (g_str_has_suffix (name, "_Packages"))
+			g_ptr_array_add (lists, g_build_filename ("/var/lib/apt/lists", name, NULL));
+	}
+	g_dir_close (dir);
+
+	for (i = 0; i < lists->len; i++) {
+		const gchar *list = lists->pdata[i];
+		FieldData data;
+		data.plugin = plugin;
+		data.current_info = NULL;
+		data.current_installed = FALSE;
+		result = parse_package_file (list, field_cb, &data, error);
+		if (!result)
+			goto done;
+	}
+
+done:
+	g_ptr_array_unref (lists);
+	return result;
 }
 
 gboolean
@@ -278,52 +357,39 @@ gs_plugin_refine (GsPlugin *plugin,
 		  GCancellable *cancellable,
 		  GError **error)
 {
-	// NOTE: Had to put into a static function so can be called from inside plugin - not sure why
-	return refine (plugin, list, flags, cancellable, error);
-}
+	GList *link;
 
-static gchar **
-get_installed (GError **error)
-{
-	g_autofree gchar *dpkg_stdout = NULL, *dpkg_stderr = NULL;
-	gint exit_status;
-	gchar *argv[3] = { (gchar *) "dpkg", (gchar *) "--get-selections", NULL }, **lines;
-	int i;
-	GPtrArray *array;
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->loaded)) {
+		gboolean ret;
 
-	if (!g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &dpkg_stdout, &dpkg_stderr, &exit_status, error))
-		return FALSE;
-	if (exit_status != EXIT_SUCCESS) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "dpkg --get-selections returned status %d", exit_status);
-		return FALSE;
+		ret = load_db (plugin, error);
+		g_once_init_leave (&plugin->priv->loaded, TRUE);
+		if (!ret)
+			return FALSE;
 	}
 
-	array = g_ptr_array_new ();
-	lines = g_strsplit (dpkg_stdout, "\n", -1);
-	for (i = 0; lines[i]; i++) {
-		g_autoptr(GsApp) app = NULL;
-		gchar *status, *c;
+	for (link = *list; link; link = link->next) {
+		GsApp *app = link->data;
+		PackageInfo *info;
 
-		// Line is the form <name>\t<status> - find the status and only use installed packages
-		status = strrchr (lines[i], '\t');
-		if (status == NULL)
-			continue;
-		status++;
-		if (strcmp (status, "install") != 0)
+		if (gs_app_get_source_default (app) == NULL)
 			continue;
 
-		// Split out name
-		c = strchr (lines[i], '\t');
-		*c = '\0';
-		g_ptr_array_add (array, (gpointer) g_strdup (lines[i]));
+		info = g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
+		if (info != NULL) {
+			if (gs_app_get_size (app) == 0)
+				gs_app_set_size (app, info->installed_size * 1024);
+			if (info->installed_version) {
+				gs_app_set_version (app, info->installed_version);
+				if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
+					gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			} else
+				gs_app_set_update_version (app, info->update_version);
+		}
 	}
-	g_strfreev (lines);
-	g_ptr_array_add (array, NULL);
 
-	return (gchar **) g_ptr_array_free (array, FALSE);
+	return TRUE;
 }
 
 gboolean
@@ -332,24 +398,29 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	gchar **installed;
-	int i;
+	GList *link;
 
-	installed = get_installed (error);
-	if (installed == NULL)
-		return FALSE;
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->loaded)) {
+		gboolean ret;
 
-	for (i = 0; installed[i] != NULL; i++) {
+		ret = load_db (plugin, error);
+		g_once_init_leave (&plugin->priv->loaded, TRUE);
+		if (!ret)
+			return FALSE;
+	}
+
+	for (link = plugin->priv->installed_packages; link; link = link->next) {
+		PackageInfo *info = link->data;
 		g_autoptr(GsApp) app = NULL;
 
-		app = gs_app_new (installed[i]);
+		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
-		gs_app_add_source (app, installed[i]);
+		gs_app_add_source (app, info->name);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_plugin_add_app (list, app);
 	}
-	g_strfreev (installed);
 
 	return TRUE;
 }
@@ -562,26 +633,29 @@ gs_plugin_add_updates (GsPlugin *plugin,
                        GCancellable *cancellable,
                        GError **error)
 {
-	GList *installed = NULL, *link;
+	GList *link;
 
-	// Get the version of everything installed
-	// FIXME: Checks all the packages we don't have appstream data for (so inefficient)
-	if (!gs_plugin_add_installed (plugin, &installed, NULL, error) ||
-	    !refine (plugin, &installed, GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION, NULL, error)) {
-		g_list_free_full (installed, g_object_unref);
-		return FALSE;
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->loaded)) {
+		gboolean ret;
+
+		ret = load_db (plugin, error);
+		g_once_init_leave (&plugin->priv->loaded, TRUE);
+		if (!ret)
+			return FALSE;
 	}
 
-	for (link = installed; link; link = link->next) {
-		GsApp *app = GS_APP (link->data);
-		const gchar *v0, *v1;
+	for (link = plugin->priv->updatable_packages; link; link = link->next) {
+		PackageInfo *info = link->data;
+		g_autoptr(GsApp) app = NULL;
 
-		v0 = gs_app_get_version (app);
-		v1 = gs_app_get_update_version (app);
-		if (v0 != NULL && v1 != NULL && version_newer (v0, v1))
-			gs_plugin_add_app (list, app);
+		app = gs_app_new (info->name);
+		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_add_source (app, info->name);
+		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+		gs_plugin_add_app (list, app);
 	}
-	g_list_free_full (installed, g_object_unref);
 
 	return TRUE;
 }
