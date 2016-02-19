@@ -1,7 +1,7 @@
 # Copyright (C) 2010-2015 Richard Hughes <richard@hughsie.com>
 AC_PREREQ(2.63)
 
-AC_INIT([gnome-software],[3.19.5],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
+AC_INIT([gnome-software],[3.19.91],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
 AC_CONFIG_SRCDIR(src)
 AM_INIT_AUTOMAKE([1.11 no-dist-gzip dist-xz tar-ustar serial-tests foreign])
 AC_CONFIG_HEADERS([config.h])
@@ -62,6 +62,7 @@ dnl - Check library dependencies
 dnl ---------------------------------------------------------------------------
 PKG_CHECK_MODULES(GTK, gtk+-3.0 >= 3.18.2 gio-unix-2.0 gtkspell3-3.0)
 PKG_CHECK_MODULES(APPSTREAM, appstream-glib >= 0.5.5)
+PKG_CHECK_MODULES(GDK_PIXBUF, gdk-pixbuf-2.0 >= 2.31.5)
 PKG_CHECK_MODULES(JSON_GLIB, json-glib-1.0)
 PKG_CHECK_MODULES(SQLITE, sqlite3)
 PKG_CHECK_MODULES(SOUP, libsoup-2.4 >= 2.51.92)
@@ -97,7 +98,7 @@ AC_ARG_ENABLE(packagekit,
               enable_packagekit=maybe)
 AS_IF([test "x$enable_packagekit" != "xno"], [
     PKG_CHECK_MODULES(PACKAGEKIT,
-                      [packagekit-glib2 >= 1.0.11],
+                      [packagekit-glib2 >= 1.1.0],
                       [have_packagekit=yes],
                       [have_packagekit=no])
 ], [
@@ -164,7 +165,7 @@ AC_ARG_ENABLE(xdg-app,
               enable_xdg_app=maybe)
 AS_IF([test "x$enable_xdg_app" != "xno"], [
     PKG_CHECK_MODULES(XDG_APP,
-                      [xdg-app >= 0.4.7],
+                      [xdg-app >= 0.4.12],
                       [have_xdg_app=yes],
                       [have_xdg_app=no])
 ], [

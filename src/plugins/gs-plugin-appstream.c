@@ -467,6 +467,43 @@ gs_plugin_appstream_copy_metadata (GsApp *app, AsApp *item)
 }
 
 /**
+ * gs_plugin_appstream_create_runtime:
+ */
+static GsApp *
+gs_plugin_appstream_create_runtime (GsApp *parent, const gchar *runtime)
+{
+	g_autofree gchar *id = NULL;
+	g_autofree gchar *source = NULL;
+	g_auto(GStrv) id_split = NULL;
+	g_auto(GStrv) runtime_split = NULL;
+	g_autoptr(GsApp) app = NULL;
+
+	/* get the name/arch/branch */
+	runtime_split = g_strsplit (runtime, "/", -1);
+	if (g_strv_length (runtime_split) != 3)
+		return NULL;
+
+	/* find the parent app ID prefix */
+	id_split = g_strsplit (gs_app_get_id (parent), ":", 2);
+	if (g_strv_length (id_split) == 2) {
+		id = g_strdup_printf ("%s:%s.runtime",
+				      id_split[0],
+				      runtime_split[0]);
+	} else {
+		id = g_strdup_printf ("%s.runtime", runtime_split[0]);
+	}
+
+	/* create the complete GsApp from the single string */
+	app = gs_app_new (id);
+	source = g_strdup_printf ("runtime/%s", runtime);
+	gs_app_add_source (app, source);
+	gs_app_set_id_kind (app, AS_ID_KIND_RUNTIME);
+	gs_app_set_version (app, id_split[2]);
+
+	return g_steal_pointer (&app);
+}
+
+/**
  * gs_plugin_refine_item_management_plugin:
  */
 static void
@@ -474,6 +511,7 @@ gs_plugin_refine_item_management_plugin (GsApp *app, AsApp *item)
 {
 	GPtrArray *bundles;
 	const gchar *management_plugin = NULL;
+	const gchar *runtime = NULL;
 	guint i;
 
 	/* find the default bundle kind */
@@ -483,6 +521,20 @@ gs_plugin_refine_item_management_plugin (GsApp *app, AsApp *item)
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_XDG_APP) {
 			management_plugin = "XgdApp";
 			gs_app_add_source (app, as_bundle_get_id (bundle));
+
+#if AS_CHECK_VERSION(0,5,10)
+			/* automatically add runtime */
+			runtime = as_bundle_get_runtime (bundle);
+			if (runtime != NULL) {
+				g_autoptr(GsApp) app2 = NULL;
+				app2 = gs_plugin_appstream_create_runtime (app, runtime);
+				if (app2 != NULL) {
+					g_debug ("runtime for %s is %s",
+						 gs_app_get_id (app), runtime);
+					gs_app_set_runtime (app, app2);
+				}
+			}
+#endif
 			break;
 		}
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_LIMBA) {
@@ -552,17 +604,18 @@ gs_plugin_refine_item (GsPlugin *plugin, GsApp *app, AsApp *item, GError **error
 	/* set name */
 	tmp = as_app_get_name (item, NULL);
 	if (tmp != NULL) {
-		gs_app_set_name (app,
-				 GS_APP_QUALITY_HIGHEST,
-				 as_app_get_name (item, NULL));
+		if (g_str_has_prefix (tmp, "(Nightly) ")) {
+			tmp += 10;
+			if (gs_app_get_metadata_item (app, "X-XdgApp-Tags") == NULL)
+				gs_app_set_metadata (app, "X-XdgApp-Tags", "nightly");
+		}
+		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, tmp);
 	}
 
 	/* set summary */
 	tmp = as_app_get_comment (item, NULL);
 	if (tmp != NULL) {
-		gs_app_set_summary (app,
-				    GS_APP_QUALITY_HIGHEST,
-				    as_app_get_comment (item, NULL));
+		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, tmp);
 	}
 
 	/* add urls */
@@ -607,9 +660,7 @@ gs_plugin_refine_item (GsPlugin *plugin, GsApp *app, AsApp *item, GError **error
 			g_prefix_error (error, "trying to parse '%s': ", tmp);
 			return FALSE;
 		}
-		gs_app_set_description (app,
-					GS_APP_QUALITY_HIGHEST,
-					from_xml);
+		gs_app_set_description (app, GS_APP_QUALITY_HIGHEST, from_xml);
 	}
 
 	/* set icon */
@@ -1040,8 +1091,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 	array = as_store_get_apps (plugin->priv->store);
 	for (i = 0; i < array->len; i++) {
 		item = g_ptr_array_index (array, i);
-		if (as_app_get_source_kind (item) == AS_APP_SOURCE_KIND_APPDATA ||
-		    as_app_get_source_kind (item) == AS_APP_SOURCE_KIND_DESKTOP) {
+		if (as_app_get_state (item) == AS_APP_STATE_INSTALLED) {
 			g_autoptr(GsApp) app = NULL;
 			app = gs_app_new (as_app_get_id (item));
 			if (!gs_plugin_refine_item (plugin, app, item, error))
