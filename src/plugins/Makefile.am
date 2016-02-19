@@ -128,7 +128,20 @@ libgs_plugin_xdg_app_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
-libgs_plugin_apt_la_SOURCES = gs-plugin-apt.c
+ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity.Launcher.xml Makefile
+	$(AM_V_GEN) gdbus-codegen --interface-prefix com.canonical.Unity.Launcher \
+	                 --generate-c-code ubuntu-unity-launcher-proxy \
+	                 --c-namespace UbuntuUnity \
+	                 --annotate 'com.canonical.Unity.Launcher' \
+	                            org.gtk.GDBus.C.Name \
+	                            Launcher \
+	                 $<
+
+
+libgs_plugin_apt_la_SOURCES = \
+	gs-plugin-apt.c \
+	ubuntu-unity-launcher-proxy.c \
+	ubuntu-unity-launcher-proxy.h
 libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_apt_la_LDFLAGS = -module -avoid-version
 libgs_plugin_apt_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
