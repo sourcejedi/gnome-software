@@ -36,6 +36,8 @@ typedef struct {
 } PackageInfo;
 
 
+#include "ubuntu-unity-launcher-proxy.h"
+
 struct GsPluginPrivate {
 	gsize		 loaded;
 	GHashTable	*package_info;
@@ -467,6 +469,30 @@ transaction_finished_cb (GDBusConnection *connection,
 	g_main_loop_quit (data->loop);
 }
 
+static void
+notify_unity_launcher (GsApp *app, const gchar *transaction_path)
+{
+	UbuntuUnityLauncher *launcher = NULL;
+
+	g_return_if_fail (GS_IS_APP (app));
+	g_return_if_fail (transaction_path);
+
+	launcher = ubuntu_unity_launcher_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+		G_DBUS_PROXY_FLAGS_NONE,
+		"com.canonical.Unity.Launcher",
+		"/com/canonical/Unity/Launcher",
+		NULL, NULL);
+
+	g_return_if_fail (launcher);
+
+	ubuntu_unity_launcher_call_add_launcher_item (launcher,
+		gs_app_get_id (app),
+		transaction_path,
+		NULL, NULL, NULL);
+
+	g_object_unref (launcher);
+}
+
 static gboolean
 aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **error)
 {
@@ -505,6 +531,9 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 		return FALSE;
 	g_variant_get (result, "(s)", &transaction_path);
 	g_variant_unref (result);
+
+	if (!g_strcmp0(method, "InstallPackages"))
+		notify_unity_launcher (app, transaction_path);
 
 	loop = g_main_loop_new (NULL, FALSE);
 
