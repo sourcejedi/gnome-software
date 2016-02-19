@@ -13,7 +13,6 @@ AM_CPPFLAGS =						\
 	$(JSON_GLIB_CFLAGS)				\
 	$(LIMBA_CFLAGS)					\
 	$(XDG_APP_CFLAGS)				\
-	$(JSON_GLIB_CFLAGS)				\
 	$(OAUTH_CFLAGS)					\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
