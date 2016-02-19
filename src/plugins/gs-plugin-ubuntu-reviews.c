@@ -661,7 +661,7 @@ static gboolean
 parse_review_entries (GsPlugin *plugin, JsonParser *parser, GError **error)
 {
 	JsonArray *array;
-	gint i;
+	guint i;
 
 	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
 		return FALSE;
@@ -776,7 +776,6 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 static gboolean
 download_review_stats (GsPlugin *plugin, GError **error)
 {
-	guint status_code;
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	JsonParser *result;
