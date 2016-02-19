@@ -182,7 +182,7 @@ libgs_plugin_ubuntu_reviews_la_SOURCES =		\
 	gs-ubuntu-login-dialog.c
 libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(OAUTH_LIBS) $(SQLITE_LIBS)
 libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
-libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARNINGFLAGS_C)
+libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_packagekit_la_SOURCES =			\
 	gs-plugin-packagekit.c				\
