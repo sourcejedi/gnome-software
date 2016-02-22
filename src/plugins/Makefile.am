@@ -14,6 +14,7 @@ AM_CPPFLAGS =						\
 	$(LIMBA_CFLAGS)					\
 	$(XDG_APP_CFLAGS)				\
 	$(OAUTH_CFLAGS)					\
+	$(LIBSECRET_CFLAGS)				\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
 	-DGS_MODULESETDIR=\"$(datadir)/gnome-software/modulesets.d\" \
@@ -179,7 +180,13 @@ endif
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
 	gs-plugin-ubuntu-reviews.c			\
 	gs-ubuntu-login-dialog.c
-libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(OAUTH_LIBS) $(SQLITE_LIBS)
+libgs_plugin_ubuntu_reviews_la_LIBADD =			\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(OAUTH_LIBS)					\
+	$(SQLITE_LIBS)					\
+	$(LIBSECRET_LIBS)
 libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
