@@ -25,6 +25,9 @@ src/gs-main.c
 src/gs-page.c
 src/gs-plugin-loader.c
 src/gs-popular-tile.c
+src/gs-price.c
+src/gs-purchase-dialog.c
+[type: gettext/glade]src/gs-purchase-dialog.ui
 src/gs-removal-dialog.c
 [type: gettext/glade]src/gs-removal-dialog.ui
 src/gs-review-dialog.c

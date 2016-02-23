@@ -32,6 +32,7 @@
 #include "gs-app-list.h"
 #include "gs-auth.h"
 #include "gs-category.h"
+#include "gs-price.h"
 
 G_BEGIN_DECLS
 

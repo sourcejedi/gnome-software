@@ -37,6 +37,7 @@
 #include "gs-review-histogram.h"
 #include "gs-review-dialog.h"
 #include "gs-review-row.h"
+#include "gs-price.h"
 
 /* the number of reviews to show before clicking the 'More Reviews' button */
 #define SHOW_NR_REVIEWS_INITIAL		4
@@ -230,6 +231,7 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 	GtkWidget *widget;
 	GtkStyleContext *sc;
 	GtkAdjustment *adj;
+	GPtrArray *prices;
 
 	if (gs_shell_get_mode (self->shell) != GS_SHELL_MODE_DETAILS) {
 		g_warning ("Called switch_to(details) when in mode %s",
@@ -258,6 +260,29 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 
 	/* install button */
 	switch (state) {
+	case AS_APP_STATE_PURCHASABLE:
+		gtk_widget_set_visible (self->button_install, TRUE);
+		gtk_widget_set_sensitive (self->button_install, TRUE);
+		gtk_style_context_add_class (gtk_widget_get_style_context (self->button_install), "suggested-action");
+		prices = gs_app_get_prices (self->app);
+		if (prices->len > 0) {
+			GsPrice *price = g_ptr_array_index (prices, 0);
+			g_autofree gchar *text = NULL;
+			text = gs_price_to_string (price);
+			gtk_button_set_label (GTK_BUTTON (self->button_install), text);
+		} else {
+			/* TRANSLATORS: button text in the header when an application
+			 * can be purchased */
+			gtk_button_set_label (GTK_BUTTON (self->button_install), _("_Buy"));
+		}
+		break;
+	case AS_APP_STATE_PURCHASING:
+		gtk_widget_set_visible (self->button_install, TRUE);
+		gtk_widget_set_sensitive (self->button_install, FALSE);
+		/* TRANSLATORS: button text in the header when an application
+		 * is in the process of being purchased */
+		gtk_button_set_label (GTK_BUTTON (self->button_install), _("_Buying"));
+		break;
 	case AS_APP_STATE_AVAILABLE:
 	case AS_APP_STATE_AVAILABLE_LOCAL:
 		gtk_widget_set_visible (self->button_install, TRUE);
@@ -357,6 +382,8 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 			gtk_style_context_remove_class (gtk_widget_get_style_context (self->button_remove), "destructive-action");
 			gtk_button_set_label (GTK_BUTTON (self->button_remove), _("_Cancel"));
 			break;
+		case AS_APP_STATE_PURCHASABLE:
+		case AS_APP_STATE_PURCHASING:
 		case AS_APP_STATE_AVAILABLE_LOCAL:
 		case AS_APP_STATE_AVAILABLE:
 		case AS_APP_STATE_INSTALLING:
@@ -409,6 +436,11 @@ gs_shell_details_refresh_progress (GsShellDetails *self)
 		gtk_label_set_label (GTK_LABEL (self->label_progress_status),
 				     _("Installing"));
 		break;
+	case AS_APP_STATE_PURCHASING:
+		gtk_widget_set_visible (self->label_progress_status, TRUE);
+		gtk_label_set_label (GTK_LABEL (self->label_progress_status),
+				     _("Buying"));
+		break;
 	default:
 		gtk_widget_set_visible (self->label_progress_status, FALSE);
 		break;
@@ -416,6 +448,7 @@ gs_shell_details_refresh_progress (GsShellDetails *self)
 
 	/* percentage bar */
 	switch (state) {
+	case AS_APP_STATE_PURCHASING:
 	case AS_APP_STATE_INSTALLING:
 		percentage = gs_app_get_progress (self->app);
 		if (percentage > 0) {
@@ -1544,6 +1577,11 @@ gs_shell_details_app_install_button_cb (GtkWidget *widget, GsShellDetails *self)
 	GList *l;
 	g_autoptr(GList) addons = NULL;
 	g_autoptr(GCancellable) cancellable = g_cancellable_new ();
+
+	if (gs_app_get_state (self->app) == AS_APP_STATE_PURCHASABLE) {
+		gs_page_purchase_app (GS_PAGE (self), self->app, self->cancellable);
+		return;
+	}
 
 	/* Mark ticked addons to be installed together with the app */
 	addons = gtk_container_get_children (GTK_CONTAINER (self->list_box_addons));

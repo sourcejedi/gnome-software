@@ -107,6 +107,15 @@ typedef gboolean	 (*GsPluginAuthFunc)		(GsPlugin	*plugin,
 							 GsAuth		*auth,
 							 GCancellable	*cancellable,
 							 GError		**error);
+typedef gboolean	 (*GsPluginPaymentMethodFunc)	(GsPlugin	*plugin,
+							 GsPaymentMethodList	*payment_methods,
+							 GCancellable	*cancellable,
+							 GError		**error);
+typedef gboolean	 (*GsPluginPurchaseFunc)	(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsPrice	*price,
+							 GCancellable	*cancellable,
+							 GError		**error);
 typedef gboolean	 (*GsPluginRefineFunc)		(GsPlugin	*plugin,
 							 GsAppList	*list,
 							 GsPluginRefineFlags flags,
@@ -147,6 +156,8 @@ typedef struct {
 	GsApp				*app;
 	AsReview			*review;
 	GsAuth				*auth;
+	GsPaymentMethodList		*payment_methods;
+	GsPrice				*price;
 } GsPluginLoaderAsyncState;
 
 static void
@@ -160,6 +171,10 @@ gs_plugin_loader_free_async_state (GsPluginLoaderAsyncState *state)
 		g_object_unref (state->auth);
 	if (state->review != NULL)
 		g_object_unref (state->review);
+	if (state->payment_methods != NULL)
+		g_object_unref (state->payment_methods);
+	if (state->price != NULL)
+		g_object_unref (state->price);
 	if (state->file != NULL)
 		g_object_unref (state->file);
 	if (state->list != NULL)
@@ -2830,6 +2845,136 @@ gs_plugin_loader_review_action_thread_cb (GTask *task,
 	g_task_return_boolean (task, TRUE);
 }
 
+static void
+gs_plugin_loader_add_payment_methods_thread_cb (GTask *task,
+						gpointer object,
+						gpointer task_data,
+						GCancellable *cancellable)
+{
+	GError *error = NULL;
+	GsPluginLoaderAsyncState *state = (GsPluginLoaderAsyncState *) task_data;
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (object);
+	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
+	GsPlugin *plugin;
+	GsPluginPaymentMethodFunc plugin_func = NULL;
+	gboolean anything_ran = FALSE;
+	gboolean exists;
+	gboolean ret;
+	guint i;
+
+	/* run each plugin */
+	for (i = 0; i < priv->plugins->len; i++) {
+		g_autoptr(AsProfileTask) ptask = NULL;
+		g_autoptr(GError) error_local = NULL;
+
+		plugin = g_ptr_array_index (priv->plugins, i);
+		if (!gs_plugin_get_enabled (plugin))
+			continue;
+		if (g_cancellable_set_error_if_cancelled (cancellable, &error))
+			g_task_return_error (task, error);
+
+		exists = g_module_symbol (gs_plugin_get_module (plugin),
+					  state->function_name,
+					  (gpointer *) &plugin_func);
+		if (!exists)
+			continue;
+		ptask = as_profile_start (priv->profile,
+					  "GsPlugin::%s(%s)",
+					  gs_plugin_get_name (plugin),
+					  state->function_name);
+		gs_plugin_loader_action_start (plugin_loader, plugin, FALSE);
+		ret = plugin_func (plugin, state->payment_methods,
+				   cancellable, &error_local);
+		gs_plugin_loader_action_stop (plugin_loader, plugin);
+		if (!ret) {
+			g_warning ("failed to call %s on %s: %s",
+				   state->function_name,
+				   gs_plugin_get_name (plugin),
+				   error_local->message);
+			continue;
+		}
+		anything_ran = TRUE;
+		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_FINISHED);
+	}
+
+	/* nothing ran */
+	if (!anything_ran) {
+		g_set_error (&error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_NOT_SUPPORTED,
+			     "no plugin could handle %s",
+			     state->function_name);
+		g_task_return_error (task, error);
+	}
+
+	g_task_return_pointer (task, g_object_ref (state->payment_methods), g_object_unref);
+}
+
+static void
+gs_plugin_loader_app_purchase_thread_cb (GTask *task,
+					 gpointer object,
+					 gpointer task_data,
+					 GCancellable *cancellable)
+{
+	GError *error = NULL;
+	GsPluginLoaderAsyncState *state = (GsPluginLoaderAsyncState *) task_data;
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (object);
+	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
+	GsPlugin *plugin;
+	GsPluginPurchaseFunc plugin_func = NULL;
+	gboolean anything_ran = FALSE;
+	gboolean exists;
+	gboolean ret;
+	guint i;
+
+	/* run each plugin */
+	for (i = 0; i < priv->plugins->len; i++) {
+		g_autoptr(AsProfileTask) ptask = NULL;
+		g_autoptr(GError) error_local = NULL;
+
+		plugin = g_ptr_array_index (priv->plugins, i);
+		if (!gs_plugin_get_enabled (plugin))
+			continue;
+		if (g_cancellable_set_error_if_cancelled (cancellable, &error))
+			g_task_return_error (task, error);
+
+		exists = g_module_symbol (gs_plugin_get_module (plugin),
+					  state->function_name,
+					  (gpointer *) &plugin_func);
+		if (!exists)
+			continue;
+		ptask = as_profile_start (priv->profile,
+					  "GsPlugin::%s(%s)",
+					  gs_plugin_get_name (plugin),
+					  state->function_name);
+		gs_plugin_loader_action_start (plugin_loader, plugin, FALSE);
+		ret = plugin_func (plugin, state->app, state->price,
+				   cancellable, &error_local);
+		gs_plugin_loader_action_stop (plugin_loader, plugin);
+		if (!ret) {
+			g_warning ("failed to call %s on %s: %s",
+				   state->function_name,
+				   gs_plugin_get_name (plugin),
+				   error_local->message);
+			continue;
+		}
+		anything_ran = TRUE;
+		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_FINISHED);
+	}
+
+	/* nothing ran */
+	if (!anything_ran) {
+		g_set_error (&error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_NOT_SUPPORTED,
+			     "no plugin could handle %s",
+			     state->function_name);
+		g_task_return_error (task, error);
+	}
+
+	g_task_return_boolean (task, TRUE);
+}
+
 static gboolean
 load_install_queue (GsPluginLoader *plugin_loader, GError **error)
 {
@@ -3068,6 +3213,83 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 	g_task_run_in_thread (task, gs_plugin_loader_app_action_thread_cb);
 }
 
+/**
+ * gs_plugin_loader_get_payment_methods_async:
+ **/
+void
+gs_plugin_loader_get_payment_methods_async (GsPluginLoader *plugin_loader,
+					    GCancellable *cancellable,
+					    GAsyncReadyCallback callback,
+					    gpointer user_data)
+{
+	GsPluginLoaderAsyncState *state;
+	g_autoptr(GTask) task = NULL;
+
+	g_return_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader));
+	g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+
+	/* save state */
+	state = g_slice_new0 (GsPluginLoaderAsyncState);
+	state->payment_methods = gs_payment_method_list_new ();
+	state->function_name = "gs_plugin_add_payment_methods";
+
+	/* run in a thread */
+	task = g_task_new (plugin_loader, cancellable, callback, user_data);
+	g_task_set_task_data (task, state, (GDestroyNotify) gs_plugin_loader_free_async_state);
+	g_task_run_in_thread (task, gs_plugin_loader_add_payment_methods_thread_cb);
+}
+
+/**
+ * gs_plugin_loader_get_payment_methods_finish:
+ *
+ * Return value: (element-type GsPaymentMethod) (transfer full): A list of payment methods.
+ **/
+GsPaymentMethodList *
+gs_plugin_loader_get_payment_methods_finish (GsPluginLoader *plugin_loader,
+					     GAsyncResult *res,
+					     GError **error)
+{
+	g_return_val_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader), NULL);
+	g_return_val_if_fail (G_IS_TASK (res), NULL);
+	g_return_val_if_fail (g_task_is_valid (res, plugin_loader), NULL);
+	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+	return g_task_propagate_pointer (G_TASK (res), error);
+}
+
+/**
+ * gs_plugin_loader_app_purchase_async:
+ **/
+void
+gs_plugin_loader_app_purchase_async (GsPluginLoader *plugin_loader,
+				     GsApp *app,
+				     GsPrice *price,
+				     GCancellable *cancellable,
+				     GAsyncReadyCallback callback,
+				     gpointer user_data)
+{
+	GsPluginLoaderAsyncState *state;
+	g_autoptr(GTask) task = NULL;
+
+	g_return_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader));
+	g_return_if_fail (GS_IS_APP (app));
+	g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+
+	/* save state */
+	state = g_slice_new0 (GsPluginLoaderAsyncState);
+	state->app = g_object_ref (app);
+	state->price = g_object_ref (price);
+	state->function_name = "gs_plugin_app_purchase";
+
+	/* run in a thread */
+	task = g_task_new (plugin_loader, cancellable, callback, user_data);
+	g_task_set_task_data (task, state, (GDestroyNotify) gs_plugin_loader_free_async_state);
+	g_task_run_in_thread (task, gs_plugin_loader_app_purchase_thread_cb);
+}
+
+/**
+ * gs_plugin_loader_review_action_async:
+ **/
 void
 gs_plugin_loader_review_action_async (GsPluginLoader *plugin_loader,
 				      GsApp *app,

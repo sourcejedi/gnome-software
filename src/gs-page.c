@@ -29,6 +29,7 @@
 #include "gs-shell.h"
 #include "gs-common.h"
 #include "gs-auth-dialog.h"
+#include "gs-price.h"
 
 typedef struct
 {
@@ -59,6 +60,33 @@ gs_page_helper_free (GsPageHelper *helper)
 }
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GsPageHelper, gs_page_helper_free);
+
+static void
+gs_page_app_purchased_cb (GObject *source,
+                          GAsyncResult *res,
+                          gpointer user_data)
+{
+	g_autoptr(GsPageHelper) helper = (GsPageHelper *) user_data;
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
+	GsPage *page = helper->page;
+	GsPagePrivate *priv = gs_page_get_instance_private (page);
+	gboolean ret;
+	g_autoptr(GError) error = NULL;
+
+	ret = gs_plugin_loader_app_action_finish (plugin_loader,
+	                                          res,
+	                                          &error);
+	if (!ret) {
+		g_warning ("failed to purchase %s: %s",
+		           gs_app_get_id (helper->app),
+		           error->message);
+		//gs_app_notify_failed_modal (helper->app,
+		//                            gs_shell_get_window (priv->shell),
+		//                            GS_PLUGIN_LOADER_ACTION_PURCHASE,
+		//                            error);
+		return;
+	}
+}
 
 static void
 gs_page_app_installed_cb (GObject *source,
@@ -289,6 +317,76 @@ gs_page_set_header_end_widget (GsPage *page, GtkWidget *widget)
 	GsPagePrivate *priv = gs_page_get_instance_private (page);
 
 	g_set_object (&priv->header_end_widget, widget);
+}
+
+static void
+gs_page_purchase_app_response_cb (GtkDialog *dialog,
+				  gint response,
+				  GsPageHelper *helper)
+{
+	GsPagePrivate *priv = gs_page_get_instance_private (helper->page);
+	GPtrArray *prices;
+
+	/* not agreed */
+	if (response != GTK_RESPONSE_OK) {
+		gs_page_helper_free (helper);
+		return;
+	}
+	g_debug ("purchase %s", gs_app_get_id (helper->app));
+	prices = gs_app_get_prices (helper->app);
+	gs_plugin_loader_app_purchase_async (priv->plugin_loader,
+					     helper->app,
+					     g_ptr_array_index (prices, 0), // FIXME: User should pick price, check if no prices
+					     helper->cancellable,
+					     gs_page_app_purchased_cb,
+					     helper);
+}
+
+void
+gs_page_purchase_app (GsPage *page, GsApp *app, GCancellable *cancellable)
+{
+	GsPagePrivate *priv = gs_page_get_instance_private (page);
+	GsPageHelper *helper;
+	GtkWidget *dialog;
+	GPtrArray *prices;
+	g_autofree gchar *price_text = NULL, *escaped = NULL;
+
+	helper = g_slice_new0 (GsPageHelper);
+	helper->app = g_object_ref (app);
+	helper->page = g_object_ref (page);
+	helper->cancellable = g_object_ref (cancellable);
+
+	/* ask for confirmation */
+	dialog = gtk_message_dialog_new (gs_shell_get_window (priv->shell),
+	                                 GTK_DIALOG_MODAL,
+	                                 GTK_MESSAGE_QUESTION,
+	                                 GTK_BUTTONS_CANCEL,
+	                                 /* TRANSLATORS: this is a prompt message, and
+	                                  * '%s' is an application summary, e.g. 'GNOME Clocks' */
+	                                 _("Are you sure you want to purchase %s?"),
+	                                 gs_app_get_name (app));
+	prices = gs_app_get_prices (app);
+	if (prices->len > 0) {
+		GsPrice *price = g_ptr_array_index (prices, 0); // FIXME: Give option of price to choose
+		g_autofree gchar *text = NULL;
+		price_text = gs_price_to_string (price);
+	} else {
+		price_text = g_strdup ("nothing"); // FIXME
+	}
+	escaped = g_markup_escape_text (gs_app_get_name (app), -1);
+	gtk_message_dialog_format_secondary_markup (GTK_MESSAGE_DIALOG (dialog),
+	                                            /* TRANSLATORS: Describing what will be purchased */
+                                                    _("You will be charged %s and %s will be installed."),
+                                                    price_text,
+                                                    escaped);
+
+	/* TRANSLATORS: this is button text to purchase the application */
+	gtk_dialog_add_button (GTK_DIALOG (dialog), _("Purchase"), GTK_RESPONSE_OK);
+
+	/* handle this async */
+	g_signal_connect (dialog, "response",
+			  G_CALLBACK (gs_page_purchase_app_response_cb), helper);
+	gs_shell_modal_dialog_present (priv->shell, GTK_DIALOG (dialog));
 }
 
 void

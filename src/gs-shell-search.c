@@ -69,8 +69,11 @@ gs_shell_search_app_row_clicked_cb (GsAppRow *app_row,
 				    GsShellSearch *self)
 {
 	GsApp *app;
+
 	app = gs_app_row_get_app (app_row);
-	if (gs_app_get_state (app) == AS_APP_STATE_AVAILABLE)
+	if (gs_app_get_state (app) == AS_APP_STATE_PURCHASABLE)
+		gs_page_purchase_app (GS_PAGE (self), app, self->cancellable);
+	else if (gs_app_get_state (app) == AS_APP_STATE_AVAILABLE)
 		gs_page_install_app (GS_PAGE (self), app, self->cancellable);
 	else if (gs_app_get_state (app) == AS_APP_STATE_INSTALLED)
 		gs_page_remove_app (GS_PAGE (self), app, self->cancellable);

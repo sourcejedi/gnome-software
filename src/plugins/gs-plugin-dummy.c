@@ -145,12 +145,30 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GError **error)
 {
 	GsPluginData *priv = gs_plugin_get_data (plugin);
-	g_autoptr(GsApp) app = NULL;
+	g_autoptr(GsApp) app = NULL, app2 = NULL;
 	g_autoptr(AsIcon) ic = NULL;
 
 	/* we're very specific */
 	if (g_strcmp0 (values[0], "chiron") != 0)
 		return TRUE;
+
+	/* use a generic stock icon */
+	ic = as_icon_new ();
+	as_icon_set_kind (ic, AS_ICON_KIND_STOCK);
+	as_icon_set_name (ic, "drive-harddisk");
+
+	/* add a live updatable normal application */
+	app2 = gs_app_new ("chiron-paid.desktop");
+	gs_app_set_name (app2, GS_APP_QUALITY_NORMAL, "Chiron (paid)");
+	gs_app_set_summary (app2, GS_APP_QUALITY_NORMAL, "A teaching application");
+	gs_app_add_price (app2, 100, "USD");
+	gs_app_add_icon (app2, ic);
+	gs_app_set_size_installed (app2, 42 * 1024 * 1024);
+	gs_app_set_size_download (app2, 50 * 1024 * 1024);
+	gs_app_set_kind (app2, AS_APP_KIND_DESKTOP);
+	gs_app_set_state (app2, AS_APP_STATE_PURCHASABLE);
+	gs_app_set_management_plugin (app2, gs_plugin_get_name (plugin));
+	gs_app_list_add (list, app2);
 
 	/* does the app already exist? */
 	app = gs_plugin_cache_lookup (plugin, "chiron");
@@ -491,7 +509,9 @@ gs_plugin_add_category_apps (GsPlugin *plugin,
 			     GCancellable *cancellable,
 			     GError **error)
 {
-	g_autoptr(GsApp) app = gs_app_new ("chiron.desktop");
+	g_autoptr(GsApp) app = NULL, app2 = NULL;
+
+	app = gs_app_new ("chiron.desktop");
 	gs_app_set_name (app, GS_APP_QUALITY_NORMAL, "Chiron");
 	gs_app_set_summary (app, GS_APP_QUALITY_NORMAL, "View and use virtual machines");
 	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, "http://www.box.org");
@@ -501,6 +521,19 @@ gs_plugin_add_category_apps (GsPlugin *plugin,
 	gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 	gs_app_set_management_plugin (app, gs_plugin_get_name (plugin));
 	gs_app_list_add (list, app);
+
+	app2 = gs_app_new ("chiron-paid.desktop");
+	gs_app_set_name (app2, GS_APP_QUALITY_NORMAL, "Expensive App");
+	gs_app_set_summary (app2, GS_APP_QUALITY_NORMAL, "An app that costs you money");
+	gs_app_add_price (app2, 100, "USD");
+	gs_app_set_url (app2, AS_URL_KIND_HOMEPAGE, "http://www.example.com");
+	gs_app_set_kind (app2, AS_APP_KIND_DESKTOP);
+	gs_app_set_state (app2, AS_APP_STATE_PURCHASABLE);
+	gs_app_set_pixbuf (app2, gdk_pixbuf_new_from_file ("/usr/share/icons/hicolor/48x48/apps/chiron.desktop.png", NULL));
+	gs_app_set_kind (app2, AS_APP_KIND_DESKTOP);
+	gs_app_set_management_plugin (app2, gs_plugin_get_name (plugin));
+	gs_app_list_add (list, app2);
+
 	return TRUE;
 }
 
@@ -618,6 +651,43 @@ gs_plugin_update_cancel (GsPlugin *plugin, GsApp *app,
 	return TRUE;
 }
 
+/**
+ * gs_plugin_add_payment_methods:
+ */
+gboolean
+gs_plugin_add_payment_methods (GsPlugin *plugin,
+			       GsPaymentMethodList *payment_methods,
+			       GCancellable *cancellable,
+			       GError **error)
+{
+	GsPaymentMethod *method;
+	g_debug ("Adding payment methods");
+	method = gs_payment_method_new ();
+	gs_payment_method_set_description (method, "Test Payment Method");
+	gs_payment_method_add_metadata (method, "card-number", "0000 0000 0000 0000");
+	gs_payment_method_list_add (payment_methods, method);
+	return TRUE;
+}
+
+/**
+ * gs_plugin_app_purchase:
+ */
+gboolean
+gs_plugin_app_purchase (GsPlugin *plugin,
+			GsApp *app,
+			GsPrice *price,
+			GsPaymentMethod *payment_method,
+			GCancellable *cancellable,
+			GError **error)
+{
+	g_debug ("Purchasing app");
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	return TRUE;
+}
+
+/**
+ * gs_plugin_review_submit:
+ */
 gboolean
 gs_plugin_review_submit (GsPlugin *plugin,
 			 GsApp *app,

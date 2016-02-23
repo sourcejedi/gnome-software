@@ -59,6 +59,7 @@ UI_FILES =						\
 	gs-info-bar.ui					\
 	gs-menus.ui					\
 	gs-popular-tile.ui				\
+	gs-purchase-dialog.ui				\
 	gs-removal-dialog.ui				\
 	gs-review-dialog.ui				\
 	gs-review-histogram.ui				\
@@ -110,11 +111,15 @@ gnome_software_cmd_SOURCES =				\
 	gs-app.c					\
 	gs-app-list.c					\
 	gs-auth.c					\
+	gs-price.c					\
+	gs-review.c					\
 	gs-cmd.c					\
 	gs-common.c					\
 	gs-debug.c					\
 	gs-utils.c					\
 	gs-os-release.c					\
+	gs-payment-method.c				\
+	gs-payment-method-list.c			\
 	gs-plugin-loader.c				\
 	gs-plugin-loader-sync.c				\
 	gs-category.c					\
@@ -190,12 +195,20 @@ gnome_software_SOURCES =				\
 	gs-os-release.h					\
 	gs-page.c					\
 	gs-page.h					\
+	gs-payment-method.c				\
+	gs-payment-method.h				\
+	gs-payment-method-list.c			\
+	gs-payment-method-list.h			\
 	gs-plugin.c					\
 	gs-plugin.h					\
 	gs-plugin-private.h				\
 	gs-plugin-vfuncs.h				\
+	gs-price.c					\
+	gs-price.h					\
 	gs-progress-button.c				\
 	gs-progress-button.h				\
+	gs-purchase-dialog.c				\
+	gs-purchase-dialog.h				\
 	gs-removal-dialog.c				\
 	gs-removal-dialog.h				\
 	gs-review-bar.c					\

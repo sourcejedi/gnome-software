@@ -204,6 +204,10 @@ const gchar	*gs_app_get_metadata_item	(GsApp		*app,
 void		 gs_app_set_metadata		(GsApp		*app,
 						 const gchar	*key,
 						 const gchar	*value);
+GPtrArray	*gs_app_get_prices		(GsApp		*app);
+void		 gs_app_add_price		(GsApp		*app,
+						 gdouble	 amount,
+						 const gchar	*currency);
 gint		 gs_app_get_rating		(GsApp		*app);
 void		 gs_app_set_rating		(GsApp		*app,
 						 gint		 rating);

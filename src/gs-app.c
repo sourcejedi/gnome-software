@@ -53,6 +53,7 @@
 #include "gs-app-private.h"
 #include "gs-plugin.h"
 #include "gs-utils.h"
+#include "gs-price.h"
 
 struct _GsApp
 {
@@ -91,6 +92,7 @@ struct _GsApp
 	gchar			*management_plugin;
 	guint			 match_value;
 	guint			 priority;
+	GPtrArray		*prices; /* of GsPrice */
 	gint			 rating;
 	GArray			*review_ratings;
 	GPtrArray		*reviews; /* of AsReview */
@@ -381,6 +383,13 @@ gs_app_to_string (GsApp *app)
 		gs_app_kv_lpad (str, "origin-ui", app->origin_ui);
 	if (app->origin_hostname != NULL && app->origin_hostname[0] != '\0')
 		gs_app_kv_lpad (str, "origin-hostname", app->origin_hostname);
+	for (i = 0; i < app->prices->len; i++) {
+		GsPrice *price = g_ptr_array_index (app->prices, i);
+		g_autofree gchar *key = NULL, *text = NULL;
+		key = g_strdup_printf ("price-%02i", i);
+		text = gs_price_to_string (price);
+		gs_app_kv_lpad (str, key, text);
+	}
 	if (app->rating != -1)
 		gs_app_kv_printf (str, "rating", "%i", app->rating);
 	if (app->review_ratings != NULL) {
@@ -599,6 +608,7 @@ gs_app_set_state_internal (GsApp *app, AsAppState state)
 		/* unknown has to go into one of the stable states */
 		if (state == AS_APP_STATE_INSTALLED ||
 		    state == AS_APP_STATE_QUEUED_FOR_INSTALL ||
+		    state == AS_APP_STATE_PURCHASABLE ||
 		    state == AS_APP_STATE_AVAILABLE ||
 		    state == AS_APP_STATE_AVAILABLE_LOCAL ||
 		    state == AS_APP_STATE_UPDATABLE ||
@@ -615,6 +625,21 @@ gs_app_set_state_internal (GsApp *app, AsAppState state)
 	case AS_APP_STATE_QUEUED_FOR_INSTALL:
 		if (state == AS_APP_STATE_UNKNOWN ||
 		    state == AS_APP_STATE_INSTALLING ||
+		    state == AS_APP_STATE_AVAILABLE)
+			state_change_ok = TRUE;
+		break;
+	case AS_APP_STATE_PURCHASABLE:
+		/* purchasable has to go into an available state */
+		if (state == AS_APP_STATE_UNKNOWN ||
+		    state == AS_APP_STATE_AVAILABLE)
+			state_change_ok = TRUE;
+		break;
+	case AS_APP_STATE_PURCHASING:
+		/* purchasing has to go into an stable state */
+		if (state == AS_APP_STATE_UNKNOWN ||
+		    state == AS_APP_STATE_INSTALLED ||
+		    state == AS_APP_STATE_UPDATABLE ||
+		    state == AS_APP_STATE_UPDATABLE_LIVE ||
 		    state == AS_APP_STATE_AVAILABLE)
 			state_change_ok = TRUE;
 		break;
@@ -1908,6 +1933,26 @@ gs_app_set_management_plugin (GsApp *app, const gchar *management_plugin)
 }
 
 /**
+ * gs_app_get_prices:
+ */
+GPtrArray *
+gs_app_get_prices (GsApp *app)
+{
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
+	return app->prices;
+}
+
+/**
+ * gs_app_add_price:
+ */
+void
+gs_app_add_price (GsApp *app, gdouble amount, const gchar *currency)
+{
+	g_return_if_fail (GS_IS_APP (app));
+	g_ptr_array_add (app->prices, gs_price_new (amount, currency));
+}
+
+/**
  * gs_app_get_rating:
  * @app: a #GsApp
  *
@@ -2832,6 +2877,7 @@ gs_app_dispose (GObject *object)
 	g_clear_pointer (&app->history, g_ptr_array_unref);
 	g_clear_pointer (&app->related, g_ptr_array_unref);
 	g_clear_pointer (&app->screenshots, g_ptr_array_unref);
+	g_clear_pointer (&app->prices, g_ptr_array_unref);
 	g_clear_pointer (&app->reviews, g_ptr_array_unref);
 	g_clear_pointer (&app->icons, g_ptr_array_unref);
 
@@ -2991,6 +3037,7 @@ gs_app_init (GsApp *app)
 	app->related = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->history = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->screenshots = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+	app->prices = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->reviews = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->icons = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	app->metadata = g_hash_table_new_full (g_str_hash,

@@ -30,6 +30,7 @@
 #include "gs-progress-button.h"
 #include "gs-common.h"
 #include "gs-folders.h"
+#include "gs-price.h"
 
 typedef struct
 {
@@ -155,6 +156,7 @@ gs_app_row_refresh_button (GsAppRow *app_row, gboolean missing_search_result)
 {
 	GsAppRowPrivate *priv = gs_app_row_get_instance_private (app_row);
 	GtkStyleContext *context;
+	GPtrArray *prices;
 
 	/* disabled */
 	if (!priv->show_buttons) {
@@ -203,6 +205,27 @@ gs_app_row_refresh_button (GsAppRow *app_row, gboolean missing_search_result)
 			 * allows the application to be easily removed */
 			gtk_button_set_label (GTK_BUTTON (priv->button), _("Remove"));
 		}
+		break;
+	case AS_APP_STATE_PURCHASABLE:
+		gtk_widget_set_visible (priv->button, TRUE);
+		prices = gs_app_get_prices (priv->app);
+		if (prices->len > 0) {
+			GsPrice *price = g_ptr_array_index (prices, 0);
+			g_autofree gchar *text = NULL;
+			text = gs_price_to_string (price);
+			gtk_button_set_label (GTK_BUTTON (priv->button), text);
+		} else {
+			/* TRANSLATORS: this is a button next to the search results that
+			 * allows the application to be easily purchased */
+			gtk_button_set_label (GTK_BUTTON (priv->button), _("Buy"));
+		}
+		break;
+	case AS_APP_STATE_PURCHASING:
+		gtk_widget_set_visible (priv->button, TRUE);
+		gtk_widget_set_sensitive (priv->button, FALSE);
+		/* TRANSLATORS: this is a button next to the search results that
+		 * allows the status of an application being purchased */
+		gtk_button_set_label (GTK_BUTTON (priv->button), _("Buying"));
 		break;
 	case AS_APP_STATE_UPDATABLE:
 	case AS_APP_STATE_INSTALLED:

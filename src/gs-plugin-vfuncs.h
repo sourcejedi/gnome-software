@@ -40,6 +40,8 @@
 #include "gs-app.h"
 #include "gs-app-list.h"
 #include "gs-category.h"
+#include "gs-payment-method-list.h"
+#include "gs-price.h"
 
 G_BEGIN_DECLS
 
@@ -497,6 +499,45 @@ gboolean	 gs_plugin_update_cancel		(GsPlugin	*plugin,
 							 GError		**error);
 
 /**
+ * gs_plugin_add_payment_methods:
+ * @plugin: a #GsPlugin
+ * @payment_methods: A #GsPaymentMethodList
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Get the available payment methods for purchasing apps.
+ *
+ * Returns: %TRUE for success or if not relevant
+ **/
+gboolean	 gs_plugin_add_payment_methods		(GsPlugin		*plugin,
+							 GsPaymentMethodList	*payment_methods,
+							 GCancellable		*cancellable,
+							 GError			**error);
+
+/**
+ * gs_plugin_app_purchase:
+ * @plugin: a #GsPlugin
+ * @app: a #GsApp
+ * @price: a #GsPrice
+ * @payment_method: (allow-none): a #GsPaymentMethod, or %NULL
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Purchase the application.
+ *
+ * NOTE: Once the action is complete, the plugin must set the new state of @app
+ * to %AS_APP_STATE_AVAILABLE.
+ *
+ * Returns: %TRUE for success or if not relevant
+ **/
+gboolean	 gs_plugin_app_purchase			(GsPlugin		*plugin,
+							 GsApp			*app,
+							 GsPrice		*price,
+							 GsPaymentMethod	*payment_method,
+							 GCancellable		*cancellable,
+							 GError			**error);
+
+/**
  * gs_plugin_app_install:
  * @plugin: a #GsPlugin
  * @app: a #GsApp
@@ -892,6 +933,7 @@ gboolean	 gs_plugin_auth_register		(GsPlugin	*plugin,
 							 GsAuth		*auth,
 							 GCancellable	*cancellable,
 							 GError		**error);
+
 
 G_END_DECLS
 

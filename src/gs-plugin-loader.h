@@ -28,6 +28,7 @@
 #include "gs-auth.h"
 #include "gs-category.h"
 #include "gs-plugin.h"
+#include "gs-payment-method-list.h"
 
 G_BEGIN_DECLS
 
@@ -237,6 +238,22 @@ gboolean	 gs_plugin_loader_app_action_finish	(GsPluginLoader	*plugin_loader,
 							 GAsyncResult	*res,
 							 GError		**error);
 gboolean	 gs_plugin_loader_review_action_finish	(GsPluginLoader	*plugin_loader,
+							 GAsyncResult	*res,
+							 GError		**error);
+void		 gs_plugin_loader_get_payment_methods_async (GsPluginLoader *plugin_loader,
+							     GCancellable *cancellable,
+							     GAsyncReadyCallback callback,
+							     gpointer user_data);
+GsPaymentMethodList	*gs_plugin_loader_get_payment_methods_finish	(GsPluginLoader	*plugin_loader,
+									 GAsyncResult	*res,
+									 GError		**error);
+void		 gs_plugin_loader_app_purchase_async	(GsPluginLoader	*plugin_loader,
+							 GsApp		*app,
+							 GsPrice	*price,
+							 GCancellable	*cancellable,
+							 GAsyncReadyCallback callback,
+							 gpointer	 user_data);
+gboolean	 gs_plugin_loader_app_purchase_finish	(GsPluginLoader	*plugin_loader,
 							 GAsyncResult	*res,
 							 GError		**error);
 void		 gs_plugin_loader_review_action_async	(GsPluginLoader	*plugin_loader,
