@@ -607,16 +607,31 @@ parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 	return TRUE;
 }
 
+static gchar *
+get_language (GsPlugin *plugin)
+{
+	gchar *language, *c;
+
+	/* Convert locale into language */
+	language = g_strdup (plugin->locale);
+	c = strchr (language, '_');
+	if (c)
+		*c = '\0';
+
+	return language;
+}
+
 static gboolean
 download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, GError **error)
 {
-	g_autofree gchar *path = NULL;
+	g_autofree gchar *language = NULL, *path = NULL;
 	JsonParser *result;
 	gboolean ret;
 
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
-	path = g_strdup_printf ("/api/1.0/reviews/filter/any/any/any/any/%s/", package_name);
+	language = get_language (plugin);
+	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/", language, package_name);
 	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, FALSE, &result, error))
 		return FALSE;
 
@@ -750,7 +765,6 @@ set_package_review (GsPlugin *plugin,
 	gint rating;
 	gint n_stars;
 	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
-	gchar *c;
 	JsonBuilder *request;
 	gboolean ret;
 
@@ -774,11 +788,7 @@ set_package_review (GsPlugin *plugin,
 	if (os_ubuntu_codename == NULL)
 		return FALSE;
 
-	/* Convert locale into language */
-	language = g_strdup (plugin->locale);
-	c = strchr (language, '_');
-	if (c)
-		*c = '\0';
+	language = get_language (plugin);
 
 	// FIXME: Need to get Apt::Architecture configuration value from APT
 	architecture = g_strdup ("amd64");
