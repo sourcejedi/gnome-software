@@ -1176,7 +1176,7 @@
                             <property name="valign">start</property>
                             <property name="hexpand">True</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Reviews</property>
+                            <property name="label" translatable="yes" comments="Translators: Header of the section with other users' opinions about the app.">Reviews</property>
                             <style>
                               <class name="application-reviews-title"/>
                             </style>
@@ -1192,7 +1192,7 @@
                         <child>
                           <object class="GtkButton" id="button_review">
                             <property name="use_underline">True</property>
-                            <property name="label" translatable="yes">_Write a Review</property>
+                            <property name="label" translatable="yes" comments="Translators: Button opening a dialog where the users can write and publish their opinions about the apps.">_Write a Review</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="halign">start</property>
@@ -1208,6 +1208,18 @@
                             <style>
                               <class name="review-listbox"/>
                             </style>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="button_more_reviews">
+                            <property name="visible">False</property>
+                            <property name="use_underline">True</property>
+                            <property name="label" translatable="yes" comments="Translators: Button to return more application-submitted reviews.">_Show More</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="halign">start</property>
+                            <property name="valign">start</property>
+                            <property name="margin_top">20</property>
                           </object>
                         </child>
                       </object>

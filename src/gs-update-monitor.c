@@ -26,10 +26,6 @@
 #include <glib/gi18n.h>
 #include <gsettings-desktop-schemas/gdesktop-enums.h>
 
-#ifdef HAVE_POLKIT
-#include <polkit/polkit.h>
-#endif
-
 #include "gs-update-monitor.h"
 #include "gs-plugin-loader.h"
 #include "gs-utils.h"
@@ -458,7 +454,11 @@ get_updates_historical_cb (GObject *object, GAsyncResult *res, gpointer data)
 
 	notification = g_notification_new (title);
 	g_notification_set_body (notification, message);
-	/* TRANSLATORS: to look at the updates that were installed */
+	/* TRANSLATORS: Button to look at the updates that were installed.
+	 * Note that it has nothing to do with the application reviews, the
+	 * users can't express their opinions here. In some languages
+	 * "Review (evaluate) something" is a different translation than
+	 * "Review (browse) something." */
 	g_notification_add_button_with_target (notification, C_("updates", "Review"), "app.set-mode", "s", "updated");
 	g_notification_set_default_action_and_target (notification, "app.set-mode", "s", "updated");
 	g_application_send_notification (monitor->application, "offline-updates", notification);
@@ -753,11 +753,8 @@ GPermission *
 gs_update_monitor_permission_get (void)
 {
 	static GPermission *permission = NULL;
-#ifdef HAVE_POLKIT
 	if (permission == NULL)
-		permission = polkit_permission_new_sync ("org.freedesktop.packagekit.trigger-offline-update",
-                                                         NULL, NULL, NULL);
-#endif
+		permission = gs_utils_get_permission ("org.freedesktop.packagekit.trigger-offline-update");
 	return permission;
 }
 
