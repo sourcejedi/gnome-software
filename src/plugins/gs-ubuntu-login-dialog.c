@@ -396,7 +396,6 @@ gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
-	GParamFlags param_flags;
 
 	object_class->dispose = gs_ubuntu_login_dialog_dispose;
 	object_class->finalize = gs_ubuntu_login_dialog_finalize;
