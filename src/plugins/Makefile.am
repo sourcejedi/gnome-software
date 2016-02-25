@@ -139,9 +139,9 @@ ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity
 
 
 libgs_plugin_apt_la_SOURCES = \
-	gs-plugin-apt.c \
 	ubuntu-unity-launcher-proxy.c \
-	ubuntu-unity-launcher-proxy.h
+	ubuntu-unity-launcher-proxy.h \
+	gs-plugin-apt.c
 libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_apt_la_LDFLAGS = -module -avoid-version
 libgs_plugin_apt_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
