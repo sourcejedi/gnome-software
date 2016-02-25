@@ -460,8 +460,16 @@ gs_plugin_refine (GsPlugin *plugin,
 
 		info = g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
 		if (info != NULL) {
-			if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN && info->installed_version != NULL) {
-				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN) {
+				if (info->installed_version != NULL) {
+					if (info->update_version != NULL) {
+						gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+					} else {
+						gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+					}
+				} else {
+					gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+				}
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0) {
 				gs_app_set_size (app, info->installed_size * 1024);
@@ -477,7 +485,6 @@ gs_plugin_refine (GsPlugin *plugin,
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
 				gs_app_set_provenance (app, TRUE);
 			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
 				gs_app_set_licence (app, "@LicenseRef-ubuntu", GS_APP_QUALITY_HIGHEST);
 			}
@@ -517,7 +524,6 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
 		gs_app_add_source (app, info->name);
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_plugin_add_app (list, app);
 	}
 
@@ -779,7 +785,6 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
 		gs_app_add_source (app, info->name);
-		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 		gs_plugin_add_app (list, app);
 	}
 
