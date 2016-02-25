@@ -352,6 +352,73 @@ done:
 	return result;
 }
 
+static void
+get_changelog (GsPlugin *plugin, GsApp *app)
+{
+	const gchar *source, *current_version, *version;
+	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
+	guint status_code;
+	gchar **lines;
+	int i;
+	GString *details;
+
+	g_return_if_fail (gs_app_get_source_default (app) != NULL);
+	g_return_if_fail (gs_app_get_update_version (app) != NULL);
+
+	source = gs_app_get_source_default (app);
+	if (g_str_has_prefix (source, "lib"))
+		source_prefix = g_strdup_printf ("lib%c", source[3]);
+	else
+		source_prefix = g_strdup_printf ("%c", source[0]);
+	current_version = gs_app_get_version (app);
+	version = gs_app_get_update_version (app);
+	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, source, version);
+	msg = soup_message_new (SOUP_METHOD_GET, uri);
+
+	status_code = soup_session_send_message (plugin->soup_session, msg);
+	if (status_code != SOUP_STATUS_OK) {
+		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", source, version, soup_status_get_phrase (status_code));
+		return;
+	}
+
+	// Extract changelog entries newer than our current version
+	changelog_prefix = g_strdup_printf ("%s (", source);
+	lines = g_strsplit (msg->response_body->data, "\n", -1);
+	details = g_string_new ("");
+	for (i = 0; lines[i] != NULL; i++) {
+		gchar *line = lines[i];
+		int version_start, version_end;
+		g_autofree gchar *v = NULL;
+
+		// First line is in the form "package (version) distribution(s); urgency=urgency"
+		if (!g_str_has_prefix (line, changelog_prefix))
+			continue;
+		version_start = strlen (changelog_prefix);
+		for (version_end = version_start; line[version_end] != '\0' && line[version_end] != ')'; version_end++);
+		v = g_strdup_printf ("%.*s", version_end - version_start, line + version_start);
+
+		// We're only interested in new versions
+		if (!version_newer (current_version, v))
+			break;
+
+		g_string_append_printf (details, "# %s\n\n", v);
+		for (i++; lines[i] != NULL; i++) {
+			// Last line is in the form " -- maintainer name <email address>  date"
+			if (g_str_has_prefix (lines[i], " -- "))
+				break;
+			if (g_str_has_prefix (lines[i], "  "))
+				g_string_append_printf (details, "%s\n\n", lines[i] + 2);
+			else
+				g_string_append_printf (details, "%s\n\n", lines[i]);
+		}
+	}
+	g_strfreev (lines);
+
+	gs_app_set_update_details (app, details->str);
+	g_string_free (details, TRUE);
+}
+
 gboolean
 gs_plugin_refine (GsPlugin *plugin,
 		  GList **list,
@@ -380,14 +447,21 @@ gs_plugin_refine (GsPlugin *plugin,
 
 		info = g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
 		if (info != NULL) {
-			if (gs_app_get_size (app) == 0)
+			if (gs_app_get_size (app) == 0) {
 				gs_app_set_size (app, info->installed_size * 1024);
-			if (info->installed_version) {
+			}
+			if (info->installed_version != NULL) {
 				gs_app_set_version (app, info->installed_version);
 				if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
 					gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-			} else
+			}
+			if (info->update_version != NULL) {
 				gs_app_set_update_version (app, info->update_version);
+			}
+		}
+
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0) {
+			get_changelog (plugin, app);
 		}
 	}
 
