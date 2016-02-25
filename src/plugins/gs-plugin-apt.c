@@ -33,6 +33,8 @@ typedef struct {
 	gchar *installed_version;
 	gchar *update_version;
 	gint installed_size;
+	gboolean is_official;
+	gboolean is_open_source;
 } PackageInfo;
 
 
@@ -267,6 +269,8 @@ typedef struct {
 	GsPlugin *plugin;
 	PackageInfo *current_info;
 	gboolean current_installed;
+	gboolean is_official;
+	gboolean is_open_source;
 } FieldData;
 
 static gboolean
@@ -284,6 +288,13 @@ field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_
 			g_hash_table_insert (data->plugin->priv->package_info, data->current_info->name, data->current_info);
 		} else
 			g_free (id);
+
+		// If an official source provides this package, then mark it as such.
+		// NOTE: A PPA could re-use the name and make this not true
+		if (data->is_official)
+			data->current_info->is_official = data->is_official;
+		if (data->is_open_source)
+			data->current_info->is_open_source = data->is_open_source;
 		return TRUE;
 	}
 
@@ -339,6 +350,8 @@ load_db (GsPlugin *plugin, GError **error)
 	for (i = 0; i < lists->len; i++) {
 		const gchar *list = lists->pdata[i];
 		FieldData data;
+		data.is_official = g_str_has_prefix (list, "/var/lib/apt/lists/archive.ubuntu.com_");
+		data.is_open_source = data.is_official && (strstr (list, "_main_") != NULL || strstr (list, "_universe_") != NULL);
 		data.plugin = plugin;
 		data.current_info = NULL;
 		data.current_installed = FALSE;
@@ -447,16 +460,26 @@ gs_plugin_refine (GsPlugin *plugin,
 
 		info = g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
 		if (info != NULL) {
-			if (gs_app_get_size (app) == 0) {
+			if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN && info->installed_version != NULL) {
+				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			}
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0) {
 				gs_app_set_size (app, info->installed_size * 1024);
 			}
-			if (info->installed_version != NULL) {
-				gs_app_set_version (app, info->installed_version);
-				if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN)
-					gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
+				if (info->installed_version != NULL) {
+					gs_app_set_version (app, info->installed_version);
+				}
+				if (info->update_version != NULL) {
+					gs_app_set_update_version (app, info->update_version);
+				}
 			}
-			if (info->update_version != NULL) {
-				gs_app_set_update_version (app, info->update_version);
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
+				gs_app_set_provenance (app, TRUE);
+			}
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0)
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
+				gs_app_set_licence (app, "@LicenseRef-ubuntu", GS_APP_QUALITY_HIGHEST);
 			}
 		}
 
