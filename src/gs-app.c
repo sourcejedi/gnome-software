@@ -320,6 +320,12 @@ gs_app_to_string (GsApp *app)
 		tmp = g_ptr_array_index (app->categories, i);
 		g_string_append_printf (str, "\tcategory:\t%s\n", tmp);
 	}
+	if (app->keywords != NULL) {
+		for (i = 0; i < app->keywords->len; i++) {
+			tmp = g_ptr_array_index (app->keywords, i);
+			g_string_append_printf (str, "\tkeyword:\t%s\n", tmp);
+		}
+	}
 	keys = g_hash_table_get_keys (app->metadata);
 	for (l = keys; l != NULL; l = l->next) {
 		tmp = g_hash_table_lookup (app->metadata, l->data);
@@ -2174,11 +2180,11 @@ gs_app_subsume (GsApp *app, GsApp *other)
 void
 gs_app_set_search_sort_key (GsApp *app, guint match_value)
 {
-	gchar md_value[4];
+	gchar md_value[6];
 
 	g_return_if_fail (GS_IS_APP (app));
 
-	g_snprintf (md_value, 4, "%03i", match_value);
+	g_snprintf (md_value, sizeof(md_value), "%05x", match_value);
 	gs_app_set_metadata (app, "SearchMatch", md_value);
 }
 
@@ -2325,6 +2331,7 @@ gs_app_finalize (GObject *object)
 	g_free (app->licence);
 	g_strfreev (app->menu_path);
 	g_free (app->origin);
+	g_free (app->origin_ui);
 	g_ptr_array_unref (app->sources);
 	g_ptr_array_unref (app->source_ids);
 	g_free (app->project_group);
