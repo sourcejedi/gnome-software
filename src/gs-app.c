@@ -1417,6 +1417,15 @@ gs_app_set_licence (GsApp *app, const gchar *licence, GsAppQuality quality)
 			continue;
 		}
 
+		/* Ubuntu licensing */
+		if (g_strcmp0 (tokens[i], "@LicenseRef-ubuntu") == 0) {
+			const gchar *url = "http://www.ubuntu.com/about/about-ubuntu/licensing";
+			g_string_append_printf (urld,
+						"<a href=\"%s\">%s</a>",
+						url, _("Open Source"));
+			continue;
+		}
+
 		/* SPDX value */
 		if (g_str_has_prefix (tokens[i], "@")) {
 			g_string_append_printf (urld,
