@@ -328,12 +328,12 @@ gs_shell_installed_get_app_sort_key (GsApp *app)
 	}
 
 	/* sort desktop files, then addons */
-	switch (gs_app_get_id_kind (app)) {
-	case AS_ID_KIND_DESKTOP:
-	case AS_ID_KIND_WEB_APP:
+	switch (gs_app_get_kind (app)) {
+	case AS_APP_KIND_DESKTOP:
+	case AS_APP_KIND_WEB_APP:
 		g_string_append (key, "1:");
 		break;
-	case AS_ID_KIND_RUNTIME:
+	case AS_APP_KIND_RUNTIME:
 		g_string_append (key, "2:");
 		break;
 	default:
@@ -341,18 +341,11 @@ gs_shell_installed_get_app_sort_key (GsApp *app)
 		break;
 	}
 
-	/* sort normal, system, other */
-	switch (gs_app_get_kind (app)) {
-	case GS_APP_KIND_NORMAL:
+	/* sort normal, compulsory */
+	if (!gs_app_has_quirk (app, AS_APP_QUIRK_COMPULSORY))
 		g_string_append (key, "1:");
-		break;
-	case GS_APP_KIND_SYSTEM:
+	else
 		g_string_append (key, "2:");
-		break;
-	default:
-		g_string_append (key, "3:");
-		break;
-	}
 
 	/* finally, sort by short name */
 	casefolded_name = g_utf8_casefold (gs_app_get_name (app), -1);
@@ -394,22 +387,13 @@ gs_shell_installed_sort_func (GtkListBoxRow *a,
 static gboolean
 gs_shell_installed_is_addon_id_kind (GsApp *app)
 {
-	AsIdKind id_kind;
-	id_kind = gs_app_get_id_kind (app);
-	if (id_kind == AS_ID_KIND_DESKTOP)
+	AsAppKind id_kind;
+	id_kind = gs_app_get_kind (app);
+	if (id_kind == AS_APP_KIND_DESKTOP)
 		return FALSE;
-	if (id_kind == AS_ID_KIND_WEB_APP)
+	if (id_kind == AS_APP_KIND_WEB_APP)
 		return FALSE;
 	return TRUE;
-}
-
-static gboolean
-gs_shell_installed_is_system_application (GsApp *app)
-{
-	if (gs_app_get_id_kind (app) == AS_ID_KIND_DESKTOP &&
-	    gs_app_get_kind (app) == GS_APP_KIND_SYSTEM)
-		return TRUE;
-	return FALSE;
 }
 
 /**
@@ -428,8 +412,10 @@ gs_shell_installed_list_header_func (GtkListBoxRow *row,
 	if (before == NULL)
 		return;
 
-	if (!gs_shell_installed_is_system_application (gs_app_row_get_app (GS_APP_ROW (before))) &&
-	    gs_shell_installed_is_system_application (gs_app_row_get_app (GS_APP_ROW (row)))) {
+	if (!gs_app_has_quirk (gs_app_row_get_app (GS_APP_ROW (before)),
+			       AS_APP_QUIRK_COMPULSORY) &&
+	    gs_app_has_quirk (gs_app_row_get_app (GS_APP_ROW (row)),
+			      AS_APP_QUIRK_COMPULSORY)) {
 		/* TRANSLATORS: This is the header dividing the normal
 		 * applications and the system ones */
 		header = gtk_label_new (_("System Applications"));

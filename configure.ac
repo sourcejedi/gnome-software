@@ -61,7 +61,7 @@ dnl ---------------------------------------------------------------------------
 dnl - Check library dependencies
 dnl ---------------------------------------------------------------------------
 PKG_CHECK_MODULES(GTK, gtk+-3.0 >= 3.18.2 gio-unix-2.0 gtkspell3-3.0)
-PKG_CHECK_MODULES(APPSTREAM, appstream-glib >= 0.5.5)
+PKG_CHECK_MODULES(APPSTREAM, appstream-glib >= 0.5.10)
 PKG_CHECK_MODULES(GDK_PIXBUF, gdk-pixbuf-2.0 >= 2.31.5)
 PKG_CHECK_MODULES(JSON_GLIB, json-glib-1.0)
 PKG_CHECK_MODULES(SQLITE, sqlite3)
@@ -164,7 +164,7 @@ AC_ARG_ENABLE(xdg-app,
               enable_xdg_app=maybe)
 AS_IF([test "x$enable_xdg_app" != "xno"], [
     PKG_CHECK_MODULES(XDG_APP,
-                      [xdg-app >= 0.4.12],
+                      [xdg-app >= 0.4.14],
                       [have_xdg_app=yes],
                       [have_xdg_app=no])
 ], [

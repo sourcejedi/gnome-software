@@ -283,12 +283,16 @@ gs_plugin_packagekit_refresh_guess_app_id (GsPlugin *plugin,
 		item = g_ptr_array_index (array, i);
 		fns = pk_files_get_files (item);
 		for (j = 0; fns[j] != NULL; j++) {
+			if (g_str_has_prefix (fns[j], "/etc/yum.repos.d/") &&
+			    g_str_has_suffix (fns[j], ".repo")) {
+				gs_app_add_quirk (app, AS_APP_QUIRK_HAS_SOURCE);
+			}
 			if (g_str_has_prefix (fns[j], "/usr/share/applications/") &&
 			    g_str_has_suffix (fns[j], ".desktop")) {
 				g_autofree gchar *basename = g_path_get_basename (fns[j]);
 				gs_app_set_id (app, basename);
-				gs_app_set_kind (app, GS_APP_KIND_NORMAL);
-				gs_app_set_id_kind (app, AS_ID_KIND_DESKTOP);
+				gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+				gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 				break;
 			}
 		}
@@ -366,7 +370,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	split = pk_package_id_split (package_id);
 	basename = g_path_get_basename (filename);
 	gs_app_set_management_plugin (app, "PackageKit");
-	gs_app_set_kind (app, GS_APP_KIND_PACKAGE);
+	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
 	if (pk_details_get_summary (item))
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST,
@@ -383,7 +387,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, pk_details_get_url (item));
 	gs_app_set_size (app, pk_details_get_size (item));
 	license_spdx = as_utils_license_to_spdx (pk_details_get_license (item));
-	gs_app_set_licence (app, license_spdx, GS_APP_QUALITY_LOWEST);
+	gs_app_set_licence (app, GS_APP_QUALITY_LOWEST, license_spdx);
 
 	/* look for a desktop file so we can use a valid application id */
 	if (!gs_plugin_packagekit_refresh_guess_app_id (plugin,

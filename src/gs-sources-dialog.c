@@ -72,15 +72,15 @@ add_source (GtkListBox *listbox, GsApp *app)
 	/* split up the types */
 	for (i = 0; i < related->len; i++) {
 		GsApp *app_tmp = g_ptr_array_index (related, i);
-		switch (gs_app_get_id_kind (app_tmp)) {
-		case AS_ID_KIND_WEB_APP:
-		case AS_ID_KIND_DESKTOP:
+		switch (gs_app_get_kind (app_tmp)) {
+		case AS_APP_KIND_WEB_APP:
+		case AS_APP_KIND_DESKTOP:
 			cnt_apps++;
 			break;
-		case AS_ID_KIND_FONT:
-		case AS_ID_KIND_CODEC:
-		case AS_ID_KIND_INPUT_METHOD:
-		case AS_ID_KIND_ADDON:
+		case AS_APP_KIND_FONT:
+		case AS_APP_KIND_CODEC:
+		case AS_APP_KIND_INPUT_METHOD:
+		case AS_APP_KIND_ADDON:
 			cnt_addon++;
 			break;
 		default:
@@ -276,8 +276,7 @@ list_row_activated_cb (GtkListBox *list_box,
 	for (i = 0; i < related->len; i++) {
 		GsApp *app_tmp = g_ptr_array_index (related, i);
 		switch (gs_app_get_kind (app_tmp)) {
-		case GS_APP_KIND_NORMAL:
-		case GS_APP_KIND_SYSTEM:
+		case AS_APP_KIND_DESKTOP:
 			add_app (GTK_LIST_BOX (dialog->listbox_apps), app_tmp);
 			cnt_apps++;
 			break;

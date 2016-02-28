@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2011-2013 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2015-2016 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -19,50 +19,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <config.h>
+#ifndef __APPSTREAM_COMMON_H
+#define __APPSTREAM_COMMON_H
 
+#include <glib.h>
 #include <gs-plugin.h>
+#include <appstream-glib.h>
 
-/**
- * gs_plugin_get_name:
- */
-const gchar *
-gs_plugin_get_name (void)
-{
-	return "self-test";
-}
+G_BEGIN_DECLS
 
-/**
- * gs_plugin_initialize:
- */
-void
-gs_plugin_initialize (GsPlugin *plugin)
-{
-	if (g_getenv ("GNOME_SOFTWARE_SELF_TEST") == NULL) {
-		g_debug ("disabling '%s' as not in self test", plugin->name);
-		gs_plugin_set_enabled (plugin, FALSE);
-	}
-}
+gboolean	 gs_appstream_refine_app		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 AsApp		*item,
+							 GError		**error);
+GsApp		*gs_appstream_create_runtime		(GsApp		*parent,
+							 const gchar	*runtime);
 
-/**
- * gs_plugin_refine:
- */
-gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		  GList **list,
-		  GsPluginRefineFlags flags,
-		  GCancellable *cancellable,
-		  GError **error)
-{
-	GsApp *app;
-	GList *l;
+G_END_DECLS
 
-	for (l = *list; l != NULL; l = l->next) {
-		app = GS_APP (l->data);
-		if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN) {
-			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-			gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
-		}
-	}
-	return TRUE;
-}
+#endif /* __APPSTREAM_COMMON_H */

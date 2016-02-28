@@ -101,7 +101,7 @@ gs_app_row_get_description (GsAppRow *app_row)
 		}
 	}
 
-	if (gs_app_get_kind (priv->app) == GS_APP_KIND_MISSING)
+	if (gs_app_get_state (priv->app) == AS_APP_STATE_UNAVAILABLE)
 		return g_string_new (gs_app_get_summary_missing (priv->app));
 
 	/* try all these things in order */
@@ -153,7 +153,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 	}
 
 	/* add warning */
-	if (gs_app_get_kind (priv->app) == GS_APP_KIND_FIRMWARE_UPDATE) {
+	if (gs_app_get_kind (priv->app) == AS_APP_KIND_FIRMWARE) {
 		gtk_label_set_text (GTK_LABEL (priv->label_tag_warning),
 				    /* TRANSLATORS: during the update the device
 				     * will restart into a special update-only mode */
@@ -167,13 +167,13 @@ gs_app_row_refresh (GsAppRow *app_row)
 		gtk_widget_set_visible (priv->label_tag_nonfree, FALSE);
 		gtk_widget_set_visible (priv->label_tag_foreign, FALSE);
 	} else {
-		switch (gs_app_get_id_kind (priv->app)) {
-		case AS_ID_KIND_UNKNOWN:
+		switch (gs_app_get_kind (priv->app)) {
+		case AS_APP_KIND_UNKNOWN:
 			gtk_widget_set_visible (priv->label_tag_webapp, FALSE);
 			gtk_widget_set_visible (priv->label_tag_nonfree, FALSE);
 			gtk_widget_set_visible (priv->label_tag_foreign, FALSE);
 			break;
-		case AS_ID_KIND_WEB_APP:
+		case AS_APP_KIND_WEB_APP:
 			gtk_widget_set_visible (priv->label_tag_webapp, TRUE);
 			gtk_widget_set_visible (priv->label_tag_nonfree, FALSE);
 			gtk_widget_set_visible (priv->label_tag_foreign, FALSE);
@@ -183,7 +183,8 @@ gs_app_row_refresh (GsAppRow *app_row)
 			gtk_widget_set_visible (priv->label_tag_nonfree,
 						!gs_app_get_licence_is_free (priv->app));
 			gtk_widget_set_visible (priv->label_tag_foreign,
-						!gs_app_get_provenance (priv->app));
+						!gs_app_has_quirk (priv->app,
+								   AS_APP_QUIRK_PROVENANCE));
 			break;
 		}
 	}
@@ -199,7 +200,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 				     gs_app_get_update_version_ui (priv->app));
 	} else {
 		gtk_widget_hide (priv->version_label);
-		if (gs_app_get_kind (priv->app) == GS_APP_KIND_MISSING ||
+		if (gs_app_get_state (priv->app) == AS_APP_STATE_UNAVAILABLE ||
 		    gs_app_get_rating (priv->app) <= 0) {
 			gtk_widget_hide (priv->star);
 		} else {
@@ -235,7 +236,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 					  gs_app_get_pixbuf (priv->app));
 
 	context = gtk_widget_get_style_context (priv->image);
-	if (gs_app_get_kind (priv->app) == GS_APP_KIND_MISSING)
+	if (gs_app_get_state (priv->app) == AS_APP_STATE_UNAVAILABLE)
 		gtk_style_context_add_class (context, "dimmer-label");
 	else
 		gtk_style_context_remove_class (context, "dimmer-label");
@@ -295,7 +296,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 		break;
 	case AS_APP_STATE_UPDATABLE:
 	case AS_APP_STATE_INSTALLED:
-		if (gs_app_get_kind (priv->app) != GS_APP_KIND_SYSTEM)
+		if (!gs_app_has_quirk (priv->app, AS_APP_QUIRK_COMPULSORY))
 			gtk_widget_set_visible (priv->button, TRUE);
 		/* TRANSLATORS: this is a button next to the search results that
 		 * allows the application to be easily removed */
@@ -335,9 +336,9 @@ gs_app_row_refresh (GsAppRow *app_row)
 	}
 
 	if (priv->selectable) {
-		if (gs_app_get_id_kind (priv->app) == AS_ID_KIND_DESKTOP ||
-		    gs_app_get_id_kind (priv->app) == AS_ID_KIND_RUNTIME ||
-		    gs_app_get_id_kind (priv->app) == AS_ID_KIND_WEB_APP)
+		if (gs_app_get_kind (priv->app) == AS_APP_KIND_DESKTOP ||
+		    gs_app_get_kind (priv->app) == AS_APP_KIND_RUNTIME ||
+		    gs_app_get_kind (priv->app) == AS_APP_KIND_WEB_APP)
 			gtk_widget_set_visible (priv->checkbox, TRUE);
 		gtk_widget_set_sensitive (priv->button, FALSE);
 	} else {

@@ -36,6 +36,7 @@
 
 #include <gs-plugin.h>
 
+#include "gs-appstream.h"
 #include "gs-utils.h"
 
 static gboolean		gs_plugin_refine_item_metadata (GsPlugin *plugin,
@@ -398,16 +399,16 @@ gs_plugin_xdg_app_create_installed (GsPlugin *plugin,
 	/* create new object */
 	id = gs_plugin_xdg_app_build_id (XDG_APP_REF (xref));
 	app = gs_app_new (id);
-	gs_app_set_kind (app, GS_APP_KIND_NORMAL);
+	gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 	gs_plugin_xdg_app_set_metadata_installed (app, xref);
 
 	switch (xdg_app_ref_get_kind (XDG_APP_REF(xref))) {
 	case XDG_APP_REF_KIND_APP:
-		gs_app_set_id_kind (app, AS_ID_KIND_DESKTOP);
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		break;
 	case XDG_APP_REF_KIND_RUNTIME:
 		gs_app_set_xdgapp_kind (app, XDG_APP_REF_KIND_RUNTIME);
-		gs_app_set_id_kind (app, AS_ID_KIND_RUNTIME);
+		gs_app_set_kind (app, AS_APP_KIND_RUNTIME);
 		gs_app_set_name (app, GS_APP_QUALITY_NORMAL,
 				 xdg_app_ref_get_name (XDG_APP_REF (xref)));
 		gs_app_set_summary (app, GS_APP_QUALITY_NORMAL,
@@ -532,7 +533,7 @@ gs_plugin_add_sources (GsPlugin *plugin,
 
 		app = gs_app_new (xdg_app_remote_get_name (xremote));
 		gs_app_set_management_plugin (app, "XgdApp");
-		gs_app_set_kind (app, GS_APP_KIND_SOURCE);
+		gs_app_set_kind (app, AS_APP_KIND_SOURCE);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_app_set_name (app,
 				 GS_APP_QUALITY_LOWEST,
@@ -935,6 +936,41 @@ gs_plugin_refine_item_state (GsPlugin *plugin,
 }
 
 /**
+ * gs_plugin_xdg_app_set_app_metadata:
+ */
+static gboolean
+gs_plugin_xdg_app_set_app_metadata (GsApp *app,
+				    const gchar *data,
+				    gsize length,
+				    GError **error)
+{
+	g_autofree gchar *name = NULL;
+	g_autofree gchar *runtime = NULL;
+	g_autofree gchar *source = NULL;
+	g_autoptr(GKeyFile) kf = NULL;
+	g_autoptr(GsApp) app_runtime = NULL;
+
+	kf = g_key_file_new ();
+	if (!g_key_file_load_from_data (kf, data, length, G_KEY_FILE_NONE, error))
+		return FALSE;
+	name = g_key_file_get_string (kf, "Application", "name", error);
+	if (name == NULL)
+		return FALSE;
+	gs_app_set_xdgapp_name (app, name);
+	runtime = g_key_file_get_string (kf, "Application", "runtime", error);
+	if (runtime == NULL)
+		return FALSE;
+	g_debug ("runtime for %s is %s", name, runtime);
+
+	/* create runtime */
+	app_runtime = gs_appstream_create_runtime (app, runtime);
+	if (app_runtime != NULL)
+		gs_app_set_runtime (app, app_runtime);
+
+	return TRUE;
+}
+
+/**
  * gs_plugin_refine_item_runtime:
  */
 static gboolean
@@ -949,12 +985,8 @@ gs_plugin_refine_item_runtime (GsPlugin *plugin,
 	g_autofree gchar *contents = NULL;
 	g_autofree gchar *installation_path_str = NULL;
 	g_autofree gchar *install_path = NULL;
-	g_autofree gchar *runtime = NULL;
-	g_autofree gchar *source = NULL;
 	g_autoptr(GBytes) data = NULL;
 	g_autoptr(GFile) installation_path = NULL;
-	g_autoptr(GKeyFile) kf = NULL;
-	g_autoptr(GsApp) app_runtime = NULL;
 	g_autoptr(XdgAppInstalledRef) xref = NULL;
 
 	/* not applicable */
@@ -999,20 +1031,8 @@ gs_plugin_refine_item_runtime (GsPlugin *plugin,
 	}
 
 	/* parse key file */
-	kf = g_key_file_new ();
-	if (!g_key_file_load_from_data (kf, str, len, G_KEY_FILE_NONE, error))
+	if (!gs_plugin_xdg_app_set_app_metadata (app, str, len, error))
 		return FALSE;
-	runtime = g_key_file_get_string (kf, "Application", "runtime", error);
-	if (runtime == NULL)
-		return FALSE;
-	g_debug ("runtime for %s is %s", gs_app_get_id (app), runtime);
-
-	/* create runtime */
-	app_runtime = gs_app_new (runtime);
-	source = g_strdup_printf ("runtime/%s", runtime);
-	gs_app_add_source (app_runtime, source);
-	gs_app_set_id_kind (app_runtime, AS_ID_KIND_RUNTIME);
-	gs_app_set_runtime (app, app_runtime);
 	return TRUE;
 }
 
@@ -1277,7 +1297,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 
 	/* install required runtime if not already installed */
-	if (gs_app_get_id_kind (app) == AS_ID_KIND_DESKTOP) {
+	if (gs_app_get_kind (app) == AS_APP_KIND_DESKTOP) {
 		GsApp *runtime;
 		runtime = gs_app_get_runtime (app);
 
@@ -1321,16 +1341,28 @@ gs_plugin_app_install (GsPlugin *plugin,
 		}
 	}
 
+	/* use the source for local apps */
+	if (gs_app_get_state (app) == AS_APP_STATE_AVAILABLE_LOCAL) {
+		g_autoptr(GFile) file = NULL;
+		file = g_file_new_for_path (gs_app_get_source_default (app));
+		xref = xdg_app_installation_install_bundle (plugin->priv->installation,
+							    file,
+							    gs_plugin_xdg_app_progress_cb,
+							    &helper,
+							    cancellable, error);
+	} else {
+		g_debug ("installing %s", gs_app_get_id (app));
+		xref = xdg_app_installation_install (plugin->priv->installation,
+						     gs_app_get_origin (app),
+						     gs_app_get_xdgapp_kind (app),
+						     gs_app_get_xdgapp_name (app),
+						     gs_app_get_xdgapp_arch (app),
+						     gs_app_get_xdgapp_branch (app),
+						     gs_plugin_xdg_app_progress_cb, &helper,
+						     cancellable, error);
+	}
+
 	/* now the main application */
-	g_debug ("installing %s", gs_app_get_id (app));
-	xref = xdg_app_installation_install (plugin->priv->installation,
-					     gs_app_get_origin (app),
-					     gs_app_get_xdgapp_kind (app),
-					     gs_app_get_xdgapp_name (app),
-					     gs_app_get_xdgapp_arch (app),
-					     gs_app_get_xdgapp_branch (app),
-					     gs_plugin_xdg_app_progress_cb, &helper,
-					     cancellable, error);
 	return xref != NULL;
 }
 
@@ -1371,4 +1403,177 @@ gs_plugin_app_update (GsPlugin *plugin,
 					    gs_plugin_xdg_app_progress_cb, &helper,
 					    cancellable, error);
 	return xref != NULL;
+}
+
+/**
+ * gs_plugin_xdg_app_content_type_matches:
+ */
+static gboolean
+gs_plugin_xdg_app_content_type_matches (const gchar *filename,
+				      gboolean *matches,
+				      GCancellable *cancellable,
+				      GError **error)
+{
+	const gchar *tmp;
+	guint i;
+	g_autoptr(GFile) file = NULL;
+	g_autoptr(GFileInfo) info = NULL;
+	const gchar *mimetypes[] = {
+		"application/vnd.xdgapp",
+		NULL };
+
+	/* get content type */
+	file = g_file_new_for_path (filename);
+	info = g_file_query_info (file,
+				  G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+				  G_FILE_QUERY_INFO_NONE,
+				  cancellable,
+				  error);
+	if (info == NULL)
+		return FALSE;
+	tmp = g_file_info_get_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
+
+	/* match any */
+	*matches = FALSE;
+	for (i = 0; mimetypes[i] != NULL; i++) {
+		if (g_strcmp0 (tmp, mimetypes[i]) == 0) {
+			*matches = TRUE;
+			break;
+		}
+	}
+	return TRUE;
+}
+
+/**
+ * gs_plugin_filename_to_app:
+ */
+gboolean
+gs_plugin_filename_to_app (GsPlugin *plugin,
+			   GList **list,
+			   const gchar *filename,
+			   GCancellable *cancellable,
+			   GError **error)
+{
+	gboolean supported;
+	g_autofree gchar *id_prefixed = NULL;
+	g_autoptr(GBytes) appstream_gz = NULL;
+	g_autoptr(GBytes) icon_data = NULL;
+	g_autoptr(GBytes) metadata = NULL;
+	g_autoptr(GError) error_local = NULL;
+	g_autoptr(GFile) file = NULL;
+	g_autoptr(GsApp) app = NULL;
+	g_autoptr(XdgAppBundleRef) xref_bundle = NULL;
+
+	/* does this match any of the mimetypes we support */
+	if (!gs_plugin_xdg_app_content_type_matches (filename,
+						     &supported,
+						     cancellable,
+						     error))
+		return FALSE;
+	if (!supported)
+		return TRUE;
+
+	/* load bundle */
+	file = g_file_new_for_path (filename);
+	xref_bundle = xdg_app_bundle_ref_new (file, &error_local);
+	if (xref_bundle == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_NOT_SUPPORTED,
+			     "Error loading bundle: %s",
+			     error_local->message);
+		return FALSE;
+	}
+
+	/* create a virtual ID */
+	id_prefixed = gs_plugin_xdg_app_build_id (XDG_APP_REF (xref_bundle));
+
+	/* load metadata */
+	app = gs_app_new (id_prefixed);
+	gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
+	gs_app_set_size (app, xdg_app_bundle_ref_get_installed_size (xref_bundle));
+	gs_plugin_xdg_app_set_metadata (app, XDG_APP_REF (xref_bundle));
+	metadata = xdg_app_bundle_ref_get_metadata (xref_bundle);
+	if (!gs_plugin_xdg_app_set_app_metadata (app,
+						 g_bytes_get_data (metadata, NULL),
+						 g_bytes_get_size (metadata),
+						 error))
+		return FALSE;
+
+	/* load AppStream */
+	appstream_gz = xdg_app_bundle_ref_get_appstream (xref_bundle);
+	if (appstream_gz != NULL) {
+		g_autoptr(GZlibDecompressor) decompressor = NULL;
+		g_autoptr(GInputStream) stream_gz = NULL;
+		g_autoptr(GInputStream) stream_data = NULL;
+		g_autoptr(GBytes) appstream = NULL;
+		g_autoptr(AsStore) store = NULL;
+		g_autofree gchar *id = NULL;
+		AsApp *item;
+
+		/* decompress data */
+		decompressor = g_zlib_decompressor_new (G_ZLIB_COMPRESSOR_FORMAT_GZIP);
+		stream_gz = g_memory_input_stream_new_from_bytes (appstream_gz);
+		if (stream_gz == NULL)
+			return FALSE;
+		stream_data = g_converter_input_stream_new (stream_gz,
+							    G_CONVERTER (decompressor));
+
+		appstream = g_input_stream_read_bytes (stream_data,
+						       0x100000, /* 1Mb */
+						       cancellable,
+						       error);
+		if (appstream == NULL)
+			return FALSE;
+		store = as_store_new ();
+		if (!as_store_from_bytes (store, appstream, cancellable, error))
+			return FALSE;
+
+		/* find app */
+		id = g_strdup_printf ("%s.desktop", gs_app_get_xdgapp_name (app));
+		item = as_store_get_app_by_id (store, id);
+		if (item == NULL) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "application %s not found",
+				     id);
+			return FALSE;
+		}
+
+		/* copy details from AppStream to app */
+		if (!gs_appstream_refine_app (plugin, app, item, error))
+			return FALSE;
+	}
+
+	/* load icon */
+	icon_data = xdg_app_bundle_ref_get_icon (xref_bundle, 64);
+	if (icon_data != NULL) {
+		g_autoptr(GInputStream) stream_icon = NULL;
+		g_autoptr(GdkPixbuf) pixbuf = NULL;
+		stream_icon = g_memory_input_stream_new_from_bytes (icon_data);
+		pixbuf = gdk_pixbuf_new_from_stream (stream_icon, cancellable, error);
+		if (pixbuf == NULL)
+			return FALSE;
+		gs_app_set_pixbuf (app, pixbuf);
+	} else {
+		g_autoptr(AsIcon) icon = NULL;
+		icon = as_icon_new ();
+		as_icon_set_kind (icon, AS_ICON_KIND_STOCK);
+		as_icon_set_name (icon, "application-x-executable");
+		gs_app_set_icon (app, icon);
+	}
+
+
+	/* set the source so we can install it higher up */
+	gs_app_add_source (app, filename);
+
+	/* not quite true: this just means we can update this specific app */
+	if (xdg_app_bundle_ref_get_origin (xref_bundle))
+		gs_app_add_quirk (app, AS_APP_QUIRK_HAS_SOURCE);
+
+	g_debug ("created local app: %s", gs_app_to_string (app));
+	gs_plugin_add_app (list, app);
+	return TRUE;
 }

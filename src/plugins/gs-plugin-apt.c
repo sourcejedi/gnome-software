@@ -483,10 +483,10 @@ gs_plugin_refine (GsPlugin *plugin,
 				}
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
-				gs_app_set_provenance (app, TRUE);
+				gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
-				gs_app_set_licence (app, "@LicenseRef-ubuntu", GS_APP_QUALITY_HIGHEST);
+				gs_app_set_licence (app, GS_APP_QUALITY_HIGHEST, "@LicenseRef-ubuntu");
 			}
 		}
 
