@@ -103,8 +103,7 @@ gs_shell_moderate_add_app (GsShellModerate *self, GsApp *app)
 	guint i;
 
 	/* this hides the action button */
-	gs_app_set_kind (app, GS_APP_KIND_UNKNOWN);
-	gs_app_set_kind (app, GS_APP_KIND_SYSTEM);
+	gs_app_add_quirk (app, AS_APP_QUIRK_COMPULSORY);
 
 	/* add top level app */
 	app_row = gs_app_row_new (app);
