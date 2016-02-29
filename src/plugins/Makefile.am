@@ -37,10 +37,9 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_moduleset.la			\
 	libgs_plugin_menu-spec-categories.la		\
 	libgs_plugin_menu-spec-refine.la		\
-	libgs_plugin_local-ratings.la			\
 	libgs_plugin_fedora_distro_upgrades.la		\
 	libgs_plugin_fedora_provenance.la		\
-	libgs_plugin_fedora_tagger_ratings.la		\
+	libgs_plugin_ubuntu-reviews.la			\
 	libgs_plugin_fedora_tagger_usage.la		\
 	libgs_plugin_epiphany.la			\
 	libgs_plugin_icons.la				\
@@ -86,11 +85,6 @@ libgs_plugin_fedora_provenance_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_fedora_provenance_la_LDFLAGS = -module -avoid-version
 libgs_plugin_fedora_provenance_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_fedora_tagger_ratings_la_SOURCES = gs-plugin-fedora-tagger-ratings.c
-libgs_plugin_fedora_tagger_ratings_la_LIBADD = $(GS_PLUGIN_LIBS) $(JSON_GLIB_LIBS) $(SOUP_LIBS) $(SQLITE_LIBS)
-libgs_plugin_fedora_tagger_ratings_la_LDFLAGS = -module -avoid-version
-libgs_plugin_fedora_tagger_ratings_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(JSON_GLIB_CFLAGS) $(WARN_CFLAGS)
-
 libgs_plugin_fedora_tagger_usage_la_SOURCES = gs-plugin-fedora-tagger-usage.c
 libgs_plugin_fedora_tagger_usage_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(SQLITE_LIBS)
 libgs_plugin_fedora_tagger_usage_la_LDFLAGS = -module -avoid-version
@@ -111,7 +105,10 @@ libgs_plugin_self_test_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_self_test_la_LDFLAGS = -module -avoid-version
 libgs_plugin_self_test_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_appstream_la_SOURCES = gs-plugin-appstream.c
+libgs_plugin_appstream_la_SOURCES =			\
+	gs-appstream.c					\
+	gs-appstream.h					\
+	gs-plugin-appstream.c
 libgs_plugin_appstream_la_LIBADD = $(GS_PLUGIN_LIBS) $(APPSTREAM_LIBS)
 libgs_plugin_appstream_la_LDFLAGS = -module -avoid-version
 libgs_plugin_appstream_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
@@ -169,10 +166,11 @@ libgs_plugin_hardcoded_blacklist_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_hardcoded_blacklist_la_LDFLAGS = -module -avoid-version
 libgs_plugin_hardcoded_blacklist_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_local_ratings_la_SOURCES = gs-plugin-local-ratings.c
-libgs_plugin_local_ratings_la_LIBADD = $(GS_PLUGIN_LIBS) $(SQLITE_LIBS)
-libgs_plugin_local_ratings_la_LDFLAGS = -module -avoid-version
-libgs_plugin_local_ratings_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+libgs_plugin_ubuntu_reviews_la_SOURCES =		\
+	gs-plugin-ubuntu-reviews.c
+libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(SQLITE_LIBS)
+libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
+libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_packagekit_la_SOURCES =			\
 	gs-plugin-packagekit.c				\

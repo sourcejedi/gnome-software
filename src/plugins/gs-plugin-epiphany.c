@@ -47,6 +47,18 @@ gs_plugin_get_name (void)
 }
 
 /**
+ * gs_plugin_get_deps:
+ */
+const gchar **
+gs_plugin_get_deps (GsPlugin *plugin)
+{
+	static const gchar *deps[] = {
+		"appstream",
+		NULL };
+	return deps;
+}
+
+/**
  * gs_plugin_initialize:
  */
 void
@@ -104,7 +116,7 @@ gs_plugin_app_install (GsPlugin *plugin, GsApp *app,
 	g_autoptr(GFile) symlink_icon = NULL;
 
 	/* only process web apps */
-	if (gs_app_get_id_kind (app) != AS_ID_KIND_WEB_APP)
+	if (gs_app_get_kind (app) != AS_APP_KIND_WEB_APP)
 		return TRUE;
 
 	/* create the correct directory */
@@ -291,7 +303,7 @@ gs_plugin_refine (GsPlugin *plugin,
 
 	for (l = *list; l != NULL; l = l->next) {
 		app = GS_APP (l->data);
-		if (gs_app_get_id_kind (app) != AS_ID_KIND_WEB_APP)
+		if (gs_app_get_kind (app) != AS_APP_KIND_WEB_APP)
 			continue;
 		gs_app_set_size (app, 4096);
 		tmp = gs_app_get_source_id_default (app);

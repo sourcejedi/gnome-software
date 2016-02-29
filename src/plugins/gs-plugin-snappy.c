@@ -311,7 +311,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 
 		app = gs_app_new (id);
 		gs_app_set_management_plugin (app, "snappy");
-		gs_app_set_kind (app, GS_APP_KIND_NORMAL);
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		status = json_object_get_string_member (package, "status");
 		if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
 			const gchar *update_available;
@@ -330,8 +330,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 		gs_app_set_version (app, json_object_get_string_member (package, "version"));
-		gs_app_set_provenance (app, TRUE);
-		gs_app_set_id_kind (app, AS_ID_KIND_DESKTOP);
+		gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 		icon_url = json_object_get_string_member (package, "icon");
 		if (g_str_has_prefix (icon_url, "/")) {
 			g_autoptr(GSocket) icon_socket = NULL;

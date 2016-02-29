@@ -684,7 +684,7 @@ gs_plugin_refine (GsPlugin *plugin,
 				continue;
 			if (gs_app_get_id_no_prefix (app) == NULL)
 				continue;
-			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
+			if (gs_app_get_kind (app) == AS_APP_KIND_ADDON)
 				continue;
 			if (!gs_plugin_refine_reviews (plugin, app,
 						       cancellable,
@@ -704,7 +704,7 @@ gs_plugin_refine (GsPlugin *plugin,
 				continue;
 			if (gs_app_get_id_no_prefix (app) == NULL)
 				continue;
-			if (gs_app_get_id_kind (app) == AS_ID_KIND_ADDON)
+			if (gs_app_get_kind (app) == AS_APP_KIND_ADDON)
 				continue;
 			if (!gs_plugin_refine_ratings (plugin, app,
 						       cancellable,
@@ -957,6 +957,23 @@ gs_plugin_review_remove (GsPlugin *plugin,
 }
 
 /**
+ * gs_plugin_create_app_dummy:
+ */
+static GsApp *
+gs_plugin_create_app_dummy (const gchar *id)
+{
+	GsApp *app = gs_app_new (id);
+	g_autoptr(GString) str = NULL;
+	str = g_string_new (id);
+	gs_string_replace (str, ".desktop", "");
+	g_string_prepend (str, "No description is available for ");
+	gs_app_set_name (app, GS_APP_QUALITY_LOWEST, "Unknown Application");
+	gs_app_set_summary (app, GS_APP_QUALITY_LOWEST, "Application not found");
+	gs_app_set_description (app, GS_APP_QUALITY_LOWEST, str->str);
+	return app;
+}
+
+/**
  * gs_plugin_add_unvoted_reviews:
  */
 gboolean
@@ -1010,7 +1027,7 @@ gs_plugin_add_unvoted_reviews (GsPlugin *plugin,
 		app_id = gs_review_get_metadata_item (review, "app_id");
 		if (g_strcmp0 (app_id, app_id_last) != 0) {
 			g_clear_object (&app_current);
-			app_current = gs_app_new (app_id);
+			app_current = gs_plugin_create_app_dummy (app_id);
 			gs_plugin_add_app (list, app_current);
 			app_id_last = app_id;
 		}

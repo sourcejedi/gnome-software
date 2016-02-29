@@ -84,6 +84,17 @@ gs_shell_moderate_review_clicked_cb (GsReviewRow *row,
 	gtk_widget_set_visible (GTK_WIDGET (row), FALSE);
 }
 
+
+static void
+gs_shell_moderate_selection_changed_cb (GtkListBox *listbox,
+					GsAppRow *app_row,
+					GsShellModerate *self)
+{
+	g_autofree gchar *tmp = NULL;
+	tmp = gs_app_to_string (gs_app_row_get_app (app_row));
+	g_print ("%s", tmp);
+}
+
 static void
 gs_shell_moderate_add_app (GsShellModerate *self, GsApp *app)
 {
@@ -92,8 +103,7 @@ gs_shell_moderate_add_app (GsShellModerate *self, GsApp *app)
 	guint i;
 
 	/* this hides the action button */
-	gs_app_set_kind (app, GS_APP_KIND_UNKNOWN);
-	gs_app_set_kind (app, GS_APP_KIND_SYSTEM);
+	gs_app_add_quirk (app, AS_APP_QUIRK_COMPULSORY);
 
 	/* add top level app */
 	app_row = gs_app_row_new (app);
@@ -301,6 +311,9 @@ static void
 gs_shell_moderate_init (GsShellModerate *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
+
+	g_signal_connect (self->list_box_install, "row-activated",
+			  G_CALLBACK (gs_shell_moderate_selection_changed_cb), self);
 
 	self->sizegroup_image = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
 	self->sizegroup_name = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);

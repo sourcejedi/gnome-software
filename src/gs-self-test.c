@@ -416,13 +416,13 @@ gs_plugin_loader_func (void)
 	g_assert_cmpstr (gs_app_get_id (app), ==, "os-update:gnome-boxes-libs;0.0.1;i386;updates-testing,libvirt-glib-devel;0.0.1;noarch;fedora");
 	g_assert_cmpstr (gs_app_get_name (app), ==, "OS Updates");
 //	g_assert_cmpstr (gs_app_get_summary (app), ==, "Includes performance, stability and security improvements for all users\nDo not segfault when using newer versons of libvirt.\nFix several memory leaks.");
-	g_assert_cmpint (gs_app_get_kind (app), ==, GS_APP_KIND_OS_UPDATE);
+	g_assert_cmpint (gs_app_get_kind (app), ==, AS_APP_KIND_OS_UPDATE);
 
 	app = g_list_nth_data (list, 1);
 	g_assert_cmpstr (gs_app_get_id (app), ==, "gnome-boxes");
 	g_assert_cmpstr (gs_app_get_name (app), ==, "Boxes");
 	g_assert_cmpstr (gs_app_get_summary (app), ==, "Do not segfault when using newer versons of libvirt.");
-	g_assert_cmpint (gs_app_get_kind (app), ==, GS_APP_KIND_NORMAL);
+	g_assert_cmpint (gs_app_get_kind (app), ==, AS_APP_KIND_DESKTOP);
 	gs_plugin_list_free (list);
 
 	/* test packagekit */
@@ -449,7 +449,8 @@ gs_plugin_loader_func (void)
 	g_assert_cmpstr (gs_app_get_name (app), ==, "Screenshot");
 	g_assert_cmpstr (gs_app_get_summary (app), ==, "Save images of your screen or individual windows");
 	g_assert_cmpint (gs_app_get_state (app), ==, AS_APP_STATE_INSTALLED);
-	g_assert_cmpint (gs_app_get_kind (app), ==, GS_APP_KIND_SYSTEM);
+	g_assert_cmpint (gs_app_get_kind (app), ==, AS_APP_KIND_DESKTOP);
+	g_assert (gs_app_has_quirk (app, AS_APP_QUIRK_COMPULSORY));
 	g_assert (gs_app_get_pixbuf (app) != NULL);
 	gs_plugin_list_free (list);
 
@@ -511,13 +512,12 @@ gs_plugin_loader_refine_func (void)
 	g_assert_no_error (error);
 	g_assert (ret);
 
-	ret = gs_plugin_loader_set_enabled (loader, "packagekit-refine", TRUE);
+	ret = gs_plugin_loader_set_enabled (loader, "dummy", TRUE);
 	g_assert (ret);
 
 	/* get the extra bits */
-	g_setenv ("GNOME_SOFTWARE_USE_PKG_DESCRIPTIONS", "1", TRUE);
-	app = gs_app_new ("gimp");
-	gs_app_add_source (app, "gimp");
+	app = gs_app_new ("gnome-boxes");
+	gs_app_add_source (app, "gnome-boxes");
 	ret = gs_plugin_loader_app_refine (loader, app,
 					   GS_PLUGIN_REFINE_FLAGS_DEFAULT |
 					   GS_PLUGIN_REFINE_FLAGS_REQUIRE_DESCRIPTION |
@@ -528,7 +528,8 @@ gs_plugin_loader_refine_func (void)
 	g_assert_no_error (error);
 	g_assert (ret);
 
-	g_assert_cmpstr (gs_app_get_licence (app), ==, "<a href=\"http://spdx.org/licenses/GPL-3.0+\">GPL-3.0+</a> and <a href=\"http://spdx.org/licenses/GPL-3.0\">GPL-3.0</a>");
+	g_assert_cmpstr (gs_app_get_licence (app), ==,
+			 "<a href=\"http://spdx.org/licenses/GPL-2.0+\">GPL-2.0+</a>");
 	g_assert_cmpstr (gs_app_get_description (app), !=, NULL);
 	url = gs_app_get_url (app, AS_URL_KIND_HOMEPAGE);
 	g_assert_cmpstr (url, ==, "http://www.gimp.org/");

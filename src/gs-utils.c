@@ -25,6 +25,10 @@
 #include <gio/gdesktopappinfo.h>
 #include <errno.h>
 
+#ifdef HAVE_POLKIT
+#include <polkit/polkit.h>
+#endif
+
 #include "gs-app.h"
 #include "gs-utils.h"
 #include "gs-plugin.h"
@@ -135,7 +139,7 @@ gs_app_notify_installed (GsApp *app)
 	 * has been successfully installed */
 	summary = g_strdup_printf (_("%s is now installed"), gs_app_get_name (app));
 	n = g_notification_new (summary);
-	if (gs_app_get_id_kind (app) == AS_ID_KIND_DESKTOP) {
+	if (gs_app_get_kind (app) == AS_APP_KIND_DESKTOP) {
 		/* TRANSLATORS: this is button that opens the newly installed application */
 		g_notification_add_button_with_target (n, _("Launch"),
 						       "app.launch", "s",
@@ -290,7 +294,7 @@ gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 	/* be aware of patent clauses */
 	if (hint & GS_APP_LICENCE_PATENT_CONCERN) {
 		g_string_append (body, "\n\n");
-		if (gs_app_get_id_kind (app) != AS_ID_KIND_CODEC) {
+		if (gs_app_get_kind (app) != AS_APP_KIND_CODEC) {
 			g_string_append_printf (body,
 						/* TRANSLATORS: Laws are geographical, urgh... */
 						_("It may be illegal to install "
@@ -499,6 +503,28 @@ gs_utils_get_user_hash (GError **error)
 	salted = g_strdup_printf ("gnome-software[%s:%s]",
 				  g_get_user_name (), data);
 	return g_compute_checksum_for_string (G_CHECKSUM_SHA1, salted, -1);
+}
+
+/**
+ * gs_utils_get_permission:
+ **/
+GPermission *
+gs_utils_get_permission (const gchar *id)
+{
+#ifdef HAVE_POLKIT
+	g_autoptr(GPermission) permission = NULL;
+	g_autoptr(GError) error = NULL;
+
+	permission = polkit_permission_new_sync (id, NULL, NULL, &error);
+	if (permission == NULL) {
+		g_warning ("Failed to create permission %s: %s", id, error->message);
+		return NULL;
+	}
+	return g_steal_pointer (&permission);
+#else
+	g_debug ("no PolicyKit, so can't return GPermission for %s", id);
+	return NULL;
+#endif
 }
 
 /* vim: set noexpandtab: */
