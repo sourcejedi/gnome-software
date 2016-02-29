@@ -812,98 +812,6 @@ set_package_review (GsPlugin *plugin,
 	return ret;
 }
 
-static gboolean
-set_review_usefulness (GsPlugin *plugin,
-		       const gchar *review_id,
-		       gboolean is_useful,
-		       GError **error)
-{
-	g_autofree gchar *path;
-
-	/* Create message for reviews.ubuntu.com */
-	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
-}
-
-static gboolean
-report_review (GsPlugin *plugin,
-	       const gchar *review_id,
-	       const gchar *reason,
-	       const gchar *text,
-	       GError **error)
-{
-	g_autofree gchar *path;
-
-	/* Create message for reviews.ubuntu.com */
-	// FIXME: escape reason / text properly
-	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
-}
-
-static gboolean
-remove_review (GsPlugin *plugin,
-	       const gchar *review_id,
-	       GError **error)
-{
-	g_autofree gchar *path;
-
-	/* Create message for reviews.ubuntu.com */
-	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
-}
-
-typedef struct
-{
-	GsPlugin *plugin;
-	GError **error;
-
-	GCond cond;
-	GMutex mutex;
-
-	gboolean done;
-	gboolean success;
-	gboolean remember;
-} LoginContext;
-
-static gboolean
-show_login_dialog (gpointer user_data)
-{
-	LoginContext *context = user_data;
-	GsPluginPrivate *priv = context->plugin->priv;
-	GtkWidget *dialog;
-
-	dialog = gs_ubuntu_login_dialog_new ();
-	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
-	case GTK_RESPONSE_DELETE_EVENT:
-	case GTK_RESPONSE_CANCEL:
-		g_set_error (context->error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to sign into Ubuntu One");
-
-		context->success = FALSE;
-		break;
-
-	case GTK_RESPONSE_OK:
-		context->remember = gs_ubuntu_login_dialog_get_do_remember (GS_UBUNTU_LOGIN_DIALOG (dialog));
-		priv->consumer_key = g_strdup (gs_ubuntu_login_dialog_get_consumer_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->consumer_secret = g_strdup (gs_ubuntu_login_dialog_get_consumer_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->token_key = g_strdup (gs_ubuntu_login_dialog_get_token_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->token_secret = g_strdup (gs_ubuntu_login_dialog_get_token_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		context->success = TRUE;
-		break;
-	}
-
-	gtk_widget_destroy (dialog);
-
-	g_mutex_lock (&context->mutex);
-	context->done = TRUE;
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-
-	return G_SOURCE_REMOVE;
-}
-
 typedef struct
 {
 	GsPlugin *plugin;
@@ -993,6 +901,58 @@ lookup_token_secret (GObject      *source_object,
 
 	g_cond_signal (&context->cond);
 	g_mutex_unlock (&context->mutex);
+}
+
+typedef struct
+{
+	GsPlugin *plugin;
+	GError **error;
+
+	GCond cond;
+	GMutex mutex;
+
+	gboolean done;
+	gboolean success;
+	gboolean remember;
+} LoginContext;
+
+static gboolean
+show_login_dialog (gpointer user_data)
+{
+	LoginContext *context = user_data;
+	GsPluginPrivate *priv = context->plugin->priv;
+	GtkWidget *dialog;
+
+	dialog = gs_ubuntu_login_dialog_new ();
+	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
+	case GTK_RESPONSE_DELETE_EVENT:
+	case GTK_RESPONSE_CANCEL:
+		g_set_error (context->error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to sign into Ubuntu One");
+
+		context->success = FALSE;
+		break;
+
+	case GTK_RESPONSE_OK:
+		context->remember = gs_ubuntu_login_dialog_get_do_remember (GS_UBUNTU_LOGIN_DIALOG (dialog));
+		priv->consumer_key = g_strdup (gs_ubuntu_login_dialog_get_consumer_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->consumer_secret = g_strdup (gs_ubuntu_login_dialog_get_consumer_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->token_key = g_strdup (gs_ubuntu_login_dialog_get_token_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		priv->token_secret = g_strdup (gs_ubuntu_login_dialog_get_token_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		context->success = TRUE;
+		break;
+	}
+
+	gtk_widget_destroy (dialog);
+
+	g_mutex_lock (&context->mutex);
+	context->done = TRUE;
+	g_cond_signal (&context->cond);
+	g_mutex_unlock (&context->mutex);
+
+	return G_SOURCE_REMOVE;
 }
 
 static gboolean
@@ -1135,6 +1095,55 @@ sign_into_ubuntu (GsPlugin  *plugin,
 	}
 
 	return login_context.success;
+}
+
+static gboolean
+set_review_usefulness (GsPlugin *plugin,
+		       const gchar *review_id,
+		       gboolean is_useful,
+		       GError **error)
+{
+	g_autofree gchar *path;
+
+	if (!sign_into_ubuntu (plugin, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+}
+
+static gboolean
+report_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       const gchar *reason,
+	       const gchar *text,
+	       GError **error)
+{
+	g_autofree gchar *path;
+
+	if (!sign_into_ubuntu (plugin, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	// FIXME: escape reason / text properly
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+}
+
+static gboolean
+remove_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       GError **error)
+{
+	g_autofree gchar *path;
+
+	if (!sign_into_ubuntu (plugin, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
 }
 
 gboolean
