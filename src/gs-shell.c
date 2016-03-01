@@ -674,13 +674,6 @@ gs_shell_monitor_permission (GsShell *shell)
 				  G_CALLBACK (on_permission_changed), shell);
 }
 
-static void
-gs_shell_main_window_hidden_cb (GtkWidget *widget,
-				gpointer   user_data)
-{
-	g_action_group_activate_action (G_ACTION_GROUP (g_application_get_default ()), "quit", NULL);
-}
-
 /**
  * gs_shell_setup:
  */
@@ -702,8 +695,6 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 	/* get UI */
 	priv->builder = gtk_builder_new_from_resource ("/org/gnome/Software/gnome-software.ui");
 	priv->main_window = GTK_WINDOW (gtk_builder_get_object (priv->builder, "window_software"));
-	g_signal_connect (priv->main_window, "hide",
-			  G_CALLBACK (gs_shell_main_window_hidden_cb), shell);
 	g_signal_connect (priv->main_window, "map",
 			  G_CALLBACK (gs_shell_main_window_mapped_cb), shell);
 
