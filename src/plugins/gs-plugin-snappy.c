@@ -29,6 +29,11 @@
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
 
+// This is fixed in json-glib 1.1.1
+#ifndef JsonParser_autoptr
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonParser, g_object_unref)
+#endif
+
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
 
 struct GsPluginPrivate {
@@ -55,7 +60,7 @@ static GSocket *
 open_snapd_socket (GError **error)
 {
 	GSocket *socket;
-	g_autoptr (GSocketAddress) address = NULL;
+	g_autoptr(GSocketAddress) address = NULL;
 	g_autoptr(GError) sub_error = NULL;
 
 	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, &sub_error);
@@ -226,7 +231,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	GPtrArray *query_fields;
 	g_autoptr (GString) path = NULL;
 	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
-	JsonParser *parser;
+	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
 	g_autoptr(GError) sub_error = NULL;
@@ -376,7 +381,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		}
 		gs_plugin_add_app (list, app);
 	}
-	g_object_unref (parser);
 
 	return TRUE;
 }
