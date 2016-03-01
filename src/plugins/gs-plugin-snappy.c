@@ -29,11 +29,6 @@
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
 
-// This is fixed in json-glib 1.1.1
-#ifndef JsonParser_autoptr
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonParser, g_object_unref)
-#endif
-
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
 
 struct GsPluginPrivate {
