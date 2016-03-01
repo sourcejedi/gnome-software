@@ -35,13 +35,6 @@
 #include "gs-ubuntu-login-dialog.h"
 #include "gs-os-release.h"
 
-// Fixes in json-glib >= 1.1.1
-#ifndef JsonParser_autoptr
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonParser, g_object_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonBuilder, g_object_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(JsonGenerator, g_object_unref)
-#endif
-
 #define SCHEMA_NAME     "com.ubuntu.UbuntuOne.GnomeSoftware"
 #define CONSUMER_KEY    "consumer-key"
 #define CONSUMER_SECRET "consumer-secret"
