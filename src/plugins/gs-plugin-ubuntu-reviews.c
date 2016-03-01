@@ -773,7 +773,7 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 		if (!json_parser_load_from_data (parser, msg->response_body->data, -1, error)) {
 			return FALSE;
 		}
-		*result = parser;
+		*result = g_steal_pointer (&parser);
 	}
 
 	return TRUE;
