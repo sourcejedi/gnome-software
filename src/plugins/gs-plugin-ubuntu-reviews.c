@@ -1093,7 +1093,7 @@ set_review_usefulness (GsPlugin *plugin,
 		       gboolean is_useful,
 		       GError **error)
 {
-	g_autofree gchar *path;
+	g_autofree gchar *path = NULL;
 
 	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
@@ -1110,7 +1110,7 @@ report_review (GsPlugin *plugin,
 	       const gchar *text,
 	       GError **error)
 {
-	g_autofree gchar *path;
+	g_autofree gchar *path = NULL;
 
 	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
@@ -1126,7 +1126,7 @@ remove_review (GsPlugin *plugin,
 	       const gchar *review_id,
 	       GError **error)
 {
-	g_autofree gchar *path;
+	g_autofree gchar *path = NULL;
 
 	if (!sign_into_ubuntu (plugin, error))
 		return FALSE;
