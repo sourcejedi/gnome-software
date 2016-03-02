@@ -53,6 +53,15 @@ gs_plugin_get_name (void)
 	return "apt";
 }
 
+const gchar **
+gs_plugin_get_deps (GsPlugin *plugin)
+{
+	static const gchar *deps[] = {
+		"appstream",		/* need pkgname */
+		NULL };
+	return deps;
+}
+
 static void
 free_package_info (gpointer data)
 {
