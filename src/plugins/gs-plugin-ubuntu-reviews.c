@@ -590,7 +590,7 @@ parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 
 		/* Read in from JSON... (skip bad entries) */
 		review = parse_review (json_array_get_element (array, i));
-		if (review)
+		if (review != NULL)
 			gs_app_add_review (app, review);
 	}
 
