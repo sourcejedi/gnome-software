@@ -450,18 +450,12 @@ static GsFolder *
 get_app_folder (GsFolders *folders, const gchar *app, GPtrArray *categories)
 {
 	GsFolder *folder;
-	const gchar *category;
 	guint i;
 
 	folder = g_hash_table_lookup (folders->apps, app);
 	if (!folder && categories) {
 		for (i = 0; i < categories->len; i++) {
-			category = g_ptr_array_index (categories, i);
-			if (!category) {
-				continue;
-			}
-
-			folder = g_hash_table_lookup (folders->categories, category);
+			folder = g_hash_table_lookup (folders->categories, g_ptr_array_index (categories, i));
 			if (folder) {
 				break;
 			}
