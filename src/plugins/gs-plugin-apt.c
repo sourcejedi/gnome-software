@@ -60,7 +60,7 @@ free_package_info (gpointer data)
 	g_free (info->name);
 	g_free (info->installed_version);
 	g_free (info->update_version);
-	g_free (info);
+	g_slice_free (PackageInfo, info);
 }
 
 void
