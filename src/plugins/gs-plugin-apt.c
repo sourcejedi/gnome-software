@@ -875,7 +875,7 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 			   &output,
 			   NULL,
 			   NULL,
-			   NULL))
+			   error))
 		return FALSE;
 
 	tokens = g_strsplit (output, "\n", 0);
