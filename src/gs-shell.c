@@ -560,6 +560,23 @@ gs_shell_monitor_permission (GsShell *shell)
 				  G_CALLBACK (on_permission_changed), shell);
 }
 
+static gboolean
+in_desktop (const gchar *name)
+{
+	const gchar *desktop_name_list;
+	g_auto(GStrv) names = NULL;
+	gint i;
+
+	desktop_name_list = g_getenv ("XDG_CURRENT_DESKTOP");
+	if (desktop_name_list == NULL)
+		return FALSE;
+
+	names = g_strsplit (desktop_name_list, ":", -1);
+	for (i = 0; names[i] && strcmp (names[i], name) != 0; i++);
+
+	return names[i] != NULL;
+}
+
 /**
  * gs_shell_setup:
  */
@@ -592,10 +609,14 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 
 	/* fix up the header bar */
 	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "header"));
-	g_object_ref (widget);
-	gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (widget)), widget);
-	gtk_window_set_titlebar (GTK_WINDOW (priv->main_window), widget);
-	g_object_unref (widget);
+	if (in_desktop ("Unity")) {
+		gtk_header_bar_set_decoration_layout (GTK_HEADER_BAR (widget), "");
+	} else {
+		g_object_ref (widget);
+		gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (widget)), widget);
+		gtk_window_set_titlebar (GTK_WINDOW (priv->main_window), widget);
+		g_object_unref (widget);
+	}
 
 	/* global keynav */
 	g_signal_connect_after (priv->main_window, "key_press_event",
