@@ -674,6 +674,23 @@ gs_shell_monitor_permission (GsShell *shell)
 				  G_CALLBACK (on_permission_changed), shell);
 }
 
+static gboolean
+in_desktop (const gchar *name)
+{
+	const gchar *desktop_name_list;
+	g_auto(GStrv) names = NULL;
+	gint i;
+
+	desktop_name_list = g_getenv ("XDG_CURRENT_DESKTOP");
+	if (desktop_name_list == NULL)
+		return FALSE;
+
+	names = g_strsplit (desktop_name_list, ":", -1);
+	for (i = 0; names[i] && strcmp (names[i], name) != 0; i++);
+
+	return names[i] != NULL;
+}
+
 /**
  * gs_shell_setup:
  */
