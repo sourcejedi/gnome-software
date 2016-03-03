@@ -1100,4 +1100,3 @@ gs_plugin_refine_app (GsPlugin *plugin,
 
 	return TRUE;
 }
-
