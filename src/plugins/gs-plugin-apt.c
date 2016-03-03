@@ -381,7 +381,7 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
-	gchar **lines;
+	g_auto(GStrv) lines = NULL;
 	int i;
 	GString *details;
 
@@ -435,7 +435,6 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 				g_string_append_printf (details, "%s\n\n", lines[i]);
 		}
 	}
-	g_strfreev (lines);
 
 	gs_app_set_update_details (app, details->str);
 	g_string_free (details, TRUE);
@@ -856,7 +855,7 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 	g_autofree gchar *output = NULL;
 	g_autofree gchar *description = NULL;
 	g_autofree gchar *path = NULL;
-	gchar **tokens = NULL;
+	g_auto(GStrv) tokens = NULL;
 
 	argv[0] = argv0 = g_strdup ("dpkg-deb");
 	argv[1] = argv1 = g_strdup ("--showformat=${Package}\\n"
@@ -898,8 +897,6 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 	gs_app_set_origin (app, path);
 
 	gs_plugin_add_app (list, app);
-
-	g_strfreev (tokens);
 
 	return TRUE;
 }
