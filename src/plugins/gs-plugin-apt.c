@@ -879,6 +879,15 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 		return FALSE;
 
 	tokens = g_strsplit (output, "\n", 0);
+
+	if (g_strv_length (tokens) < 5) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "dpkg-deb output format incorrect:\n\"%s\"\n", output);
+		return FALSE;
+	}
+
 	description = g_strjoinv (NULL, tokens + 5);
 
 	app = gs_app_new (tokens[0]);
