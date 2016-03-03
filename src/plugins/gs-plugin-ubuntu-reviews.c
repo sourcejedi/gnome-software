@@ -691,4 +691,3 @@ gs_plugin_refine (GsPlugin *plugin,
 
 	return ret;
 }
-

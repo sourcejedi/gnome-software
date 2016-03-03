@@ -620,12 +620,10 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 	if (conn == NULL)
 		return FALSE;
 
-	if (app) {
-		GVariantBuilder builder;
-		g_variant_builder_init (&builder, G_VARIANT_TYPE ("as")),
-		g_variant_builder_add (&builder, "s", gs_app_get_source_default (app));
-		parameters = g_variant_new ("(as)", &builder);
-	}
+	if (g_strcmp0 (method, "InstallFile") == 0)
+		parameters = g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app));
+	else if (app)
+		parameters = g_variant_new_parsed ("[%s]", gs_app_get_source_default (app));
 	else
 		parameters = g_variant_new ("()");
 	result = g_dbus_connection_call_sync (conn,
@@ -705,8 +703,11 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 static gboolean
 app_is_ours (GsApp *app)
 {
+	const gchar *management_plugin = gs_app_get_management_plugin (app);
+
 	// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
-	return g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") == 0;
+	return g_strcmp0 (management_plugin, "PackageKit") == 0 ||
+	       g_strcmp0 (management_plugin, "dpkg") == 0;
 }
 
 gboolean
@@ -715,6 +716,8 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
+	gboolean success = FALSE;
+
 	if (!app_is_ours (app))
 		return TRUE;
 
@@ -722,14 +725,18 @@ gs_plugin_app_install (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (aptd_transaction (plugin, "InstallPackages", app, error))
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-	else {
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		return FALSE;
-	}
 
-	return TRUE;
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") == 0)
+		success = aptd_transaction (plugin, "InstallPackages", app, error);
+	else if (g_strcmp0 (gs_app_get_management_plugin (app), "dpkg") == 0)
+		success = aptd_transaction (plugin, "InstallFile", app, error);
+
+	if (success)
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	else
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+
+	return success;
 }
 
 gboolean
@@ -830,4 +837,69 @@ gs_plugin_launch (GsPlugin *plugin,
 		return TRUE;
 
 	return gs_plugin_app_launch (plugin, app, error);
+}
+
+gboolean
+gs_plugin_filename_to_app (GsPlugin      *plugin,
+			   GList        **list,
+			   const gchar   *filename,
+			   GCancellable  *cancellable,
+			   GError       **error)
+{
+	GsApp *app;
+	g_autoptr(GFile) file = NULL;
+	gchar *argv[5] = { NULL };
+	g_autofree gchar *argv0 = NULL;
+	g_autofree gchar *argv1 = NULL;
+	g_autofree gchar *argv2 = NULL;
+	g_autofree gchar *argv3 = NULL;
+	g_autofree gchar *output = NULL;
+	g_autofree gchar *description = NULL;
+	g_autofree gchar *path = NULL;
+	gchar **tokens = NULL;
+
+	argv[0] = argv0 = g_strdup ("dpkg-deb");
+	argv[1] = argv1 = g_strdup ("--showformat=${Package}\\n"
+				    "${Version}\\n"
+				    "${Installed-Size}\\n"
+				    "${Homepage}\\n"
+				    "${Description}");
+	argv[2] = argv2 = g_strdup ("-W");
+	argv[3] = argv3 = g_strdup (filename);
+
+	if (!g_spawn_sync (NULL,
+			   argv,
+			   NULL,
+			   G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL,
+			   NULL,
+			   NULL,
+			   &output,
+			   NULL,
+			   NULL,
+			   NULL))
+		return FALSE;
+
+	tokens = g_strsplit (output, "\n", 0);
+	description = g_strjoinv (NULL, tokens + 5);
+
+	app = gs_app_new (tokens[0]);
+	file = g_file_new_for_commandline_arg (filename);
+	path = g_file_get_path (file);
+
+	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, tokens[0]);
+	gs_app_set_version (app, tokens[1]);
+	gs_app_set_size (app, 1024 * atoi (tokens[2]));
+	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, tokens[3]);
+	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, tokens[4]);
+	gs_app_set_description (app, GS_APP_QUALITY_HIGHEST, description + 1);
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
+	gs_app_set_management_plugin (app, "dpkg");
+	gs_app_add_source (app, tokens[0]);
+	gs_app_set_origin (app, path);
+
+	gs_plugin_add_app (list, app);
+
+	g_strfreev (tokens);
+
+	return TRUE;
 }
