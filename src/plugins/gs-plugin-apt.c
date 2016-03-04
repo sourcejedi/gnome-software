@@ -621,7 +621,7 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 
 	if (g_strcmp0 (method, "InstallFile") == 0)
 		parameters = g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app));
-	else if (app)
+	else if (app != NULL)
 		parameters = g_variant_new_parsed ("[%s]", gs_app_get_source_default (app));
 	else
 		parameters = g_variant_new ("()");
