@@ -385,8 +385,10 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	int i;
 	GString *details;
 
-	g_return_if_fail (gs_app_get_source_default (app) != NULL);
-	g_return_if_fail (gs_app_get_update_version (app) != NULL);
+	// Need to know the source and version to download changelog
+	if (gs_app_get_source_default (app) == NULL ||
+	    gs_app_get_update_version (app) == NULL)
+		return;
 
 	source = gs_app_get_source_default (app);
 	if (g_str_has_prefix (source, "lib"))
