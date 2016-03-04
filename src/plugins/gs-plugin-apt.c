@@ -620,10 +620,13 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 		return FALSE;
 
 	if (g_strcmp0 (method, "InstallFile") == 0)
-		parameters = g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app));
-	else if (app != NULL)
-		parameters = g_variant_new_parsed ("[%s]", gs_app_get_source_default (app));
-	else
+		parameters = g_variant_new ("(sb)", gs_app_get_origin (app), TRUE);
+	else if (app != NULL) {
+		GVariantBuilder builder;
+		g_variant_builder_init (&builder, G_VARIANT_TYPE ("as")),
+		g_variant_builder_add (&builder, "s", gs_app_get_source_default (app));
+		parameters = g_variant_new ("(as)", &builder);
+	} else
 		parameters = g_variant_new ("()");
 	result = g_dbus_connection_call_sync (conn,
 					      "org.debian.apt",
