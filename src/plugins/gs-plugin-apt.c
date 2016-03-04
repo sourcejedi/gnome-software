@@ -559,9 +559,13 @@ transaction_property_changed_cb (GDBusConnection *connection,
 	const gchar *name;
 	g_autoptr(GVariant) value = NULL;
 
-	g_variant_get (parameters, "(&sv)", &name, &value);
-	if (data->app && strcmp (name, "Progress") == 0)
-		gs_plugin_progress_update (data->plugin, data->app, g_variant_get_int32 (value));
+	if (g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(sv)"))) {
+		g_variant_get (parameters, "(&sv)", &name, &value);
+		if (data->app && strcmp (name, "Progress") == 0)
+			gs_plugin_progress_update (data->plugin, data->app, g_variant_get_int32 (value));
+	} else {
+		g_warning ("Unknown parameters in %s.%s: %s", interface_name, signal_name, g_variant_get_type_string (parameters));
+	}
 }
 
 static void
@@ -575,7 +579,10 @@ transaction_finished_cb (GDBusConnection *connection,
 {
 	TransactionData *data = user_data;
 
-	g_variant_get (parameters, "(s)", data->result);
+	if (g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(s)")))
+		g_variant_get (parameters, "(s)", data->result);
+	else
+		g_warning ("Unknown parameters in %s.%s: %s", interface_name, signal_name, g_variant_get_type_string (parameters));
 
 	g_main_loop_quit (data->loop);
 }
