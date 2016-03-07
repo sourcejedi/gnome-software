@@ -386,17 +386,16 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	GString *details;
 
 	// Need to know the source and version to download changelog
-	if (gs_app_get_source_default (app) == NULL ||
-	    gs_app_get_update_version (app) == NULL)
+	source = gs_app_get_source_default (app);
+	version = gs_app_get_update_version (app);
+	if (source == NULL || version == NULL)
 		return;
 
-	source = gs_app_get_source_default (app);
 	if (g_str_has_prefix (source, "lib"))
 		source_prefix = g_strdup_printf ("lib%c", source[3]);
 	else
 		source_prefix = g_strdup_printf ("%c", source[0]);
 	current_version = gs_app_get_version (app);
-	version = gs_app_get_update_version (app);
 	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, source, version);
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
