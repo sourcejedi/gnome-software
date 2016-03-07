@@ -377,7 +377,7 @@ done:
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	const gchar *source, *current_version, *version;
+	const gchar *source, *current_version, *update_version;
 	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
@@ -387,21 +387,21 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 
 	// Need to know the source and version to download changelog
 	source = gs_app_get_source_default (app);
-	version = gs_app_get_update_version (app);
-	if (source == NULL || version == NULL)
+	current_version = gs_app_get_version (app);
+	update_version = gs_app_get_update_version (app);
+	if (source == NULL || update_version == NULL)
 		return;
 
 	if (g_str_has_prefix (source, "lib"))
 		source_prefix = g_strdup_printf ("lib%c", source[3]);
 	else
 		source_prefix = g_strdup_printf ("%c", source[0]);
-	current_version = gs_app_get_version (app);
-	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, source, version);
+	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, source, update_version);
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
 	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
-		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", source, version, soup_status_get_phrase (status_code));
+		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", source, update_version, soup_status_get_phrase (status_code));
 		return;
 	}
 
