@@ -380,10 +380,23 @@ done:
 	return result;
 }
 
+static const gchar *
+get_source_name (GsPlugin *plugin, const gchar *binary_name)
+{
+	PackageInfo *info;
+
+	info = g_hash_table_lookup (plugin->priv->package_info, binary_name);
+	if (info != NULL && info->source != NULL) {
+		return info->source;
+	} else {
+		return binary_name;
+	}
+}
+
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	const gchar *source, *current_version, *update_version;
+	const gchar *binary_source, *source, *current_version, *update_version;
 	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
@@ -392,12 +405,13 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	GString *details;
 
 	// Need to know the source and version to download changelog
-	source = gs_app_get_source_default (app);
+	binary_source = gs_app_get_source_default (app);
 	current_version = gs_app_get_version (app);
 	update_version = gs_app_get_update_version (app);
-	if (source == NULL || update_version == NULL)
+	if (binary_source == NULL || update_version == NULL)
 		return;
 
+	source = get_source_name (plugin, binary_source);
 	if (g_str_has_prefix (source, "lib"))
 		source_prefix = g_strdup_printf ("lib%c", source[3]);
 	else
@@ -538,7 +552,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
-		gs_app_add_source (app, info->source ? info->source : info->name);
+		gs_app_add_source (app, info->name);
 		gs_plugin_add_app (list, app);
 	}
 
@@ -816,7 +830,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
-		gs_app_add_source (app, info->source ? info->source : info->name);
+		gs_app_add_source (app, info->name);
 		gs_plugin_add_app (list, app);
 	}
 
