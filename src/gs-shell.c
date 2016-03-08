@@ -516,6 +516,13 @@ main_window_closed_cb (GtkWidget *dialog, GdkEvent *event, gpointer user_data)
 	return TRUE;
 }
 
+static void
+main_window_destroyed_cb (GtkWidget *widget,
+			  GsShell   *shell)
+{
+	g_action_group_activate_action (G_ACTION_GROUP (g_application_get_default ()), "quit", NULL);
+}
+
 /**
  * gs_shell_updates_changed_cb:
  */
@@ -591,6 +598,7 @@ void
 gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *cancellable)
 {
 	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
+	GApplicationFlags flags;
 	GtkWidget *widget;
 
 	g_return_if_fail (GS_IS_SHELL (shell));
@@ -612,8 +620,15 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 	gtk_icon_theme_append_search_path (gtk_icon_theme_get_default (),
 					   GS_DATA G_DIR_SEPARATOR_S "icons");
 
-	g_signal_connect (priv->main_window, "delete-event",
-			  G_CALLBACK (main_window_closed_cb), shell);
+	flags = g_application_get_flags (g_application_get_default ());
+
+	if (flags & G_APPLICATION_IS_SERVICE) {
+		g_signal_connect (priv->main_window, "delete-event",
+				  G_CALLBACK (main_window_closed_cb), shell);
+	} else {
+		g_signal_connect (priv->main_window, "destroy",
+				  G_CALLBACK (main_window_destroyed_cb), shell);
+	}
 
 	/* fix up the header bar */
 	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "header"));
