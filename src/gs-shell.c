@@ -497,6 +497,25 @@ window_button_press_event (GtkWidget *win, GdkEventButton *event, GsShell *shell
 	return GDK_EVENT_STOP;
 }
 
+static gboolean
+main_window_closed_cb (GtkWidget *dialog, GdkEvent *event, gpointer user_data)
+{
+	GsShell *shell = user_data;
+	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
+	BackEntry *entry;
+
+	/* When the window is closed, reset the initial mode to overview */
+	priv->mode = GS_SHELL_MODE_OVERVIEW;
+
+	/* ... and clear any remaining entries in the back button stack */
+	while ((entry = g_queue_pop_head (priv->back_entry_stack)) != NULL) {
+		free_back_entry (entry);
+	}
+
+	gtk_widget_hide (dialog);
+	return TRUE;
+}
+
 /**
  * gs_shell_updates_changed_cb:
  */
@@ -511,18 +530,6 @@ gs_shell_updates_changed_cb (GsPluginLoader *plugin_loader, GsShell *shell)
 	gs_shell_overview_reload (priv->shell_overview);
 	gs_shell_search_reload (priv->shell_search);
 	gs_shell_updates_reload (priv->shell_updates);
-}
-
-/**
- * gs_shell_main_window_destroyed_cb:
- */
-static void
-gs_shell_main_window_destroyed_cb (GtkWidget *widget,
-				   GsShell   *shell)
-{
-	GActionGroup *action_group = G_ACTION_GROUP (g_application_get_default ());
-
-	g_action_group_activate_action (action_group, "quit", NULL);
 }
 
 /**
@@ -598,14 +605,15 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 	/* get UI */
 	priv->builder = gtk_builder_new_from_resource ("/org/gnome/Software/gnome-software.ui");
 	priv->main_window = GTK_WINDOW (gtk_builder_get_object (priv->builder, "window_software"));
-	g_signal_connect (priv->main_window, "destroy",
-			  G_CALLBACK (gs_shell_main_window_destroyed_cb), shell);
 	g_signal_connect (priv->main_window, "map",
 			  G_CALLBACK (gs_shell_main_window_mapped_cb), shell);
 
 	/* add application specific icons to search path */
 	gtk_icon_theme_append_search_path (gtk_icon_theme_get_default (),
 					   GS_DATA G_DIR_SEPARATOR_S "icons");
+
+	g_signal_connect (priv->main_window, "delete-event",
+			  G_CALLBACK (main_window_closed_cb), shell);
 
 	/* fix up the header bar */
 	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "header"));
