@@ -30,6 +30,7 @@
 
 typedef struct {
 	gchar *name;
+	gchar *source;
 	gchar *installed_version;
 	gchar *update_version;
 	gint installed_size;
@@ -67,6 +68,7 @@ free_package_info (gpointer data)
 {
 	PackageInfo *info = data;
 	g_free (info->name);
+	g_free (info->source);
 	g_free (info->installed_version);
 	g_free (info->update_version);
 	g_slice_free (PackageInfo, info);
@@ -317,6 +319,10 @@ field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_
 		}
 	} else if (strncmp (name, "Installed-Size", name_length) == 0) {
 		data->current_info->installed_size = atoi (value);
+	} else if (strncmp (name, "Source", name_length) == 0) {
+		gchar *source = g_strndup (value, value_length);
+		g_free (data->current_info->source);
+		data->current_info->source = source;
 	} else if (strncmp (name, "Version", name_length) == 0) {
 		gchar *version = g_strndup (value, value_length);
 		if (data->current_installed) {
@@ -532,7 +538,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
-		gs_app_add_source (app, info->name);
+		gs_app_add_source (app, info->source ? info->source : info->name);
 		gs_plugin_add_app (list, app);
 	}
 
@@ -810,7 +816,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
-		gs_app_add_source (app, info->name);
+		gs_app_add_source (app, info->source ? info->source : info->name);
 		gs_plugin_add_app (list, app);
 	}
 
