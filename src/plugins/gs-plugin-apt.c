@@ -723,7 +723,7 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "apt trasaction returned result %s", transaction_result);
+			     "apt transaction returned result %s", transaction_result);
 		return FALSE;
 	}
 
