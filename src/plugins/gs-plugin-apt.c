@@ -869,6 +869,35 @@ gs_plugin_launch (GsPlugin *plugin,
 	return gs_plugin_app_launch (plugin, app, error);
 }
 
+static gboolean
+content_type_matches (const gchar *filename,
+		      gboolean *matches,
+		      GCancellable *cancellable,
+		      GError **error)
+{
+	const gchar *content_type;
+	g_autoptr(GFile) file = NULL;
+	g_autoptr(GFileInfo) info = NULL;
+	const gchar *supported_types[] = {
+		"application/vnd.debian.binary-package",
+		NULL };
+
+	/* get content type */
+	file = g_file_new_for_path (filename);
+	info = g_file_query_info (file,
+				  G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+				  G_FILE_QUERY_INFO_NONE,
+				  cancellable,
+				  error);
+	if (info == NULL)
+		return FALSE;
+
+	content_type = g_file_info_get_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
+	*matches = g_strv_contains (supported_types, content_type);
+
+	return TRUE;
+}
+
 gboolean
 gs_plugin_filename_to_app (GsPlugin      *plugin,
 			   GList        **list,
@@ -876,6 +905,7 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 			   GCancellable  *cancellable,
 			   GError       **error)
 {
+	gboolean supported;
 	GsApp *app;
 	g_autoptr(GFile) file = NULL;
 	gchar *argv[5] = { NULL };
@@ -887,6 +917,14 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 	g_autofree gchar *description = NULL;
 	g_autofree gchar *path = NULL;
 	g_auto(GStrv) tokens = NULL;
+
+	if (!content_type_matches (filename,
+				   &supported,
+				   cancellable,
+				   error))
+		return FALSE;
+	if (!supported)
+		return TRUE;
 
 	argv[0] = argv0 = g_strdup ("dpkg-deb");
 	argv[1] = argv1 = g_strdup ("--showformat=${Package}\\n"
