@@ -197,12 +197,20 @@ gs_shell_search_set_appid_to_show (GsShellSearch *self, const gchar *appid)
 	self->appid_to_show = g_strdup (appid);
 }
 
+void
+gs_shell_search_set_text (GsShellSearch *self, const gchar *value)
+{
+	g_free (self->value);
+	self->value = g_strdup (value);
+}
+
 /**
  * gs_shell_search_switch_to:
  **/
-void
-gs_shell_search_switch_to (GsShellSearch *self, const gchar *value, gboolean scroll_up)
+static void
+gs_shell_search_switch_to (GsPage *page, gboolean scroll_up)
 {
+	GsShellSearch *self = GS_SHELL_SEARCH (page);
 	GtkWidget *widget;
 
 	if (gs_shell_get_mode (self->shell) != GS_SHELL_MODE_SEARCH) {
@@ -222,9 +230,6 @@ gs_shell_search_switch_to (GsShellSearch *self, const gchar *value, gboolean scr
 		adj = gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (self->scrolledwindow_search));
 		gtk_adjustment_set_value (adj, gtk_adjustment_get_lower (adj));
 	}
-
-	g_free (self->value);
-	self->value = g_strdup (value);
 
 	gs_shell_search_load (self);
 }
@@ -440,6 +445,7 @@ gs_shell_search_class_init (GsShellSearchClass *klass)
 	object_class->finalize = gs_shell_search_finalize;
 	page_class->app_installed = gs_shell_search_app_installed;
 	page_class->app_removed = gs_shell_search_app_removed;
+	page_class->switch_to = gs_shell_search_switch_to;
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-shell-search.ui");
 
