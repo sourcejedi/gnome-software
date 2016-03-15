@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2013-2014 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2013-2016 Richard Hughes <richard@hughsie.com>
  * Copyright (C) 2013 Matthias Clasen <mclasen@redhat.com>
  *
  * Licensed under the GNU General Public License Version 2
@@ -54,6 +54,7 @@ struct _GsShellDetails
 	GsApp			*app;
 	GsShell			*shell;
 	SoupSession		*session;
+	gboolean		 enable_reviews;
 
 	GtkWidget		*application_details_icon;
 	GtkWidget		*application_details_summary;
@@ -100,6 +101,7 @@ struct _GsShellDetails
 	GtkWidget		*spinner_details;
 	GtkWidget		*spinner_install_remove;
 	GtkWidget		*stack_details;
+	GtkWidget		*grid_details_kudo;
 	GtkWidget		*image_details_kudo_docs;
 	GtkWidget		*image_details_kudo_integration;
 	GtkWidget		*image_details_kudo_translated;
@@ -153,9 +155,10 @@ gs_shell_details_set_state (GsShellDetails *self,
 /**
  * gs_shell_details_switch_to:
  **/
-void
-gs_shell_details_switch_to (GsShellDetails *self)
+static void
+gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 {
+	GsShellDetails *self = GS_SHELL_DETAILS (page);
 	AsAppState state;
 	GtkWidget *widget;
 	GtkAdjustment *adj;
@@ -365,7 +368,7 @@ gs_shell_details_switch_to_idle (gpointer user_data)
 	GsShellDetails *self = GS_SHELL_DETAILS (user_data);
 
 	if (gs_shell_get_mode (self->shell) == GS_SHELL_MODE_DETAILS)
-		gs_shell_details_switch_to (self);
+		gs_page_switch_to (GS_PAGE (self), TRUE);
 
 	g_object_unref (self);
 	return G_SOURCE_REMOVE;
@@ -577,8 +580,6 @@ static void
 gs_shell_details_refresh_all (GsShellDetails *self)
 {
 	GPtrArray *history;
-	GArray *review_ratings;
-	gint n_reviews;
 	GdkPixbuf *pixbuf = NULL;
 	GList *addons;
 	GtkWidget *widget;
@@ -588,7 +589,6 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	guint64 kudos;
 	guint64 updated;
 	guint64 user_integration_bf;
-	guint i;
 	g_autoptr(GError) error = NULL;
 
 	/* change widgets */
@@ -642,7 +642,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	}
 
 	/* set the licence */
-	tmp = gs_app_get_licence (self->app);
+	tmp = gs_app_get_license (self->app);
 	if (tmp == NULL) {
 		/* TRANSLATORS: this is where the licence is not known */
 		gtk_label_set_label (GTK_LABEL (self->label_details_licence_value), C_("license", "Unknown"));
@@ -723,46 +723,6 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 				gs_app_get_state (self->app) == AS_APP_STATE_UPDATABLE ||
 				gs_app_get_state (self->app) == AS_APP_STATE_AVAILABLE_LOCAL);
 
-	/* set the rating */
-	switch (gs_app_get_kind (self->app)) {
-	case AS_APP_KIND_WEB_APP:
-		gtk_widget_set_visible (self->star, FALSE);
-		break;
-	default:
-		gtk_widget_set_visible (self->star, TRUE);
-		if (gs_app_get_rating (self->app) >= 0) {
-			gtk_widget_set_visible (self->star, TRUE);
-			gs_star_widget_set_rating (GS_STAR_WIDGET (self->star),
-						   gs_app_get_rating (self->app));
-		} else {
-			gtk_widget_set_visible (self->star, FALSE);
-		}
-		review_ratings = gs_app_get_review_ratings (self->app);
-		if (review_ratings != NULL) {
-			gtk_widget_set_visible (self->histogram, TRUE);
-			gs_review_histogram_set_ratings (GS_REVIEW_HISTOGRAM (self->histogram),
-						         review_ratings);
-		} else {
-			gtk_widget_set_visible (self->histogram, FALSE);
-		}
-		n_reviews = 0;
-		if (review_ratings != NULL) {
-			for (i = 0; i < review_ratings->len; i++)
-				n_reviews += g_array_index (review_ratings, gint, i);
-		} else if (gs_app_get_reviews (self->app) != NULL) {
-			n_reviews = gs_app_get_reviews (self->app)->len;
-		}
-		if (n_reviews > 0) {
-			g_autofree gchar *text = NULL;
-			gtk_widget_set_visible (self->label_review_count, TRUE);
-			text = g_strdup_printf ("(%u)", n_reviews);
-			gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
-		} else {
-			gtk_widget_set_visible (self->label_review_count, FALSE);
-		}
-		break;
-	}
-
 	/* set MyLanguage kudo */
 	kudos = gs_app_get_kudos (self->app);
 	ret = (kudos & GS_APP_KUDO_MY_LANGUAGE) > 0;
@@ -799,7 +759,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 				     _("This application can only be used when there is an active internet connection."));
 	} else {
 		gtk_widget_set_visible (self->label_details_tag_webapp, FALSE);
-		if (gs_app_get_licence_is_free (self->app) &&
+		if (gs_app_get_license_is_free (self->app) &&
 		    !gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* free and 3rd party */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, FALSE);
@@ -808,7 +768,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			gtk_label_set_label (GTK_LABEL (self->label_details_info_text),
 					     /* TRANSLATORS: this is the warning box */
 					     _("This software comes from a 3rd party."));
-		} else if (!gs_app_get_licence_is_free (self->app) &&
+		} else if (!gs_app_get_license_is_free (self->app) &&
 			   !gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* nonfree and 3rd party */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, TRUE);
@@ -817,7 +777,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			gtk_label_set_label (GTK_LABEL (self->label_details_info_text),
 					     /* TRANSLATORS: this is the warning box */
 					     _("This software comes from a 3rd party and may contain non-free components."));
-		} else if (!gs_app_get_licence_is_free (self->app) &&
+		} else if (!gs_app_get_license_is_free (self->app) &&
 			   gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* nonfree and distro */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, TRUE);
@@ -834,14 +794,15 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 		}
 	}
 
-	/* don't show a missing rating on a local file */
-	if (gs_app_get_state (self->app) == AS_APP_STATE_AVAILABLE_LOCAL &&
-	    gs_app_get_rating (self->app) < 0)
-		gtk_widget_set_visible (self->star, FALSE);
-
-	/* only mark the stars as sensitive if the application is installed */
-	gtk_widget_set_sensitive (self->star,
-				  gs_app_get_state (self->app) == AS_APP_STATE_INSTALLED);
+	/* hide the kudo details for non-desktop software */
+	switch (gs_app_get_kind (self->app)) {
+	case AS_APP_KIND_DESKTOP:
+		gtk_widget_set_visible (self->grid_details_kudo, TRUE);
+		break;
+	default:
+		gtk_widget_set_visible (self->grid_details_kudo, FALSE);
+		break;
+	}
 
 	/* make history button insensitive if there is none */
 	history = gs_app_get_history (self->app);
@@ -1014,10 +975,13 @@ gs_shell_details_review_button_clicked_cb (GsReviewRow *row,
 static void
 gs_shell_details_refresh_reviews (GsShellDetails *self)
 {
+	GArray *review_ratings;
 	GPtrArray *reviews;
 	gboolean show_review_button = TRUE;
-	guint i;
+	gboolean show_reviews = FALSE;
+	gint n_reviews = 0;
 	guint64 possible_actions = 0;
+	guint i;
 	struct {
 		GsReviewAction action;
 		const gchar *plugin_func;
@@ -1030,11 +994,58 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 		{ GS_REVIEW_ACTION_LAST,	NULL }
 	};
 
-	if (!gs_plugin_loader_get_plugin_supported (self->plugin_loader,
-						    "gs_plugin_review_submit"))
-		return;
+	/* show or hide the entire reviews section */
+	switch (gs_app_get_kind (self->app)) {
+	case AS_APP_KIND_DESKTOP:
+	case AS_APP_KIND_FONT:
+	case AS_APP_KIND_INPUT_METHOD:
+	case AS_APP_KIND_WEB_APP:
+	case AS_APP_KIND_SHELL_EXTENSION:
+		/* don't show a missing rating on a local file */
+		if (gs_app_get_state (self->app) != AS_APP_STATE_AVAILABLE_LOCAL &&
+		    self->enable_reviews)
+			show_reviews = TRUE;
+		break;
+	default:
+		break;
+	}
 
-	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
+	/* set the star rating */
+	if (show_reviews) {
+		if (gs_app_get_rating (self->app) >= 0) {
+			gs_star_widget_set_rating (GS_STAR_WIDGET (self->star),
+						   gs_app_get_rating (self->app));
+		}
+		review_ratings = gs_app_get_review_ratings (self->app);
+		if (review_ratings != NULL) {
+			gs_review_histogram_set_ratings (GS_REVIEW_HISTOGRAM (self->histogram),
+						         review_ratings);
+		}
+		if (review_ratings != NULL) {
+			for (i = 0; i < review_ratings->len; i++)
+				n_reviews += g_array_index (review_ratings, gint, i);
+		} else if (gs_app_get_reviews (self->app) != NULL) {
+			n_reviews = gs_app_get_reviews (self->app)->len;
+		}
+	}
+
+	/* enable appropriate widgets */
+	gtk_widget_set_visible (self->star, show_reviews);
+	gtk_widget_set_visible (self->box_reviews, show_reviews);
+	gtk_widget_set_visible (self->histogram, review_ratings != NULL);
+	gtk_widget_set_visible (self->label_review_count, n_reviews > 0);
+
+	/* update the review label next to the star widget */
+	if (n_reviews > 0) {
+		g_autofree gchar *text = NULL;
+		gtk_widget_set_visible (self->label_review_count, TRUE);
+		text = g_strdup_printf ("(%u)", n_reviews);
+		gtk_label_set_text (GTK_LABEL (self->label_review_count), text);
+	}
+
+	/* no point continuing */
+	if (!show_reviews)
+		return;
 
 	/* find what the plugins support */
 	for (i = 0; plugin_vfuncs[i].action != GS_REVIEW_ACTION_LAST; i++) {
@@ -1045,6 +1056,7 @@ gs_shell_details_refresh_reviews (GsShellDetails *self)
 	}
 
 	/* add all the reviews */
+	gs_container_remove_all (GTK_CONTAINER (self->list_box_reviews));
 	reviews = gs_app_get_reviews (self->app);
 	for (i = 0; i < reviews->len; i++) {
 		GsReview *review = g_ptr_array_index (reviews, i);
@@ -1146,9 +1158,7 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 		                                 _("Sorry, this did not work"));
 		gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog),
 		                                          "%s", error->message);
-		g_signal_connect (dialog, "response",
-		                  G_CALLBACK (gtk_widget_destroy), NULL);
-		gtk_window_present (GTK_WINDOW (dialog));
+		gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 
 		g_warning ("failed to convert to GsApp: %s", error->message);
 
@@ -1175,7 +1185,7 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 	g_debug ("%s", tmp);
 
 	/* change widgets */
-	gs_shell_details_switch_to (self);
+	gs_page_switch_to (GS_PAGE (self), TRUE);
 	gs_shell_details_refresh_screenshots (self);
 	gs_shell_details_refresh_addons (self);
 	gs_shell_details_refresh_reviews (self);
@@ -1366,9 +1376,43 @@ gs_shell_details_app_history_button_cb (GtkWidget *widget, GsShellDetails *self)
 
 	dialog = gs_history_dialog_new ();
 	gs_history_dialog_set_app (GS_HISTORY_DIALOG (dialog), self->app);
+	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
+}
 
-	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
-	gtk_window_present (GTK_WINDOW (dialog));
+/**
+ * gs_shell_details_review_response_cb:
+ **/
+static void
+gs_shell_details_review_response_cb (GtkDialog *dialog,
+				     gint response,
+				     GsShellDetails *self)
+{
+	g_autofree gchar *text = NULL;
+	g_autoptr(GDateTime) now = NULL;
+	g_autoptr(GsReview) review = NULL;
+	GsReviewDialog *rdialog = GS_REVIEW_DIALOG (dialog);
+
+	/* not agreed */
+	if (response != GTK_RESPONSE_OK)
+		return;
+
+	review = gs_review_new ();
+	gs_review_set_summary (review, gs_review_dialog_get_summary (rdialog));
+	text = gs_review_dialog_get_text (rdialog);
+	gs_review_set_text (review, text);
+	gs_review_set_rating (review, gs_review_dialog_get_rating (rdialog));
+	gs_review_set_version (review, gs_app_get_version (self->app));
+	now = g_date_time_new_now_local ();
+	gs_review_set_date (review, now);
+
+	/* call into the plugins to set the new value */
+	gs_plugin_loader_review_action_async (self->plugin_loader,
+					      self->app,
+					      review,
+					      GS_REVIEW_ACTION_SUBMIT,
+					      self->cancellable,
+					      gs_shell_details_app_set_review_cb,
+					      self);
 }
 
 /**
@@ -1379,36 +1423,10 @@ gs_shell_details_write_review_cb (GtkButton *button,
 				  GsShellDetails *self)
 {
 	GtkWidget *dialog;
-	GtkResponseType response;
-
 	dialog = gs_review_dialog_new ();
-
-	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
-	response = gtk_dialog_run (GTK_DIALOG (dialog));
-	if (response == GTK_RESPONSE_OK) {
-		g_autoptr(GsReview) review = NULL;
-		g_autoptr(GDateTime) now = NULL;
-		g_autofree gchar *text = NULL;
-
-		review = gs_review_new ();
-		gs_review_set_summary (review, gs_review_dialog_get_summary (GS_REVIEW_DIALOG (dialog)));
-		text = gs_review_dialog_get_text (GS_REVIEW_DIALOG (dialog));
-		gs_review_set_text (review, text);
-		gs_review_set_rating (review, gs_review_dialog_get_rating (GS_REVIEW_DIALOG (dialog)));
-		gs_review_set_version (review, gs_app_get_version (self->app));
-		now = g_date_time_new_now_local ();
-		gs_review_set_date (review, now);
-
-		/* call into the plugins to set the new value */
-		gs_plugin_loader_review_action_async (self->plugin_loader,
-						      self->app,
-						      review,
-						      GS_REVIEW_ACTION_SUBMIT,
-						      self->cancellable,
-						      gs_shell_details_app_set_review_cb,
-						      self);
-	}
-	gtk_widget_destroy (dialog);
+	g_signal_connect (dialog, "response",
+			  G_CALLBACK (gs_shell_details_review_response_cb), self);
+	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 }
 
 static void
@@ -1443,10 +1461,10 @@ gs_shell_details_setup (GsShellDetails *self,
 	self->builder = g_object_ref (builder);
 	self->cancellable = g_object_ref (cancellable);
 
-	/* Show review widgets if we have plugins that provide them */
-	if (gs_plugin_loader_get_plugin_supported (plugin_loader,
-						   "gs_plugin_review_submit"))
-		gtk_widget_set_visible (self->box_reviews, TRUE);
+	/* show review widgets if we have plugins that provide them */
+	self->enable_reviews =
+		gs_plugin_loader_get_plugin_supported (plugin_loader,
+						       "gs_plugin_review_submit");
 	g_signal_connect (self->button_review, "clicked",
 			  G_CALLBACK (gs_shell_details_write_review_cb),
 			  self);
@@ -1512,6 +1530,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	object_class->dispose = gs_shell_details_dispose;
 	page_class->app_installed = gs_shell_details_app_installed;
 	page_class->app_removed = gs_shell_details_app_removed;
+	page_class->switch_to = gs_shell_details_switch_to;
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-shell-details.ui");
 
@@ -1560,6 +1579,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_details);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, spinner_install_remove);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, stack_details);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, grid_details_kudo);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, image_details_kudo_docs);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, image_details_kudo_integration);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, image_details_kudo_translated);

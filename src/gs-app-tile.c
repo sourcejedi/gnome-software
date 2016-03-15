@@ -38,7 +38,6 @@ struct _GsAppTile
 	GtkWidget	*summary;
 	GtkWidget	*eventbox;
 	GtkWidget	*stack;
-	GtkWidget	*stars;
 	gint		 preferred_width;
 };
 
@@ -128,6 +127,7 @@ void
 gs_app_tile_set_app (GsAppTile *tile, GsApp *app)
 {
 	const gchar *summary;
+	const GdkPixbuf *pixbuf;
 
 	g_return_if_fail (GS_IS_APP_TILE (tile));
 	g_return_if_fail (GS_IS_APP (app) || app == NULL);
@@ -142,21 +142,15 @@ gs_app_tile_set_app (GsAppTile *tile, GsApp *app)
 	if (!app)
 		return;
 
-	if (gs_app_get_rating (tile->app) >= 0) {
-		gtk_widget_set_visible (tile->stars, TRUE);
-		gs_star_widget_set_rating (GS_STAR_WIDGET (tile->stars),
-					   gs_app_get_rating (tile->app));
-	} else {
-		gtk_widget_set_visible (tile->stars, FALSE);
-	}
-
 	gtk_stack_set_visible_child_name (GTK_STACK (tile->stack), "content");
 
 	g_signal_connect (tile->app, "notify::state",
 			  G_CALLBACK (app_state_changed), tile);
 	app_state_changed (tile->app, NULL, tile);
 
-	gs_image_set_from_pixbuf (GTK_IMAGE (tile->image), gs_app_get_pixbuf (app));
+	pixbuf = gs_app_get_pixbuf (app);
+	if (pixbuf != NULL)
+		gs_image_set_from_pixbuf (GTK_IMAGE (tile->image), pixbuf);
 	gtk_label_set_label (GTK_LABEL (tile->name), gs_app_get_name (app));
 	summary = gs_app_get_summary (app);
 	gtk_label_set_label (GTK_LABEL (tile->summary), summary);
@@ -181,7 +175,6 @@ gs_app_tile_init (GsAppTile *tile)
 	gtk_widget_set_has_window (GTK_WIDGET (tile), FALSE);
 	tile->preferred_width = -1;
 	gtk_widget_init_template (GTK_WIDGET (tile));
-	gs_star_widget_set_icon_size (GS_STAR_WIDGET (tile->stars), 12);
 }
 
 static void
@@ -290,7 +283,6 @@ gs_app_tile_class_init (GsAppTileClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsAppTile, summary);
 	gtk_widget_class_bind_template_child (widget_class, GsAppTile, eventbox);
 	gtk_widget_class_bind_template_child (widget_class, GsAppTile, stack);
-	gtk_widget_class_bind_template_child (widget_class, GsAppTile, stars);
 }
 
 GtkWidget *

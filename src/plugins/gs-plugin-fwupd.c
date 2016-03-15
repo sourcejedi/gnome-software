@@ -117,7 +117,6 @@ static gboolean
 gs_plugin_startup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 {
 	gsize len;
-	g_autoptr(GError) error_local = NULL;
 	g_autofree gchar *data = NULL;
 	g_autoptr(GDBusConnection) conn = NULL;
 	g_autoptr(GMutexLocker) locker = g_mutex_locker_new (&plugin->priv->mutex);
@@ -135,10 +134,10 @@ gs_plugin_startup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 						     FWUPD_DBUS_PATH,
 						     FWUPD_DBUS_INTERFACE,
 						     NULL,
-						     &error_local);
+						     error);
 	if (plugin->priv->proxy == NULL) {
-		g_warning ("Failed to start fwupd: %s", error_local->message);
-		return TRUE;
+		g_prefix_error (error, "failed to start fwupd: ");
+		return FALSE;
 	}
 	g_signal_connect (plugin->priv->proxy, "g-signal",
 			  G_CALLBACK (gs_plugin_fwupd_changed_cb), plugin);
@@ -243,7 +242,7 @@ gs_plugin_fwupd_set_app_from_kv (GsApp *app, const gchar *key, GVariant *val)
 		return;
 	}
 	if (g_strcmp0 (key, "License") == 0) {
-		gs_app_set_licence (app,
+		gs_app_set_license (app,
 				    GS_APP_QUALITY_NORMAL,
 				    g_variant_get_string (val, NULL));
 		return;
@@ -271,7 +270,6 @@ gs_plugin_add_update_app (GsPlugin *plugin,
 	FwupdDeviceFlags flags = 0;
 	GVariant *variant;
 	const gchar *key;
-	g_autoptr(GError) error_local = NULL;
 	g_autofree gchar *basename = NULL;
 	g_autofree gchar *checksum = NULL;
 	g_autofree gchar *filename_cache = NULL;
@@ -422,13 +420,6 @@ gs_plugin_add_updates_historical (GsPlugin *plugin,
 				      &error_local);
 	if (val == NULL) {
 		if (g_error_matches (error_local,
-				     G_DBUS_ERROR,
-				     G_DBUS_ERROR_SERVICE_UNKNOWN)) {
-			/* the fwupd service might be unavailable, continue in that case */
-			g_debug ("fwupd: Could not get historical updates, service is unknown.");
-			return TRUE;
-		}
-		if (g_error_matches (error_local,
 				     FWUPD_ERROR,
 				     FWUPD_ERROR_NOTHING_TO_DO))
 			return TRUE;
@@ -447,7 +438,7 @@ gs_plugin_add_updates_historical (GsPlugin *plugin,
 	app = gs_app_new (NULL);
 	gs_app_set_management_plugin (app, "fwupd");
 	gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
-	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
+	gs_app_set_kind (app, AS_APP_KIND_FIRMWARE);
 	g_variant_get (val, "(a{sv})", &iter);
 	while (g_variant_iter_next (iter, "{&sv}", &key, &variant)) {
 		gs_plugin_fwupd_set_app_from_kv (app, key, variant);
@@ -494,8 +485,8 @@ gs_plugin_add_updates (GsPlugin *plugin,
 				     G_DBUS_ERROR,
 				     G_DBUS_ERROR_SERVICE_UNKNOWN)) {
 			/* the fwupd service might be unavailable, continue in that case */
-			g_debug ("fwupd: Could not get updates, service is unknown.");
-			return TRUE;
+			g_prefix_error (error, "could not get fwupd updates: ");
+			return FALSE;
 		}
 		if (g_error_matches (error_local,
 				     FWUPD_ERROR,

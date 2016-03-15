@@ -145,7 +145,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 	/* join the description lines */
 	str = gs_app_row_get_description (app_row);
 	if (str != NULL) {
-		gs_string_replace (str, "\n", " ");
+		as_utils_string_replace (str, "\n", " ");
 		gtk_label_set_markup (GTK_LABEL (priv->description_label), str->str);
 		g_string_free (str, TRUE);
 	} else {
@@ -181,7 +181,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 		default:
 			gtk_widget_set_visible (priv->label_tag_webapp, FALSE);
 			gtk_widget_set_visible (priv->label_tag_nonfree,
-						!gs_app_get_licence_is_free (priv->app));
+						!gs_app_get_license_is_free (priv->app));
 			gtk_widget_set_visible (priv->label_tag_foreign,
 						!gs_app_has_quirk (priv->app,
 								   AS_APP_QUIRK_PROVENANCE));
@@ -231,7 +231,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 		gtk_widget_set_visible (priv->folder_label, folder != NULL);
 	}
 
-	if (gs_app_get_pixbuf (priv->app))
+	if (gs_app_get_pixbuf (priv->app) != NULL)
 		gs_image_set_from_pixbuf (GTK_IMAGE (priv->image),
 					  gs_app_get_pixbuf (priv->app));
 

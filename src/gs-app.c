@@ -585,29 +585,18 @@ gs_app_set_kind (GsApp *app, AsAppKind kind)
 	/* check the state change is allowed */
 	switch (app->kind) {
 	case AS_APP_KIND_UNKNOWN:
-		/* unknown can go into any state */
+	case AS_APP_KIND_GENERIC:
+		/* all others derive from generic */
 		state_change_ok = TRUE;
 		break;
-	case AS_APP_KIND_GENERIC:
-		/* package can become either normal or a system application */
-		if (kind == AS_APP_KIND_DESKTOP ||
-		    kind == AS_APP_KIND_SOURCE ||
-		    kind == AS_APP_KIND_UNKNOWN)
-			state_change_ok = TRUE;
-		break;
 	case AS_APP_KIND_DESKTOP:
-		/* normal can only be promoted to system */
+		/* desktop has to be reset to override */
 		if (kind == AS_APP_KIND_UNKNOWN)
 			state_change_ok = TRUE;
 		break;
-	case AS_APP_KIND_OS_UPDATE:
-	case AS_APP_KIND_SOURCE:
+	default:
 		/* this can never change state */
 		break;
-	default:
-		g_warning ("kind %s unhandled",
-			   as_app_kind_to_string (app->kind));
-		g_assert_not_reached ();
 	}
 
 	/* this state change was unexpected */
@@ -1253,30 +1242,30 @@ gs_app_set_url (GsApp *app, AsUrlKind kind, const gchar *url)
 }
 
 /**
- * gs_app_get_licence:
+ * gs_app_get_license:
  */
 const gchar *
-gs_app_get_licence (GsApp *app)
+gs_app_get_license (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), NULL);
 	return app->licence;
 }
 
 /**
- * gs_app_get_licence_is_free:
+ * gs_app_get_license_is_free:
  */
 gboolean
-gs_app_get_licence_is_free (GsApp *app)
+gs_app_get_license_is_free (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), FALSE);
 	return app->licence_is_free;
 }
 
 /**
- * gs_app_get_licence_token_is_nonfree:
+ * gs_app_get_license_token_is_nonfree:
  */
 static gboolean
-gs_app_get_licence_token_is_nonfree (const gchar *token)
+gs_app_get_license_token_is_nonfree (const gchar *token)
 {
 	/* grammar */
 	if (g_strcmp0 (token, "(") == 0)
@@ -1293,10 +1282,10 @@ gs_app_get_licence_token_is_nonfree (const gchar *token)
 }
 
 /**
- * gs_app_set_licence:
+ * gs_app_set_license:
  */
 void
-gs_app_set_licence (GsApp *app, GsAppQuality quality, const gchar *licence)
+gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
 {
 	GString *urld;
 	guint i;
@@ -1336,7 +1325,7 @@ gs_app_set_licence (GsApp *app, GsAppQuality quality, const gchar *licence)
 		}
 
 		/* do the best we can */
-		if (gs_app_get_licence_token_is_nonfree (tokens[i])) {
+		if (gs_app_get_license_token_is_nonfree (tokens[i])) {
 			g_debug ("nonfree licence from %s: '%s'",
 				 gs_app_get_id (app), tokens[i]);
 			app->licence_is_free = FALSE;
@@ -1652,7 +1641,7 @@ gs_app_set_rating (GsApp *app, gint rating)
 GArray *
 gs_app_get_review_ratings (GsApp *app)
 {
-	g_return_val_if_fail (GS_IS_APP (app), FALSE);
+	g_return_val_if_fail (GS_IS_APP (app), NULL);
 	return app->review_ratings;
 }
 

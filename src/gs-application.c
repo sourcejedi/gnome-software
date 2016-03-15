@@ -62,6 +62,7 @@ struct _GsApplication {
 #endif
 	GsShellSearchProvider *search_provider;
 	GNetworkMonitor *network_monitor;
+	gulong		 network_changed_handler;
 	GSettings       *settings;
 };
 
@@ -181,8 +182,8 @@ gs_application_monitor_network (GsApplication *app)
 		return;
 	app->network_monitor = g_object_ref (network_monitor);
 
-	g_signal_connect (app->network_monitor, "network-changed",
-			  G_CALLBACK (network_changed_cb), app);
+	app->network_changed_handler = g_signal_connect (app->network_monitor, "network-changed",
+							 G_CALLBACK (network_changed_cb), app);
 
 	network_changed_cb (app->network_monitor,
 			    g_network_monitor_get_network_available (app->network_monitor),
@@ -248,9 +249,7 @@ gs_application_show_first_run_dialog (GsApplication *app)
 
 	if (g_settings_get_boolean (app->settings, "first-run") == TRUE) {
 		dialog = gs_first_run_dialog_new ();
-		gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (app->shell));
-		gtk_window_present (GTK_WINDOW (dialog));
-
+		gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
 		g_settings_set_boolean (app->settings, "first-run", FALSE);
 	}
 }
@@ -344,8 +343,9 @@ sources_activated (GSimpleAction *action,
 static void
 about_activated (GSimpleAction *action,
 		 GVariant      *parameter,
-		 gpointer       app)
+		 gpointer       user_data)
 {
+	GsApplication *app = GS_APPLICATION (user_data);
 	const gchar *authors[] = {
 		"Richard Hughes",
 		"Matthias Clasen",
@@ -354,30 +354,30 @@ about_activated (GSimpleAction *action,
 		"William Jon McCann",
 		NULL
 	};
-	const gchar *copyright = "Copyright \xc2\xa9 2013 Richard Hughes, Matthias Clasen";
-	GList *windows;
-	GtkWindow *parent = NULL;
+	const gchar *copyright = "Copyright \xc2\xa9 2016 Richard Hughes, Matthias Clasen";
+	GtkAboutDialog *dialog;
 
 	gs_application_initialize_ui (app);
 
-	windows = gtk_application_get_windows (GTK_APPLICATION (app));
-	if (windows)
-		parent = windows->data;
+	dialog = GTK_ABOUT_DIALOG (gtk_about_dialog_new ());
+	gtk_about_dialog_set_authors (dialog, authors);
+	gtk_about_dialog_set_copyright (dialog, copyright);
+	gtk_about_dialog_set_license_type (dialog, GTK_LICENSE_GPL_2_0);
+	gtk_about_dialog_set_logo_icon_name (dialog, "org.gnome.Software");
+	gtk_about_dialog_set_translator_credits (dialog, _("translator-credits"));
+	gtk_about_dialog_set_version (dialog, VERSION);
 
-	gtk_show_about_dialog (parent,
-			       /* TRANSLATORS: this is the title of the about window */
-			       "title", _("About Software"),
-			       /* TRANSLATORS: this is the application name */
-			       "program-name", _("Software"),
-			       "authors", authors,
-			       /* TRANSLATORS: well, we seem to think so, anyway */
-			       "comments", _("A nice way to manage the software on your system."),
-			       "copyright", copyright,
-			       "license-type", GTK_LICENSE_GPL_2_0,
-			       "logo-icon-name", "org.gnome.Software",
-			       "translator-credits", _("translator-credits"),
-			       "version", VERSION,
-			       NULL);
+	/* TRANSLATORS: this is the title of the about window */
+	gtk_window_set_title (GTK_WINDOW (dialog), _("About Software"));
+
+	/* TRANSLATORS: this is the application name */
+	gtk_about_dialog_set_program_name (dialog, _("Software"));
+
+	/* TRANSLATORS: well, we seem to think so, anyway */
+	gtk_about_dialog_set_comments (dialog, _("A nice way to manage the "
+						 "software on your system."));
+
+	gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
 }
 
 static void
@@ -698,6 +698,10 @@ gs_application_dispose (GObject *object)
 	g_clear_object (&app->provider);
 	g_clear_object (&app->update_monitor);
 	g_clear_object (&app->profile);
+	if (app->network_changed_handler != 0) {
+		g_signal_handler_disconnect (app->network_monitor, app->network_changed_handler);
+		app->network_changed_handler = 0;
+	}
 	g_clear_object (&app->network_monitor);
 #ifdef HAVE_PACKAGEKIT
 	g_clear_object (&app->dbus_helper);
