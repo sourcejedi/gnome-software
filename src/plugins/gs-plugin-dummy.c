@@ -156,7 +156,7 @@ gs_plugin_refine (GsPlugin *plugin,
 		app = GS_APP (l->data);
 		if (gs_app_get_name (app) == NULL) {
 			if (g_strcmp0 (gs_app_get_id (app), "gnome-boxes") == 0) {
-				gs_app_set_licence (app, GS_APP_QUALITY_NORMAL,
+				gs_app_set_license (app, GS_APP_QUALITY_NORMAL,
 						    "GPL-2.0+");
 				gs_app_set_name (app, GS_APP_QUALITY_NORMAL,
 						 "Boxes");
@@ -258,11 +258,11 @@ gs_plugin_add_distro_upgrades (GsPlugin *plugin,
 			       GError **error)
 {
 	g_autoptr(GsApp) app = NULL;
-	app = gs_app_new ("org.fedoraproject.release-rawhide.upgrade");
+	app = gs_app_new ("org.fedoraproject.release-24.upgrade");
 	gs_app_set_kind (app, AS_APP_KIND_OS_UPGRADE);
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	gs_app_set_name (app, GS_APP_QUALITY_LOWEST, "Fedora");
-	gs_app_set_version (app, "rawhide");
+	gs_app_set_version (app, "24");
 	gs_plugin_add_app (list, app);
 	return TRUE;
 }

@@ -42,9 +42,17 @@ struct _GsPageClass
 						 GsApp		 *app);
 	void		(*app_removed)		(GsPage		 *page,
 						 GsApp		 *app);
+	void		(*switch_to)		(GsPage		 *page,
+						 gboolean	  scroll_up);
 };
 
 GsPage		*gs_page_new				(void);
+GtkWidget	*gs_page_get_header_start_widget	(GsPage		*page);
+void		 gs_page_set_header_start_widget	(GsPage		*page,
+							 GtkWidget	*widget);
+GtkWidget	*gs_page_get_header_end_widget		(GsPage		*page);
+void		 gs_page_set_header_end_widget		(GsPage		*page,
+							 GtkWidget	*widget);
 void		 gs_page_install_app			(GsPage		*page,
 							 GsApp		*app);
 void		 gs_page_remove_app			(GsPage		*page,
@@ -53,6 +61,8 @@ void		 gs_page_update_app			(GsPage		*page,
 							 GsApp		*app);
 void		 gs_page_launch_app			(GsPage		*page,
 							 GsApp		*app);
+void		 gs_page_switch_to			(GsPage		*page,
+							 gboolean	 scroll_up);
 void		 gs_page_setup				(GsPage		*page,
 							 GsShell	*shell,
 							 GsPluginLoader	*plugin_loader,

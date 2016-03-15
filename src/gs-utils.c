@@ -225,7 +225,7 @@ gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 	g_autoptr(GString) title = NULL;
 
 	/* this is very crude */
-	licence = gs_app_get_licence (app);
+	licence = gs_app_get_license (app);
 	if (licence != NULL) {
 		for (i = 0; keywords[i].str != NULL; i++) {
 			if (g_strstr_len (licence, -1, keywords[i].str) != NULL)
@@ -340,43 +340,6 @@ gs_app_show_url (GsApp *app, AsUrlKind kind)
 	url = gs_app_get_url (app, kind);
 	if (!gtk_show_uri (NULL, url, GDK_CURRENT_TIME, &error))
 		g_warning ("spawn of '%s' failed", url);
-}
-
-guint
-gs_string_replace (GString *string, const gchar *search, const gchar *replace)
-{
-	gchar *tmp;
-	guint count = 0;
-	guint replace_len;
-	guint search_len;
-
-	search_len = strlen (search);
-	replace_len = strlen (replace);
-
-	do {
-		tmp = g_strstr_len (string->str, -1, search);
-		if (tmp == NULL)
-			goto out;
-
-		/* reallocate the string if required */
-		if (search_len > replace_len) {
-			g_string_erase (string,
-					tmp - string->str,
-					search_len - replace_len);
-		}
-		if (search_len < replace_len) {
-			g_string_insert_len (string,
-					    tmp - string->str,
-					    search,
-					    replace_len - search_len);
-		}
-
-		/* just memcmp in the new string */
-		memcpy (tmp, replace, replace_len);
-		count++;
-	} while (TRUE);
-out:
-	return count;
 }
 
 /**
