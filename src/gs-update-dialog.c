@@ -92,8 +92,7 @@ set_updates_description_ui (GsUpdateDialog *dialog, GsApp *app)
 {
 	AsAppKind kind;
 	const GdkPixbuf *pixbuf;
-	const gchar *update_details;
-	g_autofree gchar *update_desc = NULL;
+	const gchar *update_desc;
 
 	/* set window title */
 	kind = gs_app_get_kind (app);
@@ -123,14 +122,7 @@ set_updates_description_ui (GsUpdateDialog *dialog, GsApp *app)
 			      _("No update description available."));
 
 	/* get the update description */
-	update_details = gs_app_get_update_details (app);
-	if (update_details != NULL) {
-		g_autoptr(GsMarkdown) markdown = NULL;
-		markdown = gs_markdown_new (GS_MARKDOWN_OUTPUT_PANGO);
-		gs_markdown_set_smart_quoting (markdown, FALSE);
-		gs_markdown_set_autocode (markdown, TRUE);
-		update_desc = gs_markdown_parse (markdown, update_details);
-	}
+	update_desc = gs_app_get_update_details (app);
 
 	/* set update header */
 	gtk_widget_set_visible (dialog->box_header, kind == AS_APP_KIND_DESKTOP);
