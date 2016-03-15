@@ -445,15 +445,12 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 		if (!version_newer (current_version, v))
 			break;
 
-		g_string_append_printf (details, "# %s\n\n", v);
+		g_string_append_printf (details, "%s\n", v);
 		for (i++; lines[i] != NULL; i++) {
 			// Last line is in the form " -- maintainer name <email address>  date"
 			if (g_str_has_prefix (lines[i], " -- "))
 				break;
-			if (g_str_has_prefix (lines[i], "  "))
-				g_string_append_printf (details, "%s\n\n", lines[i] + 2);
-			else
-				g_string_append_printf (details, "%s\n\n", lines[i]);
+			g_string_append_printf (details, "%s\n", lines[i]);
 		}
 	}
 
