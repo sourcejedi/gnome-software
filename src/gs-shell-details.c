@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2013-2014 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2013-2016 Richard Hughes <richard@hughsie.com>
  * Copyright (C) 2013 Matthias Clasen <mclasen@redhat.com>
  *
  * Licensed under the GNU General Public License Version 2
@@ -642,7 +642,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	}
 
 	/* set the licence */
-	tmp = gs_app_get_licence (self->app);
+	tmp = gs_app_get_license (self->app);
 	if (tmp == NULL) {
 		/* TRANSLATORS: this is where the licence is not known */
 		gtk_label_set_label (GTK_LABEL (self->label_details_licence_value), C_("license", "Unknown"));
@@ -759,7 +759,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 				     _("This application can only be used when there is an active internet connection."));
 	} else {
 		gtk_widget_set_visible (self->label_details_tag_webapp, FALSE);
-		if (gs_app_get_licence_is_free (self->app) &&
+		if (gs_app_get_license_is_free (self->app) &&
 		    !gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* free and 3rd party */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, FALSE);
@@ -768,7 +768,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			gtk_label_set_label (GTK_LABEL (self->label_details_info_text),
 					     /* TRANSLATORS: this is the warning box */
 					     _("This software comes from a 3rd party."));
-		} else if (!gs_app_get_licence_is_free (self->app) &&
+		} else if (!gs_app_get_license_is_free (self->app) &&
 			   !gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* nonfree and 3rd party */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, TRUE);
@@ -777,7 +777,7 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			gtk_label_set_label (GTK_LABEL (self->label_details_info_text),
 					     /* TRANSLATORS: this is the warning box */
 					     _("This software comes from a 3rd party and may contain non-free components."));
-		} else if (!gs_app_get_licence_is_free (self->app) &&
+		} else if (!gs_app_get_license_is_free (self->app) &&
 			   gs_app_has_quirk (self->app, AS_APP_QUIRK_PROVENANCE)) {
 			/* nonfree and distro */
 			gtk_widget_set_visible (self->label_details_tag_nonfree, TRUE);
@@ -1159,9 +1159,7 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 		                                 _("Sorry, this did not work"));
 		gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog),
 		                                          "%s", error->message);
-		g_signal_connect (dialog, "response",
-		                  G_CALLBACK (gtk_widget_destroy), NULL);
-		gtk_window_present (GTK_WINDOW (dialog));
+		gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 
 		g_warning ("failed to convert to GsApp: %s", error->message);
 
@@ -1379,9 +1377,43 @@ gs_shell_details_app_history_button_cb (GtkWidget *widget, GsShellDetails *self)
 
 	dialog = gs_history_dialog_new ();
 	gs_history_dialog_set_app (GS_HISTORY_DIALOG (dialog), self->app);
+	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
+}
 
-	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
-	gtk_window_present (GTK_WINDOW (dialog));
+/**
+ * gs_shell_details_review_response_cb:
+ **/
+static void
+gs_shell_details_review_response_cb (GtkDialog *dialog,
+				     gint response,
+				     GsShellDetails *self)
+{
+	g_autofree gchar *text = NULL;
+	g_autoptr(GDateTime) now = NULL;
+	g_autoptr(GsReview) review = NULL;
+	GsReviewDialog *rdialog = GS_REVIEW_DIALOG (dialog);
+
+	/* not agreed */
+	if (response != GTK_RESPONSE_OK)
+		return;
+
+	review = gs_review_new ();
+	gs_review_set_summary (review, gs_review_dialog_get_summary (rdialog));
+	text = gs_review_dialog_get_text (rdialog);
+	gs_review_set_text (review, text);
+	gs_review_set_rating (review, gs_review_dialog_get_rating (rdialog));
+	gs_review_set_version (review, gs_app_get_version (self->app));
+	now = g_date_time_new_now_local ();
+	gs_review_set_date (review, now);
+
+	/* call into the plugins to set the new value */
+	gs_plugin_loader_review_action_async (self->plugin_loader,
+					      self->app,
+					      review,
+					      GS_REVIEW_ACTION_SUBMIT,
+					      self->cancellable,
+					      gs_shell_details_app_set_review_cb,
+					      self);
 }
 
 /**
@@ -1392,36 +1424,10 @@ gs_shell_details_write_review_cb (GtkButton *button,
 				  GsShellDetails *self)
 {
 	GtkWidget *dialog;
-	GtkResponseType response;
-
 	dialog = gs_review_dialog_new ();
-
-	gtk_window_set_transient_for (GTK_WINDOW (dialog), gs_shell_get_window (self->shell));
-	response = gtk_dialog_run (GTK_DIALOG (dialog));
-	if (response == GTK_RESPONSE_OK) {
-		g_autoptr(GsReview) review = NULL;
-		g_autoptr(GDateTime) now = NULL;
-		g_autofree gchar *text = NULL;
-
-		review = gs_review_new ();
-		gs_review_set_summary (review, gs_review_dialog_get_summary (GS_REVIEW_DIALOG (dialog)));
-		text = gs_review_dialog_get_text (GS_REVIEW_DIALOG (dialog));
-		gs_review_set_text (review, text);
-		gs_review_set_rating (review, gs_review_dialog_get_rating (GS_REVIEW_DIALOG (dialog)));
-		gs_review_set_version (review, gs_app_get_version (self->app));
-		now = g_date_time_new_now_local ();
-		gs_review_set_date (review, now);
-
-		/* call into the plugins to set the new value */
-		gs_plugin_loader_review_action_async (self->plugin_loader,
-						      self->app,
-						      review,
-						      GS_REVIEW_ACTION_SUBMIT,
-						      self->cancellable,
-						      gs_shell_details_app_set_review_cb,
-						      self);
-	}
-	gtk_widget_destroy (dialog);
+	g_signal_connect (dialog, "response",
+			  G_CALLBACK (gs_shell_details_review_response_cb), self);
+	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 }
 
 static void
