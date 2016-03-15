@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2013 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2013-2016 Richard Hughes <richard@hughsie.com>
  * Copyright (C) 2013 Matthias Clasen <mclasen@redhat.com>
  *
  * Licensed under the GNU General Public License Version 2
@@ -46,6 +46,7 @@ struct _GsShellInstalled
 	gboolean		 cache_valid;
 	gboolean		 waiting;
 	GsShell			*shell;
+	GtkWidget		*button_select;
 	gboolean 		 selection_mode;
 
 	GtkWidget		*bottom_install;
@@ -258,9 +259,10 @@ gs_shell_installed_reload (GsShellInstalled *self)
 /**
  * gs_shell_installed_switch_to:
  **/
-void
-gs_shell_installed_switch_to (GsShellInstalled *self, gboolean scroll_up)
+static void
+gs_shell_installed_switch_to (GsPage *page, gboolean scroll_up)
 {
+	GsShellInstalled *self = GS_SHELL_INSTALLED (page);
 	GtkWidget *widget;
 
 	if (gs_shell_get_mode (self->shell) != GS_SHELL_MODE_INSTALLED) {
@@ -273,8 +275,7 @@ gs_shell_installed_switch_to (GsShellInstalled *self, gboolean scroll_up)
 	widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "buttonbox_main"));
 	gtk_widget_show (widget);
 
-	widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "button_select"));
-	gtk_widget_show (widget);
+	gtk_widget_show (self->button_select);
 
 	if (scroll_up) {
 		GtkAdjustment *adj;
@@ -509,11 +510,10 @@ set_selection_mode (GsShellInstalled *self, gboolean selection_mode)
 	if (self->selection_mode) {
 		gtk_header_bar_set_show_close_button (GTK_HEADER_BAR (header), FALSE);
 		gtk_style_context_add_class (context, "selection-mode");
-		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "button_select"));
-		gtk_button_set_image (GTK_BUTTON (widget), NULL);
-		gtk_button_set_label (GTK_BUTTON (widget), _("_Cancel"));
-		gtk_button_set_use_underline (GTK_BUTTON (widget), TRUE);
-		gtk_widget_show (widget);
+		gtk_button_set_image (GTK_BUTTON (self->button_select), NULL);
+		gtk_button_set_label (GTK_BUTTON (self->button_select), _("_Cancel"));
+		gtk_button_set_use_underline (GTK_BUTTON (self->button_select), TRUE);
+		gtk_widget_show (self->button_select);
 		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "buttonbox_main"));
 		gtk_widget_hide (widget);
 		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "header_selection_menu_button"));
@@ -523,10 +523,9 @@ set_selection_mode (GsShellInstalled *self, gboolean selection_mode)
 	} else {
 		gtk_header_bar_set_show_close_button (GTK_HEADER_BAR (header), TRUE);
 		gtk_style_context_remove_class (context, "selection-mode");
-		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "button_select"));
-		gtk_button_set_image (GTK_BUTTON (widget), gtk_image_new_from_icon_name ("object-select-symbolic", GTK_ICON_SIZE_MENU));
-		gtk_button_set_label (GTK_BUTTON (widget), NULL);
-		gtk_widget_show (widget);
+		gtk_button_set_image (GTK_BUTTON (self->button_select), gtk_image_new_from_icon_name ("object-select-symbolic", GTK_ICON_SIZE_MENU));
+		gtk_button_set_label (GTK_BUTTON (self->button_select), NULL);
+		gtk_widget_show (self->button_select);
 		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "buttonbox_main"));
 		gtk_widget_show (widget);
 		widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "header_selection_menu_button"));
@@ -611,9 +610,9 @@ show_folder_dialog (GtkButton *button, GsShellInstalled *self)
 	toplevel = gtk_widget_get_toplevel (GTK_WIDGET (button));
 	apps = get_selected_apps (self);
 	dialog = gs_app_folder_dialog_new (GTK_WINDOW (toplevel), apps);
-	gtk_window_present (GTK_WINDOW (dialog));
 	g_signal_connect_swapped (dialog, "delete-event",
 				  G_CALLBACK (folder_dialog_done), self);
+	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 }
 
 static void
@@ -675,6 +674,7 @@ gs_shell_installed_setup (GsShellInstalled *self,
 			  GtkBuilder *builder,
 			  GCancellable *cancellable)
 {
+	AtkObject *accessible;
 	GtkWidget *widget;
 
 	g_return_if_fail (GS_IS_SHELL_INSTALLED (self));
@@ -707,13 +707,13 @@ gs_shell_installed_setup (GsShellInstalled *self,
 	g_signal_connect (self->button_folder_remove, "clicked",
 			  G_CALLBACK (remove_folders), self);
 
-	widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "button_select"));
-	g_signal_connect (widget, "clicked",
+	self->button_select = gtk_button_new_from_icon_name ("object-select-symbolic", GTK_ICON_SIZE_MENU);
+	accessible = gtk_widget_get_accessible (self->button_select);
+	if (accessible != NULL)
+		atk_object_set_name (accessible, _("Select"));
+	gs_page_set_header_end_widget (GS_PAGE (self), self->button_select);
+	g_signal_connect (self->button_select, "clicked",
 			  G_CALLBACK (selection_mode_cb), self);
-
-	widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "button_select"));
-	gtk_button_set_image (GTK_BUTTON (widget), gtk_image_new_from_icon_name ("object-select-symbolic", GTK_ICON_SIZE_MENU));
-	gtk_button_set_label (GTK_BUTTON (widget), NULL);
 
 	widget = GTK_WIDGET (gtk_builder_get_object (self->builder, "select_all_menuitem"));
 	g_signal_connect (widget, "activate",
@@ -759,6 +759,7 @@ gs_shell_installed_class_init (GsShellInstalledClass *klass)
 
 	object_class->dispose = gs_shell_installed_dispose;
 	page_class->app_removed = gs_shell_installed_app_removed;
+	page_class->switch_to = gs_shell_installed_switch_to;
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-shell-installed.ui");
 
