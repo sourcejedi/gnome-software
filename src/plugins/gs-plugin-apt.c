@@ -30,7 +30,6 @@
 
 typedef struct {
 	gchar *name;
-	gchar *source;
 	gchar *installed_version;
 	gchar *update_version;
 	gint installed_size;
@@ -68,7 +67,6 @@ free_package_info (gpointer data)
 {
 	PackageInfo *info = data;
 	g_free (info->name);
-	g_free (info->source);
 	g_free (info->installed_version);
 	g_free (info->update_version);
 	g_slice_free (PackageInfo, info);
@@ -319,10 +317,6 @@ field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_
 		}
 	} else if (strncmp (name, "Installed-Size", name_length) == 0) {
 		data->current_info->installed_size = atoi (value);
-	} else if (strncmp (name, "Source", name_length) == 0) {
-		gchar *source = g_strndup (value, value_length);
-		g_free (data->current_info->source);
-		data->current_info->source = source;
 	} else if (strncmp (name, "Version", name_length) == 0) {
 		gchar *version = g_strndup (value, value_length);
 		if (data->current_installed) {
@@ -380,23 +374,10 @@ done:
 	return result;
 }
 
-static const gchar *
-get_source_name (GsPlugin *plugin, const gchar *binary_name)
-{
-	PackageInfo *info;
-
-	info = g_hash_table_lookup (plugin->priv->package_info, binary_name);
-	if (info != NULL && info->source != NULL) {
-		return info->source;
-	} else {
-		return binary_name;
-	}
-}
-
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	const gchar *binary_source, *source, *current_version, *update_version;
+	const gchar *binary_source, *current_version, *update_version;
 	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
@@ -411,35 +392,33 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	if (binary_source == NULL || update_version == NULL)
 		return;
 
-	source = get_source_name (plugin, binary_source);
-	if (g_str_has_prefix (source, "lib"))
-		source_prefix = g_strdup_printf ("lib%c", source[3]);
+	if (g_str_has_prefix (binary_source, "lib"))
+		source_prefix = g_strdup_printf ("lib%c", binary_source[3]);
 	else
-		source_prefix = g_strdup_printf ("%c", source[0]);
-	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, source, update_version);
+		source_prefix = g_strdup_printf ("%c", binary_source[0]);
+	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, binary_source, update_version);
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
 	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
-		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", source, update_version, soup_status_get_phrase (status_code));
+		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", binary_source, update_version, soup_status_get_phrase (status_code));
 		return;
 	}
 
 	// Extract changelog entries newer than our current version
-	changelog_prefix = g_strdup_printf ("%s (", source);
 	lines = g_strsplit (msg->response_body->data, "\n", -1);
 	details = g_string_new ("");
 	for (i = 0; lines[i] != NULL; i++) {
 		gchar *line = lines[i];
-		int version_start, version_end;
+		const gchar *version_start, *version_end;
 		g_autofree gchar *v = NULL;
 
 		// First line is in the form "package (version) distribution(s); urgency=urgency"
-		if (!g_str_has_prefix (line, changelog_prefix))
+                version_start = strchr (line, '(');
+                version_end = strchr (line, ')');
+		if (line[0] == ' ' || version_start == NULL || version_end == NULL || version_end < version_start)
 			continue;
-		version_start = strlen (changelog_prefix);
-		for (version_end = version_start; line[version_end] != '\0' && line[version_end] != ')'; version_end++);
-		v = g_strdup_printf ("%.*s", version_end - version_start, line + version_start);
+		v = g_strdup_printf ("%.*s", (int) (version_end - version_start - 1), version_start + 1);
 
 		// We're only interested in new versions
 		if (!version_newer (current_version, v))
