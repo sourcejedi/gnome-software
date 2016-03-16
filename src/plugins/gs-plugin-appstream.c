@@ -26,6 +26,7 @@
 #include <gs-utils.h>
 #include <gs-plugin.h>
 #include <gs-plugin-loader.h>
+#include <gs-application.h>
 
 #include "gs-appstream.h"
 
@@ -147,6 +148,73 @@ gs_plugin_appstream_get_origins_hash (GPtrArray *array)
 	return origins;
 }
 
+#define APP_INFO_PATH "/var/lib/app-info"
+#define REFRESH_TIMEOUT 1000
+
+static gboolean
+needs_refresh (GsPlugin *plugin)
+{
+	g_autoptr(GDir) dir = g_dir_open (APP_INFO_PATH, 0, NULL);
+
+	return dir == NULL || g_dir_read_name (dir) == NULL;
+}
+
+static void
+refreshed_cb (GObject      *source_object,
+	      GAsyncResult *res,
+	      gpointer      user_data)
+{
+	GsPlugin *plugin = user_data;
+	GsPluginLoader *loader = GS_PLUGIN_LOADER (source_object);
+
+	if (gs_plugin_loader_refresh_finish (loader, res, NULL))
+		gs_plugin_updates_changed (plugin);
+}
+
+static void
+start_refresh (GsPlugin *plugin)
+{
+	GApplication *application;
+	GsPluginLoader *loader;
+
+	application = g_application_get_default ();
+
+	loader = gs_application_get_plugin_loader (GS_APPLICATION (application));
+
+	gs_plugin_loader_refresh_async (loader,
+					0,
+					GS_PLUGIN_REFRESH_FLAGS_UPDATES,
+					NULL,
+					refreshed_cb,
+					plugin);
+}
+
+static gboolean
+ask_refresh (gpointer user_data)
+{
+	GApplication *application;
+	GtkWindow *parent;
+	GtkWidget *dialog;
+
+	application = g_application_get_default ();
+
+	parent = gtk_application_get_active_window (GTK_APPLICATION (application));
+
+	dialog = gtk_message_dialog_new (parent,
+					 GTK_DIALOG_MODAL |
+					 GTK_DIALOG_DESTROY_WITH_PARENT,
+					 GTK_MESSAGE_QUESTION,
+					 GTK_BUTTONS_YES_NO,
+					 _("An update is needed to show all installable apps. Download now?"));
+
+	if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_YES)
+		start_refresh (user_data);
+
+	gtk_widget_destroy (dialog);
+
+	return G_SOURCE_REMOVE;
+}
+
 /**
  * gs_plugin_setup:
  */
@@ -161,6 +229,9 @@ gs_plugin_setup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 	guint *perc;
 	guint i;
 	g_autoptr(GHashTable) origins = NULL;
+
+	if (needs_refresh (plugin))
+		gdk_threads_add_timeout (REFRESH_TIMEOUT, ask_refresh, plugin);
 
 	/* Parse the XML */
 	if (g_getenv ("GNOME_SOFTWARE_PREFER_LOCAL") != NULL) {
