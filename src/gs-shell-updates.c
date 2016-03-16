@@ -324,7 +324,8 @@ gs_shell_updates_update_ui_state (GsShellUpdates *self)
 	switch (self->state) {
 	case GS_SHELL_UPDATES_STATE_ACTION_REFRESH_HAS_UPDATES:
 	case GS_SHELL_UPDATES_STATE_HAS_UPDATES:
-		gtk_widget_show (self->button_update_all);
+		// We can't do offline updates in Ubuntu - Need PackageKit 1.0
+		//gtk_widget_show (self->button_update_all);
 		break;
 	case GS_SHELL_UPDATES_STATE_STARTUP:
 	case GS_SHELL_UPDATES_STATE_ACTION_REFRESH_NO_UPDATES:
@@ -1155,7 +1156,8 @@ gs_shell_updates_setup (GsShellUpdates *self,
 	gs_page_set_header_end_widget (GS_PAGE (self), self->header_end_box);
 
 	self->button_update_all = gtk_button_new_with_mnemonic (_("Restart & _Install"));
-	gtk_widget_set_visible (self->button_update_all, TRUE);
+	// We can't do offline updates in Ubuntu - Need PackageKit 1.0
+	//gtk_widget_set_visible (self->button_update_all, TRUE);
 	gtk_style_context_add_class (gtk_widget_get_style_context (self->button_update_all), "suggested-action");
 	gtk_container_add (GTK_CONTAINER (self->header_end_box), self->button_update_all);
 	g_signal_connect (self->button_update_all, "clicked", G_CALLBACK (gs_shell_updates_button_update_all_cb), self);
