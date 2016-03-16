@@ -915,8 +915,9 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			g_string_free (url, TRUE);
 		}
 
-		gtk_widget_set_visible (self->label_details_updated_title, TRUE);
-		gtk_widget_set_visible (self->label_details_updated_value, TRUE);
+		// Disabled on Ubuntu as we don't have history support
+		gtk_widget_set_visible (self->label_details_updated_title, FALSE);
+		gtk_widget_set_visible (self->label_details_updated_value, FALSE);
 	}
 
 	/* set the category */
