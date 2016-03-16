@@ -458,7 +458,10 @@ gs_plugin_app_install (GsPlugin *plugin,
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 	result = send_package_action (plugin, gs_app_get_id (app), "install", error);
-	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	if (result)
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	else
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 
 	return result;
 }
@@ -477,7 +480,10 @@ gs_plugin_app_remove (GsPlugin *plugin,
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
 	result = send_package_action (plugin, gs_app_get_id (app), "remove", error);
-	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	if (result)
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	else
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 	return result;
 }
