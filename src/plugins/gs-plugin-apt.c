@@ -688,12 +688,12 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 					      -1,
 					      NULL,
 					      error);
-	if (result == NULL)
-		return FALSE;
-
-	g_main_loop_run (loop);
+	if (result != NULL)
+		g_main_loop_run (loop);
 	g_dbus_connection_signal_unsubscribe (conn, property_signal);
 	g_dbus_connection_signal_unsubscribe (conn, finished_signal);
+	if (result == NULL)
+		return FALSE;
 
 	if (g_strcmp0 (transaction_result, "exit-success") != 0) {
 		g_set_error (error,
