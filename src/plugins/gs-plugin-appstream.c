@@ -189,6 +189,8 @@ start_refresh (GsPlugin *plugin)
 
 	application = g_application_get_default ();
 
+	g_action_group_activate_action (G_ACTION_GROUP (application), "set-mode", g_variant_new_string ("updates"));
+
 	loader = gs_application_get_plugin_loader (GS_APPLICATION (application));
 
 	gs_plugin_loader_refresh_async (loader,
