@@ -163,6 +163,9 @@ needs_refresh (GsPlugin *plugin)
 	return dir == NULL || g_dir_read_name (dir) == NULL;
 }
 
+static gboolean gs_plugin_appstream_startup (GsPlugin  *plugin,
+					     GError   **error);
+
 static void
 refreshed_cb (GObject      *source_object,
 	      GAsyncResult *res,
@@ -171,8 +174,11 @@ refreshed_cb (GObject      *source_object,
 	GsPlugin *plugin = user_data;
 	GsPluginLoader *loader = GS_PLUGIN_LOADER (source_object);
 
-	if (gs_plugin_loader_refresh_finish (loader, res, NULL))
+	if (gs_plugin_loader_refresh_finish (loader, res, NULL)) {
+		plugin->priv->done_init = FALSE;
+		gs_plugin_appstream_startup (plugin, NULL);
 		gs_plugin_updates_changed (plugin);
+	}
 }
 
 static void
