@@ -217,6 +217,7 @@ receive_login_response_cb (GsUbuntuLoginDialog *self,
 
 		if (g_str_equal (code, "TWOFACTOR_REQUIRED")) {
 			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
+			gtk_widget_grab_focus (self->passcode_entry);
 			update_widgets (self);
 			break;
 		}
@@ -235,20 +236,28 @@ receive_login_response_cb (GsUbuntuLoginDialog *self,
 
 		if (g_str_equal (code, "INVALID_CREDENTIALS")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Incorrect email or password"));
+			gtk_widget_grab_focus (self->password_entry);
 		} else if (g_str_equal (code, "ACCOUNT_SUSPENDED")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Account suspended"));
+			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "ACCOUNT_DEACTIVATED")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Account deactivated"));
+			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "EMAIL_INVALIDATED")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Email invalidated"));
+			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "TWOFACTOR_FAILURE")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Two-factor authentication failed"));
+			gtk_widget_grab_focus (self->passcode_entry);
 		} else if (g_str_equal (code, "PASSWORD_POLICY_ERROR")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Password reset required"));
+			gtk_widget_grab_focus (self->reset_radio);
 		} else if (g_str_equal (code, "TOO_MANY_REQUESTS")) {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("Too many requests"));
+			gtk_widget_grab_focus (self->password_entry);
 		} else {
 			gtk_label_set_text (GTK_LABEL (self->status_label), _("An error occurred"));
+			gtk_widget_grab_focus (self->password_entry);
 		}
 
 		break;
@@ -355,6 +364,8 @@ static void
 gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
+
+	gtk_window_set_default (GTK_WINDOW (self), self->next_button);
 
 	g_signal_connect_swapped (self->next_button, "clicked", G_CALLBACK (next_button_clicked_cb), self);
 	g_signal_connect_swapped (self->login_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
