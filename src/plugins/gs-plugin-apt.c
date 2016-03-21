@@ -30,6 +30,7 @@
 
 typedef struct {
 	gchar *name;
+	gchar *section;
 	gchar *installed_version;
 	gchar *update_version;
 	gint installed_size;
@@ -67,6 +68,7 @@ free_package_info (gpointer data)
 {
 	PackageInfo *info = data;
 	g_free (info->name);
+	g_free (info->section);
 	g_free (info->installed_version);
 	g_free (info->update_version);
 	g_slice_free (PackageInfo, info);
@@ -315,6 +317,9 @@ field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_
 			data->current_installed = TRUE;
 			data->plugin->priv->installed_packages = g_list_append (data->plugin->priv->installed_packages, data->current_info);
 		}
+	} else if (strncmp (name, "Section", name_length) == 0) {
+		g_free (data->current_info->section);
+		data->current_info->section = g_strndup (value, value_length);
 	} else if (strncmp (name, "Installed-Size", name_length) == 0) {
 		data->current_info->installed_size = atoi (value);
 	} else if (strncmp (name, "Version", name_length) == 0) {
@@ -397,6 +402,7 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	else
 		source_prefix = g_strdup_printf ("%c", binary_source[0]);
 	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, binary_source, update_version);
+       g_printerr ("%s\n", uri);
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
 	status_code = soup_session_send_message (plugin->soup_session, msg);
@@ -503,6 +509,15 @@ gs_plugin_refine (GsPlugin *plugin,
 	return TRUE;
 }
 
+static gboolean
+is_allowed_section (PackageInfo *info)
+{
+	const gchar *section_blacklist[] = { "libs", NULL };
+
+	/* There's no valid apps in the libs section */
+	return info->section == NULL || !g_strv_contains (section_blacklist, info->section);
+}
+
 gboolean
 gs_plugin_add_installed (GsPlugin *plugin,
 			 GList **list,
@@ -524,6 +539,9 @@ gs_plugin_add_installed (GsPlugin *plugin,
 	for (link = plugin->priv->installed_packages; link; link = link->next) {
 		PackageInfo *info = link->data;
 		g_autoptr(GsApp) app = NULL;
+
+		if (!is_allowed_section (info))
+			continue;
 
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
@@ -802,6 +820,9 @@ gs_plugin_add_updates (GsPlugin *plugin,
 	for (link = plugin->priv->updatable_packages; link; link = link->next) {
 		PackageInfo *info = link->data;
 		g_autoptr(GsApp) app = NULL;
+
+		if (!is_allowed_section (info))
+			continue;
 
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
