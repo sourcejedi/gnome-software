@@ -462,7 +462,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 	root = json_node_get_object (json_parser_get_root (parser));
 	result = json_object_get_object_member (root, "result");
 	resource_path = json_object_get_string_member (result, "resource");
-	status = json_object_get_string_member (result, "status");
+	status = g_strdup (json_object_get_string_member (result, "status"));
 	while (g_strcmp0 (status, "running") == 0) {
 		g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
 		g_autoptr(JsonParser) status_parser = NULL;
