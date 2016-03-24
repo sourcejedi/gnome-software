@@ -218,6 +218,46 @@ send_snapd_request (GSocket *socket,
 	return TRUE;
 }
 
+static JsonParser *
+parse_result (const gchar *response, const gchar *response_type, GError **error)
+{
+	g_autoptr(JsonParser) parser = NULL;
+	g_autoptr(GError) sub_error = NULL;
+
+	if (response_type == NULL) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd returned no content type");
+		return NULL;
+	}
+	if (g_strcmp0 (response_type, "application/json") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned unexpected content type %s", response_type);
+		return NULL;
+	}
+
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, response, -1, &sub_error)) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to parse snapd response: %s", sub_error->message);
+		return NULL;
+	}
+	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response does is not a valid JSON object");
+		return NULL;
+	}
+
+	return g_object_ref (parser);
+}
+
 static gboolean
 get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
@@ -264,36 +304,9 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		return FALSE;
 	}
 
-	if (!response_type) {
-		g_set_error_literal (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "snapd returned no content type");
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
 		return FALSE;
-	}
-	if (g_strcmp0 (response_type, "application/json") != 0) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned unexpected content type %s", response_type);
-		return FALSE;
-	}
-
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, response, -1, &sub_error)) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to parse snapd response: %s", sub_error->message);
-		return FALSE;
-	}
-	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
-		g_set_error_literal (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "snapd response does is not a valid JSON object");
-		return FALSE;
-	}
 	root = json_node_get_object (json_parser_get_root (parser));
 	result = json_object_get_object_member (root, "result");
 	packages = json_object_get_object_member (result, "snaps");
@@ -421,7 +434,11 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 	g_autofree gchar *content = NULL, *path = NULL;
 	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
-	g_autofree gchar *reason_phrase, *response_type = NULL, *response = NULL;
+	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL, *status = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root, *result;
+        const gchar *resource_path;
+	g_autoptr(GError) sub_error = NULL;
 
 	socket = open_snapd_socket (error);
 	if (!socket)
@@ -440,7 +457,46 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		return FALSE;
 	}
 
-	// FIXME: Need to poll for status - may stil have failed
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return FALSE;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_object_member (root, "result");
+	resource_path = json_object_get_string_member (result, "resource");
+	status = json_object_get_string_member (result, "status");
+	while (g_strcmp0 (status, "running") == 0) {
+		g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
+		g_autoptr(JsonParser) status_parser = NULL;
+
+		/* Wait for a little bit before polling */
+		g_usleep (100 * 1000);
+
+		if (!send_snapd_request (socket, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
+			return FALSE;
+		if (status_code != SOUP_STATUS_OK) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd returned status code %d: %s", status_code, status_reason_phrase);
+			return FALSE;
+		}
+		status_parser = parse_result (status_response, status_response_type, error);
+		if (status_parser == NULL)
+			return FALSE;
+
+		root = json_node_get_object (json_parser_get_root (status_parser));
+		result = json_object_get_object_member (root, "result");
+		g_free (status);
+		status = g_strdup (json_object_get_string_member (result, "status"));
+	}
+
+	if (g_strcmp0 (status, "succeeded") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd operation finished with status %s", status);
+		return FALSE;
+	}
 
 	return TRUE;
 }
