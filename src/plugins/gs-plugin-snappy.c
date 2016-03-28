@@ -20,6 +20,7 @@
  */
 
 #include <config.h>
+#include <glib/gi18n.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -324,6 +325,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 
 		app = gs_app_new (id);
 		gs_app_set_management_plugin (app, "snappy");
+		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
 		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		status = json_object_get_string_member (package, "status");
 		if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
