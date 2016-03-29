@@ -969,6 +969,7 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 	gs_app_set_management_plugin (app, "dpkg");
 	gs_app_add_source (app, tokens[0]);
 	gs_app_set_origin (app, path);
+	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 
 	gs_plugin_add_app (list, app);
 
