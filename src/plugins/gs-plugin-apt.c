@@ -402,7 +402,6 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	else
 		source_prefix = g_strdup_printf ("%c", binary_source[0]);
 	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, binary_source, update_version);
-       g_printerr ("%s\n", uri);
 	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
 	status_code = soup_session_send_message (plugin->soup_session, msg);
