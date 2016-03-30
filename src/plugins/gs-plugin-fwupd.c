@@ -290,12 +290,16 @@ gs_plugin_add_update_app (GsPlugin *plugin,
 		g_variant_unref (variant);
 	}
 
-	/* offline unsupported */
-	if ((flags & FU_DEVICE_FLAG_ALLOW_OFFLINE) == 0) {
+	/* update unsupported */
+	if (flags & FU_DEVICE_FLAG_ALLOW_ONLINE) {
+		gs_app_set_metadata (app, "fwupd::InstallMethod", "online");
+	} else if (flags & FU_DEVICE_FLAG_ALLOW_OFFLINE) {
+		gs_app_set_metadata (app, "fwupd::InstallMethod", "offline");
+	} else {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "%s [%s] cannot be updated offline",
+			     "%s [%s] cannot be updated",
 			     gs_app_get_name (app), gs_app_get_id (app));
 		return FALSE;
 	}
@@ -313,52 +317,59 @@ gs_plugin_add_update_app (GsPlugin *plugin,
 		g_warning ("fwupd: No update-version! for %s!", gs_app_get_id (app));
 		return TRUE;
 	}
-	if (update_hash == NULL) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "%s [%s] (%s) has no checksum, ignoring as unsafe",
-			     gs_app_get_name (app),
-			     gs_app_get_id (app),
-			     gs_app_get_update_version (app));
-		return FALSE;
-	}
-	if (update_uri == NULL) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "no location available for %s [%s]",
-			     gs_app_get_name (app), gs_app_get_id (app));
-		return FALSE;
-	}
 
-	/* does the firmware already exist in the cache? */
-	basename = g_path_get_basename (update_uri);
-	filename_cache = g_build_filename (plugin->priv->cachedir, basename, NULL);
-	if (!g_file_test (filename_cache, G_FILE_TEST_EXISTS)) {
-		gs_plugin_fwupd_add_required_location (plugin, update_uri);
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "%s does not yet exist, wait patiently",
-			     filename_cache);
-		return FALSE;
-	}
+	/* devices that are locked need unlocking */
+	if (flags & FU_DEVICE_FLAG_LOCKED) {
+		gs_app_set_metadata (app, "fwupd::IsLocked", "");
+	} else {
+		if (update_hash == NULL) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "%s [%s] (%s) has no checksum, ignoring as unsafe",
+				     gs_app_get_name (app),
+				     gs_app_get_id (app),
+				     gs_app_get_update_version (app));
+			return FALSE;
+		}
+		if (update_uri == NULL) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "no location available for %s [%s]",
+				     gs_app_get_name (app), gs_app_get_id (app));
+			return FALSE;
+		}
 
-	/* does the checksum match */
-	checksum = gs_plugin_fwupd_get_file_checksum (filename_cache,
-						      G_CHECKSUM_SHA1,
-						      error);
-	if (checksum == NULL)
-		return FALSE;
-	if (g_strcmp0 (update_hash, checksum) != 0) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "%s does not match checksum, expected %s, got %s",
-			     filename_cache, update_hash, checksum);
-		g_unlink (filename_cache);
-		return FALSE;
+		/* does the firmware already exist in the cache? */
+		basename = g_path_get_basename (update_uri);
+		filename_cache = g_build_filename (plugin->priv->cachedir,
+						   basename, NULL);
+		if (!g_file_test (filename_cache, G_FILE_TEST_EXISTS)) {
+			gs_plugin_fwupd_add_required_location (plugin, update_uri);
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "%s does not yet exist, wait patiently",
+				     filename_cache);
+			return FALSE;
+		}
+
+		/* does the checksum match */
+		checksum = gs_plugin_fwupd_get_file_checksum (filename_cache,
+							      G_CHECKSUM_SHA1,
+							      error);
+		if (checksum == NULL)
+			return FALSE;
+		if (g_strcmp0 (update_hash, checksum) != 0) {
+			g_set_error (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "%s does not match checksum, expected %s got %s",
+				     filename_cache, update_hash, checksum);
+			g_unlink (filename_cache);
+			return FALSE;
+		}
 	}
 
 	/* can be done live */
@@ -907,16 +918,15 @@ gs_plugin_offline_update (GsPlugin *plugin,
 }
 
 /**
- * gs_plugin_app_install:
- *
- * Called when a user double clicks on a .cab file
+ * gs_plugin_fwupd_install:
  */
-gboolean
-gs_plugin_app_install (GsPlugin *plugin,
-		       GsApp *app,
-		       GCancellable *cancellable,
-		       GError **error)
+static gboolean
+gs_plugin_fwupd_install (GsPlugin *plugin,
+			 GsApp *app,
+			 GCancellable *cancellable,
+			 GError **error)
 {
+	const gchar *install_method;
 	const gchar *filename;
 	gboolean offline = TRUE;
 
@@ -933,13 +943,63 @@ gs_plugin_app_install (GsPlugin *plugin,
 			     filename);
 		return FALSE;
 	}
+
+	/* only offline supported */
+	install_method = gs_app_get_metadata_item (app, "fwupd::InstallMethod");
+	if (g_strcmp0 (install_method, "offline") == 0)
+		offline = TRUE;
+
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (gs_app_get_kind (app) == AS_APP_KIND_FIRMWARE)
-		offline = FALSE;
 	if (!gs_plugin_fwupd_upgrade (plugin, filename, FWUPD_DEVICE_ID_ANY, offline,
 				      cancellable, error))
 		return FALSE;
 	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	return TRUE;
+}
+
+/**
+ * gs_plugin_app_install:
+ *
+ * Called when a user double clicks on a .cab file
+ */
+gboolean
+gs_plugin_app_install (GsPlugin *plugin,
+		       GsApp *app,
+		       GCancellable *cancellable,
+		       GError **error)
+{
+	return gs_plugin_fwupd_install (plugin, app, cancellable, error);
+}
+
+/**
+ * gs_plugin_fwupd_unlock:
+ */
+static gboolean
+gs_plugin_fwupd_unlock (GsPlugin *plugin,
+			const gchar *device_id,
+			GCancellable *cancellable,
+			GError **error)
+{
+	g_autoptr(GVariant) val = NULL;
+
+	/* set up plugin */
+	if (plugin->priv->proxy == NULL) {
+		if (!gs_plugin_startup (plugin, cancellable, error))
+			return FALSE;
+	}
+	if (plugin->priv->proxy == NULL)
+		return TRUE;
+
+	/* unlock device */
+	val = g_dbus_proxy_call_sync (plugin->priv->proxy,
+				      "Unlock",
+				      g_variant_new ("(s)", device_id),
+				      G_DBUS_CALL_FLAGS_NONE,
+				      -1,
+				      NULL,
+				      error);
+	if (val == NULL)
+		return FALSE;
 	return TRUE;
 }
 
@@ -954,7 +1014,24 @@ gs_plugin_app_update (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	return gs_plugin_app_install (plugin, app, cancellable, error);
+	/* locked devices need unlocking, rather than installing */
+	if (gs_app_get_metadata_item (app, "fwupd::IsLocked") != NULL) {
+		const gchar *device_id;
+		device_id = gs_app_get_metadata_item (app, "fwupd::DeviceID");
+		if (device_id == NULL) {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_FAILED,
+					     "not enough data for fwupd unlock");
+			return FALSE;
+		}
+		return gs_plugin_fwupd_unlock (plugin,
+					       device_id,
+					       cancellable,
+					       error);
+	}
+
+	return gs_plugin_fwupd_install (plugin, app, cancellable, error);
 }
 
 /**
@@ -1006,6 +1083,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 			   GCancellable *cancellable,
 			   GError **error)
 {
+	FwupdDeviceFlags flags = FU_DEVICE_FLAG_ALLOW_OFFLINE;
 	GVariant *body;
 	GVariant *val;
 	GVariant *variant;
@@ -1083,14 +1161,26 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	gs_app_set_kind (app, AS_APP_KIND_FIRMWARE);
 	gs_app_set_management_plugin (app, "fwupd");
 	gs_app_set_kind (app, AS_APP_KIND_FIRMWARE);
-	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
 	gs_app_add_source_id (app, filename);
 	gs_app_add_category (app, "System");
 	val = g_dbus_message_get_body (message);
 	g_variant_get (val, "(a{sv})", &iter);
 	while (g_variant_iter_next (iter, "{&sv}", &key, &variant)) {
 		gs_plugin_fwupd_set_app_from_kv (app, key, variant);
+		if (g_strcmp0 (key, "Flags") == 0)
+			flags = g_variant_get_uint64 (variant);
 		g_variant_unref (variant);
+	}
+
+	/* can we install on-line, off-line, or not at all */
+	if (flags & FU_DEVICE_FLAG_ALLOW_ONLINE) {
+		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+		gs_app_set_metadata (app, "fwupd::InstallMethod", "online");
+	} else if (flags & FU_DEVICE_FLAG_ALLOW_OFFLINE) {
+		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+		gs_app_set_metadata (app, "fwupd::InstallMethod", "offline");
+	} else {
+		gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
 	}
 
 	/* create icon */

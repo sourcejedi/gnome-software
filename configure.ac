@@ -1,7 +1,7 @@
 # Copyright (C) 2010-2015 Richard Hughes <richard@hughsie.com>
 AC_PREREQ(2.63)
 
-AC_INIT([gnome-software],[3.19.93],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
+AC_INIT([gnome-software],[3.20.1],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
 AC_CONFIG_SRCDIR(src)
 AM_INIT_AUTOMAKE([1.11 no-dist-gzip dist-xz tar-ustar serial-tests foreign])
 AC_CONFIG_HEADERS([config.h])
@@ -203,6 +203,13 @@ AS_IF([test "x$have_limba" = "xyes"], [
 ])
 AM_CONDITIONAL(HAVE_LIMBA, test x$enable_limba = xyes)
 
+# Open Desktop Ratings Service
+AC_ARG_ENABLE(odrs,
+              [AS_HELP_STRING([--enable-odrs],
+                              [enable ODRS support [default=yes]])],,
+              have_odrs=yes)
+AM_CONDITIONAL(HAVE_ODRS, test "$have_odrs" != no)
+
 # this refers to the gnome-software plugin API version
 # this is not in any way related to a package or soname version
 GS_PLUGIN_API_VERSION=9
@@ -252,4 +259,5 @@ echo "
         Firmware support:          ${have_firmware}
         Limba support:             ${have_limba}
         XDG-APP support:           ${have_xdg_app}
+        ODRS support:              ${have_odrs}
 "
