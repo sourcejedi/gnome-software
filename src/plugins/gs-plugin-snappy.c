@@ -259,6 +259,83 @@ parse_result (const gchar *response, const gchar *response_type, GError **error)
 	return g_object_ref (parser);
 }
 
+static void
+refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
+{
+	const gchar *status, *icon_url;
+	g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
+	gint64 size = -1;
+
+	status = json_object_get_string_member (package, "status");
+	if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
+		const gchar *update_available;
+
+		update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
+		if (update_available)
+			gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
+		else
+			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+		size = json_object_get_int_member (package, "installed_size");
+	}
+	else if (g_strcmp0 (status, "removed") == 0) {
+		// A removed app is only available if it can be downloaded (it might have been sideloaded)
+		size = json_object_get_int_member (package, "download_size");
+		if (size > 0)
+			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	} else if (g_strcmp0 (status, "not installed") == 0) {
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+		size = json_object_get_int_member (package, "download_size");
+	}
+	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
+	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
+	gs_app_set_version (app, json_object_get_string_member (package, "version"));
+	if (size > 0)
+		gs_app_set_size (app, size);
+	gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
+	icon_url = json_object_get_string_member (package, "icon");
+	if (g_str_has_prefix (icon_url, "/")) {
+		g_autoptr(GSocket) icon_socket = NULL;
+		g_autofree gchar *icon_response = NULL;
+		gsize icon_response_length;
+
+		icon_socket = open_snapd_socket (NULL);
+		if (icon_socket && send_snapd_request (icon_socket, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+			g_autoptr(GdkPixbufLoader) loader = NULL;
+
+			loader = gdk_pixbuf_loader_new ();
+			gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
+			gdk_pixbuf_loader_close (loader, NULL);
+			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
+		}
+		else
+			g_printerr ("Failed to get icon\n");
+	}
+	else {
+		g_autoptr(SoupMessage) message = NULL;
+		g_autoptr(GdkPixbufLoader) loader = NULL;
+
+		message = soup_message_new (SOUP_METHOD_GET, icon_url);
+		if (message != NULL) {
+			soup_session_send_message (plugin->soup_session, message);
+			loader = gdk_pixbuf_loader_new ();
+			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
+			gdk_pixbuf_loader_close (loader, NULL);
+			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
+		}
+	}
+
+	if (icon_pixbuf)
+		gs_app_set_pixbuf (app, icon_pixbuf);
+	else {
+		g_autoptr(AsIcon) icon = NULL;
+
+		icon = as_icon_new ();
+		as_icon_set_kind (icon, AS_ICON_KIND_STOCK);
+		as_icon_set_name (icon, "package-x-generic");
+		gs_app_set_icon (app, icon);
+	}
+}
+
 static gboolean
 get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
@@ -270,7 +347,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result, *packages;
 	GList *package_list, *link;
-	g_autoptr(GError) sub_error = NULL;
 
 	socket = open_snapd_socket (error);
 	if (!socket)
@@ -315,10 +391,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	for (link = package_list; link; link = link->next) {
 		const gchar *id = link->data;
 		JsonObject *package;
-		const gchar *status, *icon_url;
 		g_autoptr(GsApp) app = NULL;
-		g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
-		gint64 size = -1;
 
 		package = json_object_get_object_member (packages, id);
 		if (filter_func != NULL && !filter_func (id, package, user_data))
@@ -374,28 +447,48 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 			g_autoptr(SoupMessage) message = NULL;
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
-			message = soup_message_new (SOUP_METHOD_GET, icon_url);
-			if (message != NULL) {
-				soup_session_send_message (plugin->soup_session, message);
-				loader = gdk_pixbuf_loader_new ();
-				gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
-				gdk_pixbuf_loader_close (loader, NULL);
-				icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
-			}
-		}
+	return TRUE;
+}
 
-		if (icon_pixbuf)
-			gs_app_set_pixbuf (app, icon_pixbuf);
-		else {
-			g_autoptr(AsIcon) icon = NULL;
+static gboolean
+get_app (GsPlugin *plugin, GsApp *app, GError **error)
+{
+	g_autoptr(GSocket) socket = NULL;
+	guint status_code;
+	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root, *result;
 
-			icon = as_icon_new ();
-			as_icon_set_kind (icon, AS_ICON_KIND_STOCK);
-			as_icon_set_name (icon, "package-x-generic");
-			gs_app_set_icon (app, icon);
-		}
-		gs_plugin_add_app (list, app);
+	socket = open_snapd_socket (error);
+	if (!socket)
+		return FALSE;
+
+	path = g_strdup_printf ("/2.0/snaps/%s", gs_app_get_id (app));
+	if (!send_snapd_request (socket, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %d: %s", status_code, reason_phrase);
+		return FALSE;
 	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return FALSE;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_object_member (root, "result");
+	if (result == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned no results for %s", gs_app_get_id (app));
+		return FALSE;
+	}
+
+	refine_app (plugin, app, result);
 
 	return TRUE;
 }
@@ -431,6 +524,29 @@ gs_plugin_add_search (GsPlugin *plugin,
 	return get_apps (plugin, NULL, values, list, NULL, values, error);
 }
 
+gboolean
+gs_plugin_refine (GsPlugin *plugin,
+		  GList **list,
+		  GsPluginRefineFlags flags,
+		  GCancellable *cancellable,
+		  GError **error)
+{
+	GList *link;
+
+	for (link = *list; link; link = link->next) {
+		GsApp *app = link->data;
+
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
+			continue;
+
+		// Get info from snapd
+		if (!get_app (plugin, app, error))
+			return FALSE;
+	}
+
+	return TRUE;
+}
+
 static gboolean
 send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GError **error)
 {
@@ -441,7 +557,6 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result;
         const gchar *resource_path;
-	g_autoptr(GError) sub_error = NULL;
 
 	socket = open_snapd_socket (error);
 	if (!socket)
