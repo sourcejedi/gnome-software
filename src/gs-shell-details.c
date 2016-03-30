@@ -164,6 +164,7 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 	GsShellDetails *self = GS_SHELL_DETAILS (page);
 	AsAppState state;
 	GtkWidget *widget;
+	GtkStyleContext *sc;
 	GtkAdjustment *adj;
 
 	if (gs_shell_get_mode (self->shell) != GS_SHELL_MODE_DETAILS) {
@@ -217,8 +218,23 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 	case AS_APP_STATE_INSTALLED:
 	case AS_APP_STATE_REMOVING:
 	case AS_APP_STATE_UPDATABLE:
-	case AS_APP_STATE_UPDATABLE_LIVE:
 		gtk_widget_set_visible (self->button_install, FALSE);
+		break;
+	case AS_APP_STATE_UPDATABLE_LIVE:
+		gtk_widget_set_visible (self->button_install, TRUE);
+		gtk_widget_set_sensitive (self->button_install, TRUE);
+		sc = gtk_widget_get_style_context (self->button_install);
+		if (gs_app_get_kind (self->app) == AS_APP_KIND_FIRMWARE) {
+			/* TRANSLATORS: button text in the header when firmware
+			 * can be live-installed */
+			gtk_button_set_label (GTK_BUTTON (self->button_install), _("_Install"));
+			gtk_style_context_add_class (sc, "suggested-action");
+		} else {
+			/* TRANSLATORS: button text in the header when an application
+			 * can be live-updated */
+			gtk_button_set_label (GTK_BUTTON (self->button_install), _("_Install"));
+			gtk_style_context_remove_class (sc, "suggested-action");
+		}
 		break;
 	case AS_APP_STATE_UNAVAILABLE:
 		if (gs_app_get_url (self->app, AS_URL_KIND_MISSING) != NULL) {
@@ -260,7 +276,8 @@ gs_shell_details_switch_to (GsPage *page, gboolean scroll_up)
 		gtk_widget_set_visible (self->button_details_launch, FALSE);
 
 	/* remove button */
-	if (gs_app_has_quirk (self->app, AS_APP_QUIRK_COMPULSORY)) {
+	if (gs_app_has_quirk (self->app, AS_APP_QUIRK_COMPULSORY) ||
+	    gs_app_get_kind (self->app) == AS_APP_KIND_FIRMWARE) {
 		gtk_widget_set_visible (self->button_remove, FALSE);
 	} else {
 		switch (state) {
