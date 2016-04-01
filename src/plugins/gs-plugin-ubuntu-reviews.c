@@ -27,18 +27,11 @@
 #include <json-glib/json-glib.h>
 #include <oauth.h>
 #include <sqlite3.h>
-#include <libsecret/secret.h>
 
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
 #include "gs-os-release.h"
-
-#define SCHEMA_NAME     "com.ubuntu.UbuntuOne.GnomeSoftware"
-#define CONSUMER_KEY    "consumer-key"
-#define CONSUMER_SECRET "consumer-secret"
-#define TOKEN_KEY       "token-key"
-#define TOKEN_SECRET    "token-secret"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
