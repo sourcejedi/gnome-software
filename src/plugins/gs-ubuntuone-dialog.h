@@ -19,26 +19,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef GS_UBUNTU_LOGIN_DIALOG_H
-#define GS_UBUNTU_LOGIN_DIALOG_H
+#ifndef GS_UBUNTUONE_DIALOG_H
+#define GS_UBUNTUONE_DIALOG_H
 
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
 
-#define GS_TYPE_UBUNTU_LOGIN_DIALOG gs_ubuntu_login_dialog_get_type ()
+#define GS_TYPE_UBUNTUONE_DIALOG gs_ubuntuone_dialog_get_type ()
 
-G_DECLARE_FINAL_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GS, UBUNTU_LOGIN_DIALOG, GtkDialog)
+G_DECLARE_FINAL_TYPE (GsUbuntuoneDialog, gs_ubuntuone_dialog, GS, UBUNTUONE_DIALOG, GtkDialog)
 
-GtkWidget	*gs_ubuntu_login_dialog_new			(void);
-gboolean	 gs_ubuntu_login_dialog_get_do_remember		(GsUbuntuLoginDialog *dialog);
-const gchar	*gs_ubuntu_login_dialog_get_consumer_key	(GsUbuntuLoginDialog *dialog);
-const gchar	*gs_ubuntu_login_dialog_get_consumer_secret	(GsUbuntuLoginDialog *dialog);
-const gchar	*gs_ubuntu_login_dialog_get_token_key		(GsUbuntuLoginDialog *dialog);
-const gchar	*gs_ubuntu_login_dialog_get_token_secret	(GsUbuntuLoginDialog *dialog);
+GtkWidget	*gs_ubuntuone_dialog_new			(void);
+gboolean	 gs_ubuntuone_dialog_get_do_remember		(GsUbuntuoneDialog *dialog);
+const gchar	*gs_ubuntuone_dialog_get_consumer_key		(GsUbuntuoneDialog *dialog);
+const gchar	*gs_ubuntuone_dialog_get_consumer_secret	(GsUbuntuoneDialog *dialog);
+const gchar	*gs_ubuntuone_dialog_get_token_key		(GsUbuntuoneDialog *dialog);
+const gchar	*gs_ubuntuone_dialog_get_token_secret		(GsUbuntuoneDialog *dialog);
 
 G_END_DECLS
 
-#endif /* GS_UBUNTU_LOGIN_DIALOG_H */
+#endif /* GS_UBUNTUONE_DIALOG_H */
 
 /* vim: set noexpandtab: */

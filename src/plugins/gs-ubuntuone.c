@@ -26,7 +26,7 @@
 #include <gs-plugin.h>
 
 #include "gs-ubuntuone.h"
-#include "gs-ubuntu-login-dialog.h"
+#include "gs-ubuntuone-dialog.h"
 
 #define SCHEMA_NAME     "com.ubuntu.UbuntuOne.GnomeSoftware"
 #define CONSUMER_KEY    "consumer-key"
@@ -151,7 +151,7 @@ show_login_dialog (gpointer user_data)
 	LoginContext *context = user_data;
 	GtkWidget *dialog;
 
-	dialog = gs_ubuntu_login_dialog_new ();
+	dialog = gs_ubuntuone_dialog_new ();
 	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
 	case GTK_RESPONSE_DELETE_EVENT:
 	case GTK_RESPONSE_CANCEL:
@@ -164,11 +164,11 @@ show_login_dialog (gpointer user_data)
 		break;
 
 	case GTK_RESPONSE_OK:
-		context->remember = gs_ubuntu_login_dialog_get_do_remember (GS_UBUNTU_LOGIN_DIALOG (dialog));
-		context->consumer_key = g_strdup (gs_ubuntu_login_dialog_get_consumer_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		context->consumer_secret = g_strdup (gs_ubuntu_login_dialog_get_consumer_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		context->token_key = g_strdup (gs_ubuntu_login_dialog_get_token_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		context->token_secret = g_strdup (gs_ubuntu_login_dialog_get_token_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
+		context->remember = gs_ubuntuone_dialog_get_do_remember (GS_UBUNTUONE_DIALOG (dialog));
+		context->consumer_key = g_strdup (gs_ubuntuone_dialog_get_consumer_key (GS_UBUNTUONE_DIALOG (dialog)));
+		context->consumer_secret = g_strdup (gs_ubuntuone_dialog_get_consumer_secret (GS_UBUNTUONE_DIALOG (dialog)));
+		context->token_key = g_strdup (gs_ubuntuone_dialog_get_token_key (GS_UBUNTUONE_DIALOG (dialog)));
+		context->token_secret = g_strdup (gs_ubuntuone_dialog_get_token_secret (GS_UBUNTUONE_DIALOG (dialog)));
 		context->success = TRUE;
 		break;
 	}
