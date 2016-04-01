@@ -178,6 +178,8 @@ libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
+	gs-ubuntuone.c					\
+	gs-ubuntuone.h					\
 	gs-plugin-ubuntu-reviews.c			\
 	gs-ubuntu-login-dialog.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\
