@@ -173,7 +173,7 @@ libgs_plugin_ubuntu_reviews_la_SOURCES =		\
 	gs-ubuntuone.c					\
 	gs-ubuntuone.h					\
 	gs-plugin-ubuntu-reviews.c			\
-	gs-ubuntu-login-dialog.c
+	gs-ubuntuone-dialog.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\
 	$(GS_PLUGIN_LIBS)				\
 	$(SOUP_LIBS)					\

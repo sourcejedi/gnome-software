@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "gs-ubuntu-login-dialog.h"
+#include "gs-ubuntuone-dialog.h"
 #include "gs-utils.h"
 
 #include <glib/gi18n.h>
@@ -28,7 +28,7 @@
 
 #define UBUNTU_LOGIN_HOST "https://login.ubuntu.com"
 
-struct _GsUbuntuLoginDialog
+struct _GsUbuntuoneDialog
 {
 	GtkDialog parent_instance;
 
@@ -55,7 +55,7 @@ struct _GsUbuntuLoginDialog
 	gchar *token_secret;
 };
 
-G_DEFINE_TYPE (GsUbuntuLoginDialog, gs_ubuntu_login_dialog, GTK_TYPE_DIALOG)
+G_DEFINE_TYPE (GsUbuntuoneDialog, gs_ubuntuone_dialog, GTK_TYPE_DIALOG)
 
 static gboolean
 is_email_address (const gchar *text)
@@ -74,7 +74,7 @@ is_email_address (const gchar *text)
 }
 
 static void
-update_widgets (GsUbuntuLoginDialog *self)
+update_widgets (GsUbuntuoneDialog *self)
 {
 	if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-0")) {
 		gtk_widget_set_sensitive (self->next_button,
@@ -94,14 +94,14 @@ update_widgets (GsUbuntuLoginDialog *self)
 	}
 }
 
-typedef void (*ResponseCallback) (GsUbuntuLoginDialog *self,
+typedef void (*ResponseCallback) (GsUbuntuoneDialog *self,
 				  guint	      status,
 				  GVariant	  *response,
 				  gpointer	   user_data);
 
 typedef struct
 {
-	GsUbuntuLoginDialog *dialog;
+	GsUbuntuoneDialog *dialog;
 	ResponseCallback callback;
 	gpointer user_data;
 } RequestInfo;
@@ -136,7 +136,7 @@ response_received_cb (SoupSession *session,
 }
 
 static void
-send_request (GsUbuntuLoginDialog *self,
+send_request (GsUbuntuoneDialog *self,
 	      const gchar         *method,
 	      const gchar         *uri,
 	      GVariant	          *request,
@@ -170,7 +170,7 @@ send_request (GsUbuntuLoginDialog *self,
 }
 
 static void
-receive_login_response_cb (GsUbuntuLoginDialog *self,
+receive_login_response_cb (GsUbuntuoneDialog *self,
 			   guint	        status,
 			   GVariant	       *response,
 			   gpointer	        user_data)
@@ -265,7 +265,7 @@ receive_login_response_cb (GsUbuntuLoginDialog *self,
 }
 
 static void
-send_login_request (GsUbuntuLoginDialog *self)
+send_login_request (GsUbuntuoneDialog *self)
 {
 	PangoAttrList *attributes;
 
@@ -321,7 +321,7 @@ send_login_request (GsUbuntuLoginDialog *self)
 }
 
 static void
-next_button_clicked_cb (GsUbuntuLoginDialog *self,
+next_button_clicked_cb (GsUbuntuoneDialog *self,
 			GtkButton	    *button)
 {
 	if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-0")) {
@@ -340,14 +340,14 @@ next_button_clicked_cb (GsUbuntuLoginDialog *self,
 }
 
 static void
-radio_button_toggled_cb (GsUbuntuLoginDialog *self,
+radio_button_toggled_cb (GsUbuntuoneDialog *self,
 			 GtkToggleButton   *toggle)
 {
 	update_widgets (self);
 }
 
 static void
-entry_edited_cb (GsUbuntuLoginDialog *self,
+entry_edited_cb (GsUbuntuoneDialog *self,
 		 GParamSpec	     *pspec,
 		 GObject	     *object)
 {
@@ -355,13 +355,13 @@ entry_edited_cb (GsUbuntuLoginDialog *self,
 }
 
 static void
-remember_check_toggled_cb (GsUbuntuLoginDialog *self,
+remember_check_toggled_cb (GsUbuntuoneDialog *self,
 			   GtkToggleButton     *toggle)
 {
 }
 
 static void
-gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
+gs_ubuntuone_dialog_init (GsUbuntuoneDialog *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
 
@@ -380,94 +380,94 @@ gs_ubuntu_login_dialog_init (GsUbuntuLoginDialog *self)
 }
 
 static void
-gs_ubuntu_login_dialog_dispose (GObject *object)
+gs_ubuntuone_dialog_dispose (GObject *object)
 {
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+	GsUbuntuoneDialog *self = GS_UBUNTUONE_DIALOG (object);
 
 	g_clear_object (&self->session);
 
-	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->dispose (object);
+	G_OBJECT_CLASS (gs_ubuntuone_dialog_parent_class)->dispose (object);
 }
 
 static void
-gs_ubuntu_login_dialog_finalize (GObject *object)
+gs_ubuntuone_dialog_finalize (GObject *object)
 {
-	GsUbuntuLoginDialog *self = GS_UBUNTU_LOGIN_DIALOG (object);
+	GsUbuntuoneDialog *self = GS_UBUNTUONE_DIALOG (object);
 
 	g_clear_pointer (&self->token_secret, g_free);
 	g_clear_pointer (&self->token_key, g_free);
 	g_clear_pointer (&self->consumer_secret, g_free);
 	g_clear_pointer (&self->consumer_key, g_free);
 
-	G_OBJECT_CLASS (gs_ubuntu_login_dialog_parent_class)->finalize (object);
+	G_OBJECT_CLASS (gs_ubuntuone_dialog_parent_class)->finalize (object);
 }
 
 static void
-gs_ubuntu_login_dialog_class_init (GsUbuntuLoginDialogClass *klass)
+gs_ubuntuone_dialog_class_init (GsUbuntuoneDialogClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-	object_class->dispose = gs_ubuntu_login_dialog_dispose;
-	object_class->finalize = gs_ubuntu_login_dialog_finalize;
+	object_class->dispose = gs_ubuntuone_dialog_dispose;
+	object_class->finalize = gs_ubuntuone_dialog_finalize;
 
-	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntu-login-dialog.ui");
+	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/plugins/gs-ubuntuone-dialog.ui");
 
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, content_box);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, cancel_button);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, next_button);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_stack);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_image);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, status_label);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, page_stack);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, login_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, register_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, reset_radio);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, email_entry);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, password_entry);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, remember_check);
-	gtk_widget_class_bind_template_child (widget_class, GsUbuntuLoginDialog, passcode_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, content_box);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, cancel_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, next_button);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, status_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, status_image);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, status_label);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, page_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, login_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, register_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, reset_radio);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, email_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, password_entry);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, remember_check);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, passcode_entry);
 }
 
 gboolean
-gs_ubuntu_login_dialog_get_do_remember (GsUbuntuLoginDialog *dialog)
+gs_ubuntuone_dialog_get_do_remember (GsUbuntuoneDialog *dialog)
 {
-	g_return_val_if_fail (GS_IS_UBUNTU_LOGIN_DIALOG (dialog), FALSE);
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), FALSE);
 	return gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (dialog->remember_check));
 }
 
 const gchar *
-gs_ubuntu_login_dialog_get_consumer_key (GsUbuntuLoginDialog *dialog)
+gs_ubuntuone_dialog_get_consumer_key (GsUbuntuoneDialog *dialog)
 {
-	g_return_val_if_fail (GS_IS_UBUNTU_LOGIN_DIALOG (dialog), NULL);
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), NULL);
 	return dialog->consumer_key;
 }
 
 const gchar *
-gs_ubuntu_login_dialog_get_consumer_secret (GsUbuntuLoginDialog *dialog)
+gs_ubuntuone_dialog_get_consumer_secret (GsUbuntuoneDialog *dialog)
 {
-	g_return_val_if_fail (GS_IS_UBUNTU_LOGIN_DIALOG (dialog), NULL);
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), NULL);
 	return dialog->consumer_secret;
 }
 
 const gchar *
-gs_ubuntu_login_dialog_get_token_key (GsUbuntuLoginDialog *dialog)
+gs_ubuntuone_dialog_get_token_key (GsUbuntuoneDialog *dialog)
 {
-	g_return_val_if_fail (GS_IS_UBUNTU_LOGIN_DIALOG (dialog), NULL);
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), NULL);
 	return dialog->token_key;
 }
 
 const gchar *
-gs_ubuntu_login_dialog_get_token_secret (GsUbuntuLoginDialog *dialog)
+gs_ubuntuone_dialog_get_token_secret (GsUbuntuoneDialog *dialog)
 {
-	g_return_val_if_fail (GS_IS_UBUNTU_LOGIN_DIALOG (dialog), NULL);
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), NULL);
 	return dialog->token_secret;
 }
 
 GtkWidget *
-gs_ubuntu_login_dialog_new (void)
+gs_ubuntuone_dialog_new (void)
 {
-	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTU_LOGIN_DIALOG,
+	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTUONE_DIALOG,
 					 "use-header-bar", TRUE,
 					 NULL));
 }
