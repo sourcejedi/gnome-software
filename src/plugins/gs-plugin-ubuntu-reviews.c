@@ -922,8 +922,9 @@ parse_date_time (const gchar *text)
 }
 
 static GsReview *
-parse_review (JsonNode *node)
+parse_review (GsPlugin *plugin, JsonNode *node)
 {
+	GsPluginPrivate *priv = plugin->priv;
 	GsReview *review;
 	JsonObject *object;
 	gint64 star_rating;
@@ -935,6 +936,8 @@ parse_review (JsonNode *node)
 	object = json_node_get_object (node);
 
 	review = gs_review_new ();
+	if (g_strcmp0 (priv->consumer_key, json_object_get_string_member (object, "reviewer_username")) == 0)
+		gs_review_add_flags (review, GS_REVIEW_FLAG_SELF);
 	gs_review_set_reviewer (review, json_object_get_string_member (object, "reviewer_displayname"));
 	gs_review_set_summary (review, json_object_get_string_member (object, "summary"));
 	gs_review_set_text (review, json_object_get_string_member (object, "review_text"));
@@ -962,7 +965,7 @@ parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 		g_autoptr(GsReview) review = NULL;
 
 		/* Read in from JSON... (skip bad entries) */
-		review = parse_review (json_array_get_element (array, i));
+		review = parse_review (plugin, json_array_get_element (array, i));
 		if (review != NULL)
 			gs_app_add_review (app, review);
 	}
@@ -1052,10 +1055,44 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 }
 
 static gboolean
+get_ubuntuone_credentials (GsPlugin  *plugin,
+			   gboolean   required,
+			   GError   **error)
+{
+	GsPluginPrivate *priv = plugin->priv;
+
+	/* Use current credentials if already available */
+	if (priv->consumer_key != NULL &&
+	    priv->consumer_secret != NULL &&
+	    priv->token_key != NULL &&
+	    priv->token_secret != NULL)
+		return TRUE;
+
+	/* Otherwise start with a clean slate */
+	g_clear_pointer (&priv->token_secret, g_free);
+	g_clear_pointer (&priv->token_key, g_free);
+	g_clear_pointer (&priv->consumer_secret, g_free);
+	g_clear_pointer (&priv->consumer_key, g_free);
+
+	/* Use credentials if we have them */
+	if (gs_ubuntuone_get_credentials (&priv->consumer_key, &priv->consumer_secret, &priv->token_key, &priv->token_secret))
+		return TRUE;
+
+	/* Otherwise log in to get them */
+	if (required)
+		return gs_ubuntuone_sign_in (&priv->consumer_key, &priv->consumer_secret, &priv->token_key, &priv->token_secret, error);
+	else
+		return TRUE;
+}
+
+static gboolean
 refine_reviews (GsPlugin *plugin, GsApp *app, GError **error)
 {
 	GPtrArray *sources;
 	guint i;
+
+	if (!get_ubuntuone_credentials (plugin, FALSE, error))
+		return FALSE;
 
 	/* Skip if already has reviews */
 	if (gs_app_get_reviews (app)->len > 0)
