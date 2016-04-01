@@ -184,7 +184,7 @@ show_login_dialog (gpointer user_data)
 }
 
 gboolean
-gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret, GError **error)
+gs_ubuntuone_get_credentials (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret)
 {
 	static SecretSchema schema = {
 		SCHEMA_NAME,
@@ -193,7 +193,6 @@ gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **tok
 	};
 
 	SecretContext secret_context = { 0 };
-	LoginContext login_context = { 0 };
 
 	/* Use credentials from libsecret if available */
 	secret_context.waiting = 4;
@@ -247,11 +246,23 @@ gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **tok
 		return TRUE;
 	}
 
-	/* Otherwise start with a clean slate */
-	g_clear_pointer (&secret_context.token_secret, g_free);
-	g_clear_pointer (&secret_context.token_key, g_free);
-	g_clear_pointer (&secret_context.consumer_secret, g_free);
-	g_clear_pointer (&secret_context.consumer_key, g_free);
+	g_free (&secret_context.token_secret);
+	g_free (&secret_context.token_key);
+	g_free (&secret_context.consumer_secret);
+	g_free (&secret_context.consumer_key);
+	return FALSE;
+}
+
+gboolean
+gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret, GError **error)
+{
+	static SecretSchema schema = {
+		SCHEMA_NAME,
+		SECRET_SCHEMA_NONE,
+		{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
+	};
+
+	LoginContext login_context = { 0 };
 
 	/* Pop up a login dialog */
 	login_context.error = error;
