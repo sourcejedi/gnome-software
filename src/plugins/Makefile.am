@@ -274,6 +274,6 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 
-EXTRA_DIST = moduleset-test.xml
+EXTRA_DIST = moduleset-test.xml gs-ubuntuone-dialog.ui
 
 -include $(top_srcdir)/git.mk
