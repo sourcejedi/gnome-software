@@ -170,6 +170,8 @@ libgs_plugin_hardcoded_blacklist_la_LDFLAGS = -module -avoid-version
 libgs_plugin_hardcoded_blacklist_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
+	gs-ubuntuone.c					\
+	gs-ubuntuone.h					\
 	gs-plugin-ubuntu-reviews.c			\
 	gs-ubuntu-login-dialog.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\

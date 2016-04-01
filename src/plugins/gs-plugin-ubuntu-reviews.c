@@ -27,19 +27,12 @@
 #include <json-glib/json-glib.h>
 #include <oauth.h>
 #include <sqlite3.h>
-#include <libsecret/secret.h>
 
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
-#include "gs-ubuntu-login-dialog.h"
+#include "gs-ubuntuone.h"
 #include "gs-os-release.h"
-
-#define SCHEMA_NAME     "com.ubuntu.UbuntuOne.GnomeSoftware"
-#define CONSUMER_KEY    "consumer-key"
-#define CONSUMER_SECRET "consumer-secret"
-#define TOKEN_KEY       "token-key"
-#define TOKEN_SECRET    "token-secret"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
@@ -796,162 +789,11 @@ set_package_review (GsPlugin *plugin,
 	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/", request, TRUE, NULL, error);
 }
 
-typedef struct
-{
-	GsPlugin *plugin;
-
-	GCancellable *cancellable;
-	GCond cond;
-	GMutex mutex;
-
-	gint waiting;
-} SecretContext;
-
-static void
-lookup_consumer_key (GObject      *source_object,
-		     GAsyncResult *result,
-		     gpointer      user_data)
-{
-	SecretContext *context = user_data;
-
-	context->plugin->priv->consumer_key = secret_password_lookup_finish (result, NULL);
-
-	g_mutex_lock (&context->mutex);
-
-	if (context->plugin->priv->consumer_key != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
-
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-}
-
-static void
-lookup_consumer_secret (GObject      *source_object,
-			GAsyncResult *result,
-			gpointer      user_data)
-{
-	SecretContext *context = user_data;
-
-	context->plugin->priv->consumer_secret = secret_password_lookup_finish (result, NULL);
-
-	g_mutex_lock (&context->mutex);
-
-	if (context->plugin->priv->consumer_secret != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
-
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-}
-
-static void
-lookup_token_key (GObject      *source_object,
-		  GAsyncResult *result,
-		  gpointer      user_data)
-{
-	SecretContext *context = user_data;
-
-	context->plugin->priv->token_key = secret_password_lookup_finish (result, NULL);
-
-	g_mutex_lock (&context->mutex);
-
-	if (context->plugin->priv->token_key != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
-
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-}
-
-static void
-lookup_token_secret (GObject      *source_object,
-		     GAsyncResult *result,
-		     gpointer      user_data)
-{
-	SecretContext *context = user_data;
-
-	context->plugin->priv->token_secret = secret_password_lookup_finish (result, NULL);
-
-	g_mutex_lock (&context->mutex);
-
-	if (context->plugin->priv->token_secret != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
-
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-}
-
-typedef struct
-{
-	GsPlugin *plugin;
-	GError **error;
-
-	GCond cond;
-	GMutex mutex;
-
-	gboolean done;
-	gboolean success;
-	gboolean remember;
-} LoginContext;
-
-static gboolean
-show_login_dialog (gpointer user_data)
-{
-	LoginContext *context = user_data;
-	GsPluginPrivate *priv = context->plugin->priv;
-	GtkWidget *dialog;
-
-	dialog = gs_ubuntu_login_dialog_new ();
-	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
-	case GTK_RESPONSE_DELETE_EVENT:
-	case GTK_RESPONSE_CANCEL:
-		g_set_error (context->error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to sign into Ubuntu One");
-
-		context->success = FALSE;
-		break;
-
-	case GTK_RESPONSE_OK:
-		context->remember = gs_ubuntu_login_dialog_get_do_remember (GS_UBUNTU_LOGIN_DIALOG (dialog));
-		priv->consumer_key = g_strdup (gs_ubuntu_login_dialog_get_consumer_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->consumer_secret = g_strdup (gs_ubuntu_login_dialog_get_consumer_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->token_key = g_strdup (gs_ubuntu_login_dialog_get_token_key (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		priv->token_secret = g_strdup (gs_ubuntu_login_dialog_get_token_secret (GS_UBUNTU_LOGIN_DIALOG (dialog)));
-		context->success = TRUE;
-		break;
-	}
-
-	gtk_widget_destroy (dialog);
-
-	g_mutex_lock (&context->mutex);
-	context->done = TRUE;
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-
-	return G_SOURCE_REMOVE;
-}
-
 static gboolean
 sign_into_ubuntu (GsPlugin  *plugin,
 		  GError   **error)
 {
-	static SecretSchema schema = {
-		SCHEMA_NAME,
-		SECRET_SCHEMA_NONE,
-		{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
-	};
-
 	GsPluginPrivate *priv = plugin->priv;
-	SecretContext secret_context = { 0 };
-	LoginContext login_context = { 0 };
 
 	/* Use current credentials if already available */
 	if (priv->consumer_key != NULL &&
@@ -966,119 +808,7 @@ sign_into_ubuntu (GsPlugin  *plugin,
 	g_clear_pointer (&priv->consumer_secret, g_free);
 	g_clear_pointer (&priv->consumer_key, g_free);
 
-	/* Use credentials from libsecret if available */
-	secret_context.plugin = plugin;
-	secret_context.waiting = 4;
-	secret_context.cancellable = g_cancellable_new ();
-	g_cond_init (&secret_context.cond);
-	g_mutex_init (&secret_context.mutex);
-	g_mutex_lock (&secret_context.mutex);
-
-	secret_password_lookup (&schema,
-				secret_context.cancellable,
-				lookup_consumer_key,
-				&secret_context,
-				"key", CONSUMER_KEY,
-				NULL);
-	secret_password_lookup (&schema,
-				secret_context.cancellable,
-				lookup_consumer_secret,
-				&secret_context,
-				"key", CONSUMER_SECRET,
-				NULL);
-	secret_password_lookup (&schema,
-				secret_context.cancellable,
-				lookup_token_key,
-				&secret_context,
-				"key", TOKEN_KEY,
-				NULL);
-	secret_password_lookup (&schema,
-				secret_context.cancellable,
-				lookup_token_secret,
-				&secret_context,
-				"key", TOKEN_SECRET,
-				NULL);
-
-	while (secret_context.waiting > 0)
-		g_cond_wait (&secret_context.cond, &secret_context.mutex);
-
-	g_mutex_unlock (&secret_context.mutex);
-	g_mutex_clear (&secret_context.mutex);
-	g_cond_clear (&secret_context.cond);
-	g_cancellable_cancel (secret_context.cancellable);
-	g_clear_object (&secret_context.cancellable);
-
-	if (priv->consumer_key != NULL &&
-	    priv->consumer_secret != NULL &&
-	    priv->token_key != NULL &&
-	    priv->token_secret != NULL)
-		return TRUE;
-
-	/* Otherwise start with a clean slate */
-	g_clear_pointer (&priv->token_secret, g_free);
-	g_clear_pointer (&priv->token_key, g_free);
-	g_clear_pointer (&priv->consumer_secret, g_free);
-	g_clear_pointer (&priv->consumer_key, g_free);
-
-	/* Pop up a login dialog */
-	login_context.plugin = plugin;
-	login_context.error = error;
-	g_cond_init (&login_context.cond);
-	g_mutex_init (&login_context.mutex);
-	g_mutex_lock (&login_context.mutex);
-
-	gdk_threads_add_idle (show_login_dialog, &login_context);
-
-	while (!login_context.done)
-		g_cond_wait (&login_context.cond, &login_context.mutex);
-
-	g_mutex_unlock (&login_context.mutex);
-	g_mutex_clear (&login_context.mutex);
-	g_cond_clear (&login_context.cond);
-
-	if (login_context.remember) {
-		secret_password_store (&schema,
-				       NULL,
-				       SCHEMA_NAME,
-				       priv->consumer_key,
-				       NULL,
-				       NULL,
-				       NULL,
-				       "key", CONSUMER_KEY,
-				       NULL);
-
-		secret_password_store (&schema,
-				       NULL,
-				       SCHEMA_NAME,
-				       priv->consumer_secret,
-				       NULL,
-				       NULL,
-				       NULL,
-				       "key", CONSUMER_SECRET,
-				       NULL);
-
-		secret_password_store (&schema,
-				       NULL,
-				       SCHEMA_NAME,
-				       priv->token_key,
-				       NULL,
-				       NULL,
-				       NULL,
-				       "key", TOKEN_KEY,
-				       NULL);
-
-		secret_password_store (&schema,
-				       NULL,
-				       SCHEMA_NAME,
-				       priv->token_secret,
-				       NULL,
-				       NULL,
-				       NULL,
-				       "key", TOKEN_SECRET,
-				       NULL);
-	}
-
-	return login_context.success;
+	return gs_ubuntuone_sign_in (&priv->consumer_key, &priv->consumer_secret, &priv->token_key, &priv->token_secret, error);
 }
 
 static gboolean
