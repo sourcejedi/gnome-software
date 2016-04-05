@@ -769,6 +769,7 @@ gs_application_new (void)
 	return g_object_new (GS_APPLICATION_TYPE,
 			     "application-id", "org.gnome.Software",
 			     "flags", G_APPLICATION_HANDLES_OPEN,
+			     "inactivity-timeout", 12000,
 			     NULL);
 }
 
