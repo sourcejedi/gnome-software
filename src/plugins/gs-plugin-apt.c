@@ -63,6 +63,26 @@ gs_plugin_get_deps (GsPlugin *plugin)
 	return deps;
 }
 
+/**
+ * gs_plugin_get_conflicts:
+ */
+const gchar **
+gs_plugin_get_conflicts (GsPlugin *plugin)
+{
+
+	static const gchar *deps[] = {
+		"packagekit",
+		"packagekit-history",
+		"packagekit-offline",
+		"packagekit-origin",
+		"packagekit-proxy",
+		"packagekit-refine",
+		"packagekit-refresh",
+		"systemd-updates",
+		NULL };
+	return deps;
+}
+
 static void
 free_package_info (gpointer data)
 {
