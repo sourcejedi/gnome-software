@@ -246,10 +246,10 @@ gs_ubuntuone_get_credentials (gchar **consumer_key, gchar **consumer_secret, gch
 		return TRUE;
 	}
 
-	g_free (&secret_context.token_secret);
-	g_free (&secret_context.token_key);
-	g_free (&secret_context.consumer_secret);
-	g_free (&secret_context.consumer_key);
+	g_free (secret_context.token_secret);
+	g_free (secret_context.token_key);
+	g_free (secret_context.consumer_secret);
+	g_free (secret_context.consumer_key);
 	return FALSE;
 }
 
