@@ -85,22 +85,6 @@ gs_app_row_get_description (GsAppRow *app_row)
 	const gchar *tmp = NULL;
 	g_autofree gchar *escaped = NULL;
 
-	/* convert the markdown update description into PangoMarkup */
-	if (priv->show_update &&
-	    (gs_app_get_state (priv->app) == AS_APP_STATE_UPDATABLE ||
-	     gs_app_get_state (priv->app) == AS_APP_STATE_UPDATABLE_LIVE)) {
-		tmp = gs_app_get_update_details (priv->app);
-		if (tmp != NULL && tmp[0] != '\0') {
-			g_autoptr(GsMarkdown) markdown = NULL;
-			markdown = gs_markdown_new (GS_MARKDOWN_OUTPUT_PANGO);
-			gs_markdown_set_smart_quoting (markdown, FALSE);
-			gs_markdown_set_autocode (markdown, FALSE);
-			gs_markdown_set_autolinkify (markdown, FALSE);
-			escaped = gs_markdown_parse (markdown, tmp);
-			return g_string_new (escaped);
-		}
-	}
-
 	if (gs_app_get_state (priv->app) == AS_APP_STATE_UNAVAILABLE)
 		return g_string_new (gs_app_get_summary_missing (priv->app));
 

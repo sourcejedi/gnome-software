@@ -284,6 +284,12 @@ is_show_confirm_search_set (const gchar *interaction)
 	return ret;
 }
 
+static gboolean
+is_unity (void)
+{
+	return g_strcmp0 (g_getenv ("XDG_CURRENT_DESKTOP"), "Unity") == 0;
+}
+
 static void
 notify_search_resources (GsShellExtrasMode   mode,
                          const gchar        *desktop_id,
@@ -344,9 +350,11 @@ notify_search_resources (GsShellExtrasMode   mode,
 
 	n = g_notification_new (title);
 	g_notification_set_body (n, body);
-	/* TRANSLATORS: this is a button that launches gnome-software */
-	g_notification_add_button_with_target (n, _("Find in Software"), "app.install-resources", "(s^ass)", mode_string, resources, "");
-	g_notification_set_default_action_and_target (n, "app.install-resources", "(s^ass)", mode_string, resources, "");
+	if (!is_unity ()) {
+		/* TRANSLATORS: this is a button that launches gnome-software */
+		g_notification_add_button_with_target (n, _("Find in Software"), "app.install-resources", "(s^ass)", mode_string, resources, "");
+		g_notification_set_default_action_and_target (n, "app.install-resources", "(s^ass)", mode_string, resources, "");
+	}
 	g_application_send_notification (g_application_get_default (), "install-resources", n);
 }
 
