@@ -62,5 +62,7 @@ src/plugins/gs-plugin-epiphany.c
 src/plugins/gs-plugin-moduleset.c
 src/plugins/gs-plugin-packagekit.c
 src/plugins/gs-plugin-packagekit-refine.c
+src/plugins/gs-ubuntuone-dialog.c
+[type: gettext/glade]src/plugins/gs-ubuntuone-dialog.ui
 src/plugins/menu-spec-common.c
 [type: gettext/glade]src/popular-tile.ui

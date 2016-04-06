@@ -13,6 +13,8 @@ AM_CPPFLAGS =						\
 	$(JSON_GLIB_CFLAGS)				\
 	$(LIMBA_CFLAGS)					\
 	$(XDG_APP_CFLAGS)				\
+	$(OAUTH_CFLAGS)					\
+	$(LIBSECRET_CFLAGS)				\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
 	-DGS_MODULESETDIR=\"$(datadir)/gnome-software/modulesets.d\" \
@@ -187,8 +189,17 @@ libgs_plugin_hardcoded_blacklist_la_LDFLAGS = -module -avoid-version
 libgs_plugin_hardcoded_blacklist_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
-	gs-plugin-ubuntu-reviews.c
-libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(SQLITE_LIBS)
+	gs-ubuntuone.c					\
+	gs-ubuntuone.h					\
+	gs-plugin-ubuntu-reviews.c			\
+	gs-ubuntuone-dialog.c
+libgs_plugin_ubuntu_reviews_la_LIBADD =			\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(OAUTH_LIBS)					\
+	$(SQLITE_LIBS)					\
+	$(LIBSECRET_LIBS)
 libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
@@ -263,6 +274,6 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 
-EXTRA_DIST = moduleset-test.xml
+EXTRA_DIST = moduleset-test.xml gs-ubuntuone-dialog.ui
 
 -include $(top_srcdir)/git.mk
