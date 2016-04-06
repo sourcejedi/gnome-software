@@ -59,10 +59,7 @@ lookup_consumer_key (GObject      *source_object,
 
 	g_mutex_lock (&context->mutex);
 
-	if (context->consumer_key != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
+	context->waiting--;
 
 	g_cond_signal (&context->cond);
 	g_mutex_unlock (&context->mutex);
@@ -79,10 +76,7 @@ lookup_consumer_secret (GObject      *source_object,
 
 	g_mutex_lock (&context->mutex);
 
-	if (context->consumer_secret != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
+	context->waiting--;
 
 	g_cond_signal (&context->cond);
 	g_mutex_unlock (&context->mutex);
@@ -99,10 +93,7 @@ lookup_token_key (GObject      *source_object,
 
 	g_mutex_lock (&context->mutex);
 
-	if (context->token_key != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
+	context->waiting--;
 
 	g_cond_signal (&context->cond);
 	g_mutex_unlock (&context->mutex);
@@ -119,10 +110,7 @@ lookup_token_secret (GObject      *source_object,
 
 	g_mutex_lock (&context->mutex);
 
-	if (context->token_secret != NULL)
-		context->waiting--;
-	else
-		context->waiting = 0;
+	context->waiting--;
 
 	g_cond_signal (&context->cond);
 	g_mutex_unlock (&context->mutex);
