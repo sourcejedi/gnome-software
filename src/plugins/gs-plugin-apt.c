@@ -515,7 +515,7 @@ gs_plugin_refine (GsPlugin *plugin,
 				gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
-				gs_app_set_license (app, GS_APP_QUALITY_HIGHEST, "@LicenseRef-ubuntu");
+				gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-ubuntu");
 			}
 		}
 
