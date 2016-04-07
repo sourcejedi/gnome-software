@@ -825,6 +825,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		app = gs_app_new (info->name);
 		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
 		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 		gs_app_add_source (app, info->name);
 		gs_plugin_add_app (list, app);
 	}
