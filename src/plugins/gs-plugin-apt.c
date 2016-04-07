@@ -382,8 +382,7 @@ done:
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	const gchar *binary_source, *current_version, *update_version;
-	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL;
+	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL, *binary_source = NULL, *current_version = NULL, *update_version = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
 	g_auto(GStrv) lines = NULL;
@@ -391,9 +390,9 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	GString *details;
 
 	// Need to know the source and version to download changelog
-	binary_source = gs_app_get_source_default (app);
-	current_version = gs_app_get_version (app);
-	update_version = gs_app_get_update_version (app);
+	binary_source = g_strdup(gs_app_get_source_default (app));
+	current_version = g_strdup(gs_app_get_version (app));
+	update_version = g_strdup(gs_app_get_update_version (app));
 	if (binary_source == NULL || update_version == NULL)
 		return;
 
