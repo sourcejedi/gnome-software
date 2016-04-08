@@ -877,13 +877,13 @@ gs_plugin_app_upgrade (GsPlugin *plugin,
 }
 
 /**
- * gs_plugin_offline_update:
+ * gs_plugin_update:
  */
 gboolean
-gs_plugin_offline_update (GsPlugin *plugin,
-                          GList *apps,
-                          GCancellable *cancellable,
-                          GError **error)
+gs_plugin_update (GsPlugin *plugin,
+                  GList *apps,
+                  GCancellable *cancellable,
+                  GError **error)
 {
 	GList *l;
 
@@ -906,6 +906,7 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 			 GError **error)
 {
 	const gchar *install_method;
+	const gchar *device_id;
 	const gchar *filename;
 	gboolean offline = FALSE;
 
@@ -922,6 +923,11 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 			     filename);
 		return FALSE;
 	}
+
+	/* limit to single device? */
+	device_id = gs_app_get_metadata_item (app, "fwupd::DeviceID");
+	if (device_id == NULL)
+		device_id = FWUPD_DEVICE_ID_ANY;
 
 	/* only offline supported */
 	install_method = gs_app_get_metadata_item (app, "fwupd::InstallMethod");
@@ -977,12 +983,12 @@ gs_plugin_fwupd_unlock (GsPlugin *plugin,
 }
 
 /**
- * gs_plugin_app_update:
+ * gs_plugin_update_app:
  *
- * This is only called when updating device firmware live.
+ * Called when a user clicks [Update] in the updates panel
  */
 gboolean
-gs_plugin_app_update (GsPlugin *plugin,
+gs_plugin_update_app (GsPlugin *plugin,
 		      GsApp *app,
 		      GCancellable *cancellable,
 		      GError **error)
