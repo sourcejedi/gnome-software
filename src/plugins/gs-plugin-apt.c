@@ -410,9 +410,9 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	GString *details;
 
 	// Need to know the source and version to download changelog
-	binary_source = g_strdup(gs_app_get_source_default (app));
-	current_version = g_strdup(gs_app_get_version (app));
-	update_version = g_strdup(gs_app_get_update_version (app));
+	binary_source = g_strdup (gs_app_get_source_default (app));
+	current_version = g_strdup (gs_app_get_version (app));
+	update_version = g_strdup (gs_app_get_update_version (app));
 	if (binary_source == NULL || update_version == NULL)
 		return;
 
