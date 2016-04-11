@@ -2628,6 +2628,7 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 		gs_plugin_loader_update_async (plugin_loader, list,
 					       cancellable, callback,
 					       user_data);
+		return;
 	}
 
 	if (action == GS_PLUGIN_LOADER_ACTION_REMOVE) {
