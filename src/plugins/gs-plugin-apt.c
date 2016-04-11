@@ -402,7 +402,12 @@ done:
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	g_autofree gchar *source_prefix = NULL, *uri = NULL, *changelog_prefix = NULL, *binary_source = NULL, *current_version = NULL, *update_version = NULL;
+	g_autofree gchar *source_prefix = NULL,
+			 *uri = NULL,
+			 *changelog_prefix = NULL,
+			 *binary_source = NULL,
+			 *current_version = NULL,
+			 *update_version = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	guint status_code;
 	g_auto(GStrv) lines = NULL;
