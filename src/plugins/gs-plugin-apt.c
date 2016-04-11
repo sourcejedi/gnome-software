@@ -1000,3 +1000,5 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 
 	return TRUE;
 }
+
+/* vim: set noexpandtab ts=8 sw=8: */
