@@ -29,7 +29,6 @@ noinst_LTLIBRARIES =					\
 
 plugindir = $(libdir)/gs-plugins-${GS_PLUGIN_API_VERSION}
 plugin_LTLIBRARIES =					\
-	libgs_plugin_apt.la				\
 	libgs_plugin_appstream.la			\
 	libgs_plugin_dummy.la				\
 	libgs_plugin_hardcoded-featured.la		\
@@ -43,6 +42,11 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_fedora_tagger_usage.la		\
 	libgs_plugin_epiphany.la			\
 	libgs_plugin_icons.la
+
+if HAVE_APT
+plugin_LTLIBRARIES +=					\
+	libgs_plugin_apt.la
+endif
 
 if HAVE_PACKAGEKIT
 plugin_LTLIBRARIES +=					\
@@ -134,6 +138,7 @@ libgs_plugin_xdg_app_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
+if HAVE_APT
 ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity.Launcher.xml Makefile
 	$(AM_V_GEN) gdbus-codegen --interface-prefix com.canonical.Unity.Launcher \
 	                 --generate-c-code ubuntu-unity-launcher-proxy \
@@ -143,14 +148,14 @@ ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity
 	                            Launcher \
 	                 $<
 
-
 libgs_plugin_apt_la_SOURCES = \
 	ubuntu-unity-launcher-proxy.c \
 	ubuntu-unity-launcher-proxy.h \
-	gs-plugin-apt.c
-libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS)
+	gs-plugin-apt.cc
+libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS) -lapt-pkg
 libgs_plugin_apt_la_LDFLAGS = -module -avoid-version
 libgs_plugin_apt_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+endif
 
 libgs_plugin_moduleset_la_SOURCES =			\
 	gs-moduleset.c					\

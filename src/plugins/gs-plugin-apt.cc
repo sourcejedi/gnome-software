@@ -25,17 +25,38 @@
 #include <string.h>
 #include <ctype.h>
 
+#include <apt-pkg/init.h>
+#include <apt-pkg/cachefile.h>
+#include <apt-pkg/cmndline.h>
+#include <apt-pkg/version.h>
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <set>
+#include <vector>
+#include <fstream>
+#include <iomanip>
+#include <algorithm>
+#include <stdexcept>
+
 #include <gs-plugin.h>
 #include <gs-utils.h>
+
+#define LICENSE_URL "http://www.ubuntu.com/about/about-ubuntu/licensing"
 
 typedef struct {
 	gchar *name;
 	gchar *section;
+	gchar *architecture;
 	gchar *installed_version;
 	gchar *update_version;
+	gchar *origin;
+	gchar *release;
+	gchar *component;
 	gint installed_size;
-	gboolean is_official;
-	gboolean is_open_source;
+	gint package_size;
 } PackageInfo;
 
 
@@ -86,19 +107,27 @@ gs_plugin_get_conflicts (GsPlugin *plugin)
 static void
 free_package_info (gpointer data)
 {
-	PackageInfo *info = data;
-	g_free (info->name);
+	PackageInfo *info = (PackageInfo *) data;
 	g_free (info->section);
 	g_free (info->installed_version);
 	g_free (info->update_version);
-	g_slice_free (PackageInfo, info);
+	g_free (info->origin);
+	g_free (info->release);
+	g_free (info->component);
+	g_free (info);
 }
 
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
-	plugin->priv->package_info = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, free_package_info);
+	plugin->priv->package_info = g_hash_table_new_full (g_str_hash,
+							    g_str_equal,
+							    NULL,
+							    free_package_info);
+
+	pkgInitConfig (*_config);
+	pkgInitSystem (*_config, _system);
 }
 
 void
@@ -109,294 +138,122 @@ gs_plugin_destroy (GsPlugin *plugin)
 	g_list_free (plugin->priv->updatable_packages);
 }
 
-// Ordering of symbols in dpkg ~, 0-9, A-Z, a-z, everything else (ASCII ordering)
-static int
-order (int c)
-{
-	if (isdigit(c))
-		return 0;
-	else if (isalpha(c))
-		return c;
-	else if (c == '~')
-		return -1;
-	else if (c)
-		return c + 256;
-	else
-		return 0;
-}
-
-// Check if this is a valid dpkg character ('-' terminates version for revision)
-static gboolean
-valid_char (char c)
-{
-	return c != '\0' && c != '-';
-}
-
-static int
-compare_version (const char *v0, const char *v1)
-{
-	while (valid_char (*v0) || valid_char (*v1))
-	{
-		int first_diff = 0;
-
-		// Compare non-digits based on ordering rules
-		while ((valid_char (*v0) && !isdigit (*v0)) || (valid_char (*v1) && !isdigit (*v1))) {
-			int o0 = order (*v0);
-			int o1 = order (*v1);
-
-			if (o0 != o1)
-				return o0 - o1;
-
-			v0++;
-			v1++;
-		}
-
-		// Skip leading zeroes
-		while (*v0 == '0')
-			v0++;
-		while (*v1 == '0')
-			v1++;
-
-		// Compare numbers - longest wins, otherwise compare first digit
-		while (isdigit (*v0) && isdigit (*v1)) {
-			if (first_diff == 0)
-				first_diff = *v0 - *v1;
-			v0++;
-			v1++;
-		}
-		if (isdigit (*v0))
-			return 1;
-		if (isdigit (*v1))
-			return -1;
-		if (first_diff)
-			return first_diff;
-	}
-
-	return 0;
-}
-
-// Get the epoch, i.e. 1:2.3-4 -> '1'
-static int
-get_epoch (const gchar *version)
-{
-	if (strchr (version, ':') == NULL)
-		return 0;
-	return atoi (version);
-}
-
-// Get the version after the epoch, i.e. 1:2.3-4 -> '2.3'
-static const gchar *
-get_version (const gchar *version)
-{
-	const gchar *v = strchr (version, ':');
-	return v ? v : version;
-}
-
-// Get the debian revision, i.e. 1:2.3-4 -> '4'
-static const gchar *
-get_revision (const gchar *version)
-{
-	const gchar *v = strchr (version, '-');
-	return v ? v + 1: version + strlen (version);
-}
-
-static int
-compare_dpkg_version (const gchar *v0, const gchar *v1)
-{
-	int r;
-
-	r = get_epoch (v0) - get_epoch (v1);
-	if (r != 0)
-		return r;
-
-	r = compare_version (get_version (v0), get_version (v1));
-	if (r != 0)
-		return r;
-
-	return compare_version (get_revision (v0), get_revision (v1));
-}
-
 static gboolean
 version_newer (const gchar *v0, const gchar *v1)
 {
-	return v0 ? compare_dpkg_version (v0, v1) < 0 : TRUE;
-}
-
-typedef gboolean (*PackageFileFunc) (const gchar *name, gsize name_length, const gchar *value, gsize value_length, gpointer user_data, GError **error);
-
-static void
-skip_to_eol (gchar *data, gsize data_length, gsize *offset)
-{
-	while (*offset < data_length && data[*offset] != '\n')
-		(*offset)++;
-	if (*offset >= data_length)
-		return;
-	(*offset)++;
+	return v0 ? _system->VS->CmpVersion(v0, v1) < 0 : TRUE;
 }
 
 static gboolean
-parse_package_file_data (gchar *data, gsize data_length, PackageFileFunc callback, gpointer user_data, GError **error)
+look_at_pkg (const pkgCache::PkgIterator &P,
+	     pkgSourceList *list,
+	     pkgPolicy *policy,
+	     GsPlugin *plugin)
 {
-	gsize offset;
+	pkgCache::VerIterator current = P.CurrentVer();
+	pkgCache::VerIterator candidate = policy->GetCandidateVer(P);
+	pkgCache::VerFileIterator VF;
+	FileFd PkgF;
+	pkgTagSection Tags;
+	gchar *name;
 
-	for (offset = 0; offset < data_length; ) {
-		gsize name_start, name_end, name_length;
-		gsize value_start, value_end, value_length;
+	PackageInfo *info;
 
-		// Entry divided by empty space
-		if (data[offset] == '\n') {
-			offset++;
-			continue;
-		}
+	if (!candidate || !candidate.FileList ())
+		return false;
 
-		// Line continuations start with a space
-		if (data[offset] == ' ') {
-			skip_to_eol (data, data_length, &offset);
-			continue;
-		}
+	name = g_strdup (P.Name ());
 
-		// Find the field in the form "name: value"
-		name_start = offset;
-		name_end = name_start + 1;
-		while (name_end < data_length && !(data[name_end] == ':' || data[name_end] == '\n'))
-			name_end++;
-		if ((name_end + 1) >= data_length)
-			return TRUE;
-		if (data[name_end] != ':') {
-			offset = name_end;
-			skip_to_eol (data, data_length, &offset);
-		}
-		value_start = name_end + 1;
-		while (value_start < data_length && data[value_start] == ' ')
-			value_start++;
-		value_end = value_start + 1;
-		while (value_end < data_length && data[value_end] != '\n')
-			value_end++;
-		if (value_end >= data_length)
-			return TRUE;
-		name_length = name_end - name_start;
-		value_length = value_end - value_start;
+	info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, name);
 
-		if (!callback (data + name_start, name_length, data + value_start, value_length, user_data, error))
-			return FALSE;
-		offset = value_end + 1;
+	if (!info)
+	{
+		info = g_new0 (PackageInfo, 1);
+		info->name = name;
+		g_hash_table_insert (plugin->priv->package_info, name, info);
 	}
+
+	for (VF = candidate.FileList (); VF.IsGood (); VF++) {
+		// see InRelease for the fields
+		if (VF.File ().Archive ())
+			info->release = g_strdup (VF.File ().Archive ());
+		if(VF.File ().Origin ())
+			info->origin = g_strdup (VF.File ().Origin ());
+		if(VF.File ().Component ())
+			info->component = g_strdup (VF.File ().Component ());
+		// also available: Codename, Label
+		break;
+	}
+
+
+	pkgCache::PkgFileIterator I = VF.File ();
+
+	if (I.IsOk () == false)
+		return _error->Error (("Package file %s is out of sync."),I.FileName ());
+
+	PkgF.Open (I.FileName (), FileFd::ReadOnly, FileFd::Extension);
+
+	pkgTagFile TagF (&PkgF);
+
+	if (TagF.Jump (Tags, current.FileList ()->Offset) == false)
+		return _error->Error ("Internal Error, Unable to parse a package record");
+
+	if (Tags.FindI ("Installed-Size") > 0)
+		info->installed_size = Tags.FindI ("Installed-Size")*1024;
+	else
+		info->installed_size = 0;
+
+	if (Tags.FindI ("Size") > 0)
+		info->package_size = Tags.FindI ("Size");
+	else
+		info->package_size = 0;
+
+	if (current)
+		info->installed_version = g_strdup (current.VerStr ());
+
+	info->section = g_strdup (candidate.Section ());
+	info->architecture = g_strdup (P.Arch ());
+	if (info->installed_version) {
+		info->update_version = g_strdup (candidate.VerStr ());
+		plugin->priv->installed_packages =
+			g_list_append (plugin->priv->installed_packages, info);
+	}
+
+	/* no upgrade */
+	if (g_strcmp0 (info->installed_version, info->update_version) == 0)
+		info->update_version = NULL;
+
+	if (info->update_version)
+		plugin->priv->updatable_packages =
+			g_list_append (plugin->priv->updatable_packages, info);
 
 	return TRUE;
 }
 
 static gboolean
-parse_package_file (const gchar *filename, PackageFileFunc callback, gpointer user_data, GError **error)
+load_apt_db (GsPlugin *plugin, GError **error)
 {
-	g_autoptr(GMappedFile) f = NULL;
+	pkgSourceList *list;
+	pkgPolicy *policy;
+	pkgCacheFile cachefile;
+	pkgCache *cache = cachefile.GetPkgCache();
+	pkgCache::PkgIterator P;
 
-	f = g_mapped_file_new (filename, FALSE, NULL);
-	if (f == NULL)
+	list = cachefile.GetSourceList();
+	policy = cachefile.GetPolicy();
+	if (cache == NULL || _error->PendingError()) {
+		_error->DumpErrors();
 		return FALSE;
-	return parse_package_file_data (g_mapped_file_get_contents (f), g_mapped_file_get_length (f), callback, user_data, error);
-}
-
-typedef struct {
-	GsPlugin *plugin;
-	PackageInfo *current_info;
-	gboolean current_installed;
-	gboolean is_official;
-	gboolean is_open_source;
-} FieldData;
-
-static gboolean
-field_cb (const gchar *name, gsize name_length, const gchar *value, gsize value_length, gpointer user_data, GError **error)
-{
-	FieldData *data = user_data;
-
-	if (strncmp (name, "Package", name_length) == 0) {
-		gchar *id = g_strndup (value, value_length);
-		data->current_info = g_hash_table_lookup (data->plugin->priv->package_info, id);
-		if (data->current_info == NULL) {
-			data->current_info = g_slice_new0 (PackageInfo);
-			data->current_installed = FALSE;
-			data->current_info->name = id;
-			g_hash_table_insert (data->plugin->priv->package_info, data->current_info->name, data->current_info);
-		} else
-			g_free (id);
-
-		// If an official source provides this package, then mark it as such.
-		// NOTE: A PPA could re-use the name and make this not true
-		if (data->is_official)
-			data->current_info->is_official = data->is_official;
-		if (data->is_open_source)
-			data->current_info->is_open_source = data->is_open_source;
-		return TRUE;
 	}
 
-	if (data->current_info == NULL)
-		return TRUE;
-
-	if (strncmp (name, "Status", name_length) == 0) {
-		if (strncmp (value, "install ok installed", value_length) == 0) {
-			data->current_installed = TRUE;
-			data->plugin->priv->installed_packages = g_list_append (data->plugin->priv->installed_packages, data->current_info);
-		}
-	} else if (strncmp (name, "Section", name_length) == 0) {
-		g_free (data->current_info->section);
-		data->current_info->section = g_strndup (value, value_length);
-	} else if (strncmp (name, "Installed-Size", name_length) == 0) {
-		data->current_info->installed_size = atoi (value);
-	} else if (strncmp (name, "Version", name_length) == 0) {
-		gchar *version = g_strndup (value, value_length);
-		if (data->current_installed) {
-			g_free (data->current_info->installed_version);
-			data->current_info->installed_version = version;
-		} else if (version_newer (data->current_info->installed_version, version) && version_newer (data->current_info->update_version, version)) {
-			if (data->current_info->installed_version && data->current_info->update_version == NULL)
-				data->plugin->priv->updatable_packages = g_list_append (data->plugin->priv->updatable_packages, data->current_info);
-			g_free (data->current_info->update_version);
-			data->current_info->update_version = version;
-		} else
-			g_free (version);
+	for (pkgCache::GrpIterator grp = cache->GrpBegin(); grp != cache->GrpEnd(); grp++) {
+		P = grp.FindPreferredPkg();
+		if (P.end())
+			continue;
+		look_at_pkg (P, list, policy, plugin);
 	}
 
 	return TRUE;
-}
-
-static gboolean
-load_db (GsPlugin *plugin, GError **error)
-{
-	GPtrArray *lists;
-	GDir *dir;
-	guint i;
-	gboolean result = FALSE;
-
-	// Find the package lists to load
-	lists = g_ptr_array_new ();
-	g_ptr_array_set_free_func (lists, g_free);
-	g_ptr_array_add (lists, g_strdup ("/var/lib/dpkg/status"));
-	dir = g_dir_open ("/var/lib/apt/lists", 0, NULL);
-	while (TRUE) {
-		const gchar *name = g_dir_read_name (dir);
-		if (name == NULL)
-			break;
-		if (g_str_has_suffix (name, "_Packages"))
-			g_ptr_array_add (lists, g_build_filename ("/var/lib/apt/lists", name, NULL));
-	}
-	g_dir_close (dir);
-
-	for (i = 0; i < lists->len; i++) {
-		const gchar *list = lists->pdata[i];
-		FieldData data;
-		data.is_official = g_str_has_prefix (list, "/var/lib/apt/lists/archive.ubuntu.com_");
-		data.is_open_source = data.is_official && (strstr (list, "_main_") != NULL || strstr (list, "_universe_") != NULL);
-		data.plugin = plugin;
-		data.current_info = NULL;
-		data.current_installed = FALSE;
-		result = parse_package_file (list, field_cb, &data, error);
-		if (!result)
-			goto done;
-	}
-
-done:
-	g_ptr_array_unref (lists);
-	return result;
 }
 
 static void
@@ -466,6 +323,22 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	g_string_free (details, TRUE);
 }
 
+static gboolean
+is_official (PackageInfo *info)
+{
+	return g_strcmp0 (info->origin, "Ubuntu") == 0;
+}
+
+static gboolean
+is_open_source (PackageInfo *info)
+{
+	const gchar *open_source_components[] = { "main", "universe", NULL };
+
+	/* There's no valid apps in the libs section */
+	return info->component != NULL && g_strv_contains (open_source_components, info->component);
+}
+
+
 gboolean
 gs_plugin_refine (GsPlugin *plugin,
 		  GList **list,
@@ -479,20 +352,20 @@ gs_plugin_refine (GsPlugin *plugin,
 	if (g_once_init_enter (&plugin->priv->loaded)) {
 		gboolean ret;
 
-		ret = load_db (plugin, error);
+		ret = load_apt_db (plugin, error);
 		g_once_init_leave (&plugin->priv->loaded, TRUE);
 		if (!ret)
 			return FALSE;
 	}
 
 	for (link = *list; link; link = link->next) {
-		GsApp *app = link->data;
+		GsApp *app = (GsApp *) link->data;
 		PackageInfo *info;
 
 		if (gs_app_get_source_default (app) == NULL)
 			continue;
 
-		info = g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
+		info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
 		if (info != NULL) {
 			if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN) {
 				if (info->installed_version != NULL) {
@@ -506,7 +379,7 @@ gs_plugin_refine (GsPlugin *plugin,
 				}
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0) {
-				gs_app_set_size (app, info->installed_size * 1024);
+				gs_app_set_size (app, info->installed_size);
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
 				if (info->installed_version != NULL) {
@@ -516,11 +389,11 @@ gs_plugin_refine (GsPlugin *plugin,
 					gs_app_set_update_version (app, info->update_version);
 				}
 			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && is_official (info)) {
 				gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
-				gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-ubuntu");
+			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && is_open_source(info)) {
+				gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-free=" LICENSE_URL);
 			}
 		}
 
@@ -541,6 +414,21 @@ is_allowed_section (PackageInfo *info)
 	return info->section == NULL || !g_strv_contains (section_blacklist, info->section);
 }
 
+static gchar *
+get_origin (PackageInfo *info)
+{
+	gchar *origin_lower = g_strdup (info->origin);
+	gchar *out;
+	for (int i = 0; origin_lower[i]; ++i)
+		g_ascii_tolower(origin_lower[i]);
+
+	out = g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
+
+	g_free (origin_lower);
+
+	return out;
+}
+
 gboolean
 gs_plugin_add_installed (GsPlugin *plugin,
 			 GList **list,
@@ -553,23 +441,31 @@ gs_plugin_add_installed (GsPlugin *plugin,
 	if (g_once_init_enter (&plugin->priv->loaded)) {
 		gboolean ret;
 
-		ret = load_db (plugin, error);
+		ret = load_apt_db (plugin, error);
 		g_once_init_leave (&plugin->priv->loaded, TRUE);
 		if (!ret)
 			return FALSE;
 	}
 
+
 	for (link = plugin->priv->installed_packages; link; link = link->next) {
-		PackageInfo *info = link->data;
+		PackageInfo *info = (PackageInfo *) link->data;
+		g_autofree gchar *origin = get_origin (info);
 		g_autoptr(GsApp) app = NULL;
 
 		if (!is_allowed_section (info))
 			continue;
 
-		app = gs_app_new (info->name);
-		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+		app = gs_app_new (NULL);
+		// FIXME: Since appstream marks all packages as owned by
+		// PackageKit and we are replacing PackageKit we need to accept
+		// those packages
 		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, info->name);
 		gs_app_add_source (app, info->name);
+		gs_app_set_origin (app, origin);
+		gs_app_set_origin_ui (app, info->origin);
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_plugin_add_app (list, app);
 	}
 
@@ -593,7 +489,7 @@ transaction_property_changed_cb (GDBusConnection *connection,
 				 GVariant *parameters,
 				 gpointer user_data)
 {
-	TransactionData *data = user_data;
+	TransactionData *data = (TransactionData *) user_data;
 	const gchar *name;
 	g_autoptr(GVariant) value = NULL;
 
@@ -615,7 +511,7 @@ transaction_finished_cb (GDBusConnection *connection,
 			 GVariant *parameters,
 			 gpointer user_data)
 {
-	TransactionData *data = user_data;
+	TransactionData *data = (TransactionData *) user_data;
 
 	if (g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(s)")))
 		g_variant_get (parameters, "(s)", data->result);
@@ -752,7 +648,8 @@ app_is_ours (GsApp *app)
 {
 	const gchar *management_plugin = gs_app_get_management_plugin (app);
 
-	// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+	// FIXME: Since appstream marks all packages as owned by PackageKit and
+	// we are replacing PackageKit we need to accept those packages
 	return g_strcmp0 (management_plugin, "PackageKit") == 0 ||
 	       g_strcmp0 (management_plugin, "dpkg") == 0;
 }
@@ -834,22 +731,25 @@ gs_plugin_add_updates (GsPlugin *plugin,
 	if (g_once_init_enter (&plugin->priv->loaded)) {
 		gboolean ret;
 
-		ret = load_db (plugin, error);
+		ret = load_apt_db (plugin, error);
 		g_once_init_leave (&plugin->priv->loaded, TRUE);
 		if (!ret)
 			return FALSE;
 	}
 
 	for (link = plugin->priv->updatable_packages; link; link = link->next) {
-		PackageInfo *info = link->data;
+		PackageInfo *info = (PackageInfo *) link->data;
 		g_autoptr(GsApp) app = NULL;
 
 		if (!is_allowed_section (info))
 			continue;
 
-		app = gs_app_new (info->name);
-		// FIXME: Since appstream marks all packages as owned by PackageKit and we are replacing PackageKit we need to accept those packages
+		app = gs_app_new (NULL);
+		// FIXME: Since appstream marks all packages as owned by
+		// PackageKit and we are replacing PackageKit we need to accept
+		// those packages
 		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, info->name);
 		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 		gs_app_add_source (app, info->name);
 		gs_plugin_add_app (list, app);
@@ -956,15 +856,15 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 	argv[2] = argv2 = g_strdup ("-W");
 	argv[3] = argv3 = g_strdup (filename);
 
-	if (!g_spawn_sync (NULL,
+	if (!g_spawn_sync (NULL, /* working_directory */
 			   argv,
-			   NULL,
-			   G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL,
-			   NULL,
-			   NULL,
+			   NULL, /* envp */
+			   (GSpawnFlags) (G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
+			   NULL, /* child_setup */
+			   NULL, /* user_data */
 			   &output,
-			   NULL,
-			   NULL,
+			   NULL, /* standard_error */
+			   NULL, /* exit_status */
 			   error))
 		return FALSE;
 
@@ -980,16 +880,16 @@ gs_plugin_filename_to_app (GsPlugin      *plugin,
 
 	description = g_strjoinv (NULL, tokens + 5);
 
-	app = gs_app_new (tokens[0]);
+	app = gs_app_new (NULL);
 	file = g_file_new_for_commandline_arg (filename);
 	path = g_file_get_path (file);
 
-	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, tokens[0]);
+	gs_app_set_name (app, GS_APP_QUALITY_LOWEST, tokens[0]);
 	gs_app_set_version (app, tokens[1]);
 	gs_app_set_size (app, 1024 * atoi (tokens[2]));
 	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, tokens[3]);
-	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, tokens[4]);
-	gs_app_set_description (app, GS_APP_QUALITY_HIGHEST, description + 1);
+	gs_app_set_summary (app, GS_APP_QUALITY_LOWEST, tokens[4]);
+	gs_app_set_description (app, GS_APP_QUALITY_LOWEST, description + 1);
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
 	gs_app_set_management_plugin (app, "dpkg");
 	gs_app_add_source (app, tokens[0]);
