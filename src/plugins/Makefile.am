@@ -28,7 +28,6 @@ AM_CPPFLAGS =						\
 
 plugindir = $(libdir)/gs-plugins-${GS_PLUGIN_API_VERSION}
 plugin_LTLIBRARIES =					\
-	libgs_plugin_apt.la				\
 	libgs_plugin_appstream.la			\
 	libgs_plugin_dummy.la				\
 	libgs_plugin_hardcoded-featured.la		\
@@ -42,6 +41,11 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_epiphany.la			\
 	libgs_plugin_icons.la				\
 	libgs_plugin_snappy.la
+
+if HAVE_APT
+plugin_LTLIBRARIES +=					\
+	libgs_plugin_apt.la
+endif
 
 if HAVE_PACKAGEKIT
 plugin_LTLIBRARIES +=					\
