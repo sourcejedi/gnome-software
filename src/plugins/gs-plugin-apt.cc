@@ -255,17 +255,17 @@ load_apt_db (GsPlugin *plugin, GError **error)
 static void
 get_changelog (GsPlugin *plugin, GsApp *app)
 {
-	g_autofree gchar *source_prefix = NULL,
-			 *uri = NULL,
-			 *changelog_prefix = NULL,
-			 *binary_source = NULL,
-			 *current_version = NULL,
-			 *update_version = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
+	guint i;
 	guint status_code;
+	g_autofree gchar *binary_source = NULL,
+	g_autofree gchar *changelog_prefix = NULL,
+	g_autofree gchar *current_version = NULL,
+	g_autofree gchar *source_prefix = NULL,
+	g_autofree gchar *update_version = NULL;
+	g_autofree gchar *uri = NULL,
 	g_auto(GStrv) lines = NULL;
-	int i;
-	GString *details;
+	g_autoptr(GString) details = NULL;
+	g_autoptr(SoupMessage) msg = NULL;
 
 	// Need to know the source and version to download changelog
 	binary_source = g_strdup (gs_app_get_source_default (app));
@@ -279,8 +279,9 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	else
 		source_prefix = g_strdup_printf ("%c", binary_source[0]);
 	uri = g_strdup_printf ("http://changelogs.ubuntu.com/changelogs/binary/%s/%s/%s/changelog", source_prefix, binary_source, update_version);
-	msg = soup_message_new (SOUP_METHOD_GET, uri);
 
+	/* download file */
+	msg = soup_message_new (SOUP_METHOD_GET, uri);
 	status_code = soup_session_send_message (plugin->soup_session, msg);
 	if (status_code != SOUP_STATUS_OK) {
 		g_warning ("Failed to get changelog for %s version %s from changelogs.ubuntu.com: %s", binary_source, update_version, soup_status_get_phrase (status_code));
@@ -316,7 +317,6 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 	}
 
 	gs_app_set_update_details (app, details->str);
-	g_string_free (details, TRUE);
 }
 
 static gboolean
@@ -417,13 +417,10 @@ get_origin (PackageInfo *info)
 		return NULL;
 
 	g_autofree gchar *origin_lower = g_strdup (info->origin);
-	gchar *out;
 	for (int i = 0; origin_lower[i]; ++i)
 		origin_lower[i] = g_ascii_tolower (origin_lower[i]);
 
-	out = g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
-
-	return out;
+	return g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
 }
 
 gboolean
@@ -469,8 +466,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 	return TRUE;
 }
 
-typedef struct
-{
+typedef struct {
 	GsPlugin *plugin;
 	GMainLoop *loop;
 	GsApp *app;
