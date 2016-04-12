@@ -47,18 +47,17 @@
 #define LICENSE_URL "http://www.ubuntu.com/about/about-ubuntu/licensing"
 
 typedef struct {
-	gchar *name;
-	gchar *section;
-	gchar *architecture;
-	gchar *installed_version;
-	gchar *update_version;
-	gchar *origin;
-	gchar *release;
-	gchar *component;
-	gint installed_size;
-	gint package_size;
+	gchar		*name;
+	gchar		*section;
+	gchar		*architecture;
+	gchar		*installed_version;
+	gchar		*update_version;
+	gchar		*origin;
+	gchar		*release;
+	gchar		*component;
+	gint		 installed_size;
+	gint		 package_size;
 } PackageInfo;
-
 
 #include "ubuntu-unity-launcher-proxy.h"
 
@@ -163,11 +162,8 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 		return false;
 
 	name = g_strdup (P.Name ());
-
 	info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, name);
-
-	if (!info)
-	{
+	if (info == NULL) {
 		info = g_new0 (PackageInfo, 1);
 		info->name = name;
 		g_hash_table_insert (plugin->priv->package_info, name, info);
@@ -177,9 +173,9 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 		// see InRelease for the fields
 		if (VF.File ().Archive ())
 			info->release = g_strdup (VF.File ().Archive ());
-		if(VF.File ().Origin ())
+		if (VF.File ().Origin ())
 			info->origin = g_strdup (VF.File ().Origin ());
-		if(VF.File ().Component ())
+		if (VF.File ().Component ())
 			info->component = g_strdup (VF.File ().Component ());
 		// also available: Codename, Label
 		break;
