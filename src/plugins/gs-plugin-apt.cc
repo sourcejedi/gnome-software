@@ -417,14 +417,15 @@ is_allowed_section (PackageInfo *info)
 static gchar *
 get_origin (PackageInfo *info)
 {
-	gchar *origin_lower = g_strdup (info->origin);
+	if (!info->origin)
+		return NULL;
+
+	g_autofree gchar *origin_lower = g_strdup (info->origin);
 	gchar *out;
 	for (int i = 0; origin_lower[i]; ++i)
-		g_ascii_tolower(origin_lower[i]);
+		origin_lower[i] = g_ascii_tolower (origin_lower[i]);
 
 	out = g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
-
-	g_free (origin_lower);
 
 	return out;
 }
