@@ -1370,7 +1370,7 @@ gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
 			g_string_append_printf (urld,
 						"<a href=\"%s\">%s</a>",
 						/* TRANSLATORS: see GNU page */
-						url, _("Free Software"));
+						url, _("Open Source"));
 			continue;
 		}
 
