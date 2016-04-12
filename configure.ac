@@ -280,6 +280,7 @@ echo "
         cppflags:                  ${CPPFLAGS}
         Dogtail:                   ${enable_dogtail}
         PackageKit support:        ${have_packagekit}
+        APT support:               ${have_apt}
         PolicyKit support:         ${have_polkit}
         Firmware support:          ${have_firmware}
         Limba support:             ${have_limba}
