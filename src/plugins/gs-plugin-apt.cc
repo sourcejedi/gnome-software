@@ -270,12 +270,12 @@ get_changelog (GsPlugin *plugin, GsApp *app)
 {
 	guint i;
 	guint status_code;
-	g_autofree gchar *binary_source = NULL,
-	g_autofree gchar *changelog_prefix = NULL,
-	g_autofree gchar *current_version = NULL,
-	g_autofree gchar *source_prefix = NULL,
+	g_autofree gchar *binary_source = NULL;
+	g_autofree gchar *changelog_prefix = NULL;
+	g_autofree gchar *current_version = NULL;
+	g_autofree gchar *source_prefix = NULL;
 	g_autofree gchar *update_version = NULL;
-	g_autofree gchar *uri = NULL,
+	g_autofree gchar *uri = NULL;
 	g_auto(GStrv) lines = NULL;
 	g_autoptr(GString) details = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
