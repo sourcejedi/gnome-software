@@ -114,6 +114,7 @@ gs_plugin_destroy (GsPlugin *plugin)
 	g_clear_pointer (&priv->consumer_secret, g_free);
 	g_clear_pointer (&priv->consumer_key, g_free);
 	g_clear_pointer (&priv->db, sqlite3_close);
+	g_free (priv->db_path);
 }
 
 static gint
