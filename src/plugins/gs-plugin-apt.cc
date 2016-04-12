@@ -464,9 +464,6 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			continue;
 
 		app = gs_app_new (NULL);
-		// FIXME: Since appstream marks all packages as owned by
-		// PackageKit and we are replacing PackageKit we need to accept
-		// those packages
 		gs_app_set_management_plugin (app, "apt");
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, info->name);
 		gs_app_add_source (app, info->name);
@@ -657,8 +654,9 @@ app_is_ours (GsApp *app)
 
 	// FIXME: Since appstream marks all packages as owned by PackageKit and
 	// we are replacing PackageKit we need to accept those packages
-	return g_strcmp0 (management_plugin, "PackageKit") == 0 ||
-	       g_strcmp0 (management_plugin, "dpkg") == 0;
+	const gchar *our_management_plugins[] = { "PackageKit", "apt", NULL };
+
+	return g_strv_contains (our_management_plugins, management_plugin);
 }
 
 gboolean
@@ -675,12 +673,25 @@ gs_plugin_app_install (GsPlugin *plugin,
 	if (gs_app_get_source_default (app) == NULL)
 		return TRUE;
 
-	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") == 0)
+	switch (gs_app_get_state (app)) {
+	case AS_APP_STATE_AVAILABLE:
+	case AS_APP_STATE_UPDATABLE:
+		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		success = aptd_transaction (plugin, "InstallPackages", app, error);
-	else if (g_strcmp0 (gs_app_get_management_plugin (app), "dpkg") == 0)
+		break;
+	case AS_APP_STATE_AVAILABLE_LOCAL:
+		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		success = aptd_transaction (plugin, "InstallFile", app, error);
+		break;
+	default:
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "do not know how to install app in state %s",
+			     as_app_state_to_string (gs_app_get_state (app)));
+		return FALSE;
+	}
+
 
 	if (success)
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
@@ -752,10 +763,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 			continue;
 
 		app = gs_app_new (NULL);
-		// FIXME: Since appstream marks all packages as owned by
-		// PackageKit and we are replacing PackageKit we need to accept
-		// those packages
-		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_management_plugin (app, "apt");
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, info->name);
 		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 		gs_app_add_source (app, info->name);
@@ -795,117 +803,6 @@ gs_plugin_launch (GsPlugin *plugin,
 		return TRUE;
 
 	return gs_plugin_app_launch (plugin, app, error);
-}
-
-static gboolean
-content_type_matches (const gchar *filename,
-		      gboolean *matches,
-		      GCancellable *cancellable,
-		      GError **error)
-{
-	const gchar *content_type;
-	g_autoptr(GFile) file = NULL;
-	g_autoptr(GFileInfo) info = NULL;
-	const gchar *supported_types[] = {
-		"application/vnd.debian.binary-package",
-		NULL };
-
-	/* get content type */
-	file = g_file_new_for_path (filename);
-	info = g_file_query_info (file,
-				  G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
-				  G_FILE_QUERY_INFO_NONE,
-				  cancellable,
-				  error);
-	if (info == NULL)
-		return FALSE;
-
-	content_type = g_file_info_get_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
-	*matches = g_strv_contains (supported_types, content_type);
-
-	return TRUE;
-}
-
-gboolean
-gs_plugin_filename_to_app (GsPlugin      *plugin,
-			   GList        **list,
-			   const gchar   *filename,
-			   GCancellable  *cancellable,
-			   GError       **error)
-{
-	gboolean supported;
-	GsApp *app;
-	g_autoptr(GFile) file = NULL;
-	gchar *argv[5] = { NULL };
-	g_autofree gchar *argv0 = NULL;
-	g_autofree gchar *argv1 = NULL;
-	g_autofree gchar *argv2 = NULL;
-	g_autofree gchar *argv3 = NULL;
-	g_autofree gchar *output = NULL;
-	g_autofree gchar *description = NULL;
-	g_autofree gchar *path = NULL;
-	g_auto(GStrv) tokens = NULL;
-
-	if (!content_type_matches (filename,
-				   &supported,
-				   cancellable,
-				   error))
-		return FALSE;
-	if (!supported)
-		return TRUE;
-
-	argv[0] = argv0 = g_strdup ("dpkg-deb");
-	argv[1] = argv1 = g_strdup ("--showformat=${Package}\\n"
-				    "${Version}\\n"
-				    "${Installed-Size}\\n"
-				    "${Homepage}\\n"
-				    "${Description}");
-	argv[2] = argv2 = g_strdup ("-W");
-	argv[3] = argv3 = g_strdup (filename);
-
-	if (!g_spawn_sync (NULL, /* working_directory */
-			   argv,
-			   NULL, /* envp */
-			   (GSpawnFlags) (G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
-			   NULL, /* child_setup */
-			   NULL, /* user_data */
-			   &output,
-			   NULL, /* standard_error */
-			   NULL, /* exit_status */
-			   error))
-		return FALSE;
-
-	tokens = g_strsplit (output, "\n", 0);
-
-	if (g_strv_length (tokens) < 5) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "dpkg-deb output format incorrect:\n\"%s\"\n", output);
-		return FALSE;
-	}
-
-	description = g_strjoinv (NULL, tokens + 5);
-
-	app = gs_app_new (NULL);
-	file = g_file_new_for_commandline_arg (filename);
-	path = g_file_get_path (file);
-
-	gs_app_set_name (app, GS_APP_QUALITY_LOWEST, tokens[0]);
-	gs_app_set_version (app, tokens[1]);
-	gs_app_set_size (app, 1024 * atoi (tokens[2]));
-	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, tokens[3]);
-	gs_app_set_summary (app, GS_APP_QUALITY_LOWEST, tokens[4]);
-	gs_app_set_description (app, GS_APP_QUALITY_LOWEST, description + 1);
-	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
-	gs_app_set_management_plugin (app, "dpkg");
-	gs_app_add_source (app, tokens[0]);
-	gs_app_set_origin (app, path);
-	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
-
-	gs_plugin_add_app (list, app);
-
-	return TRUE;
 }
 
 /* vim: set noexpandtab ts=8 sw=8: */
