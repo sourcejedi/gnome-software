@@ -362,7 +362,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_ptr_array_add (query_fields, g_strdup_printf ("q=%s", query));
 	}
 	g_ptr_array_add (query_fields, NULL);
-	path = g_string_new ("/2.0/snaps");
+	path = g_string_new ("/v2/snaps");
 	if (query_fields->len > 1) {
 		g_autofree gchar *fields = NULL;
 		g_string_append (path, "?");
@@ -421,7 +421,7 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 	if (!socket)
 		return FALSE;
 
-	path = g_strdup_printf ("/2.0/snaps/%s", gs_app_get_id (app));
+	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
 	if (!send_snapd_request (socket, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
@@ -521,7 +521,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		return FALSE;
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
-	path = g_strdup_printf ("/2.0/snaps/%s", id);
+	path = g_strdup_printf ("/v2/snaps/%s", id);
 	if (!send_snapd_request (socket, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
