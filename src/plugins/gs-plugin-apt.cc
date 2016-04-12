@@ -549,10 +549,9 @@ notify_unity_launcher (GsApp *app, const gchar *transaction_path)
 }
 
 static gboolean
-aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **error)
+aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GVariant *parameters, GError **error)
 {
 	g_autoptr(GDBusConnection) conn = NULL;
-	GVariant *parameters;
 	g_autoptr(GVariant) result = NULL;
 	g_autofree gchar *transaction_path = NULL, *transaction_result = NULL;
 	g_autoptr(GMainLoop) loop = NULL;
@@ -563,16 +562,9 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GError **er
 	if (conn == NULL)
 		return FALSE;
 
-	if (g_strcmp0 (method, "InstallFile") == 0) {
-		parameters = g_variant_new ("(sb)", gs_app_get_origin (app), TRUE);
-	} else if (app != NULL) {
-		GVariantBuilder builder;
-		g_variant_builder_init (&builder, G_VARIANT_TYPE ("as")),
-		g_variant_builder_add (&builder, "s", gs_app_get_source_default (app));
-		parameters = g_variant_new ("(as)", &builder);
-	} else {
-		parameters = g_variant_new ("()");
-	}
+	if (parameters == NULL && app != NULL)
+		parameters = g_variant_new_parsed ("([%s],)", gs_app_get_source_default (app));
+
 	result = g_dbus_connection_call_sync (conn,
 					      "org.debian.apt",
 					      "/org/debian/apt",
@@ -677,11 +669,13 @@ gs_plugin_app_install (GsPlugin *plugin,
 	case AS_APP_STATE_AVAILABLE:
 	case AS_APP_STATE_UPDATABLE:
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-		success = aptd_transaction (plugin, "InstallPackages", app, error);
+		success = aptd_transaction (plugin, "InstallPackages", app, NULL, error);
 		break;
 	case AS_APP_STATE_AVAILABLE_LOCAL:
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-		success = aptd_transaction (plugin, "InstallFile", app, error);
+		success = aptd_transaction (plugin, "InstallFile", app,
+					    g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app)),
+					    error);
 		break;
 	default:
 		g_set_error (error,
@@ -714,7 +708,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	if (aptd_transaction (plugin, "RemovePackages", app, error))
+	if (aptd_transaction (plugin, "RemovePackages", app, NULL, error))
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
@@ -734,7 +728,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
 		return TRUE;
 
-	return aptd_transaction (plugin, "UpdateCache", NULL, error);
+	return aptd_transaction (plugin, "UpdateCache", NULL, NULL, error);
 }
 
 gboolean
@@ -783,7 +777,7 @@ gs_plugin_update_app (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (aptd_transaction (plugin, "UpgradePackages", app, error))
+	if (aptd_transaction (plugin, "UpgradePackages", app, NULL, error))
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
