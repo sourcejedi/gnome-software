@@ -773,15 +773,50 @@ gs_plugin_update_app (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	if (!app_is_ours (app))
-		return TRUE;
+	GPtrArray *apps;
+	GsApp *app_i;
+	guint i;
+	GVariantBuilder builder;
 
-	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	if (aptd_transaction (plugin, "UpgradePackages", app, NULL, error))
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-	else {
-		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
-		return FALSE;
+	if (g_strcmp0 (gs_app_get_id (app), "os-update.virtual") == 0) {
+		apps = gs_app_get_related (app);
+
+		g_variant_builder_init (&builder, G_VARIANT_TYPE ("(as)"));
+		g_variant_builder_open (&builder, G_VARIANT_TYPE ("as"));
+
+		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
+
+		for (i = 0; i < apps->len; i++) {
+			app_i = GS_APP (g_ptr_array_index (apps, i));
+			gs_app_set_state (app_i, AS_APP_STATE_INSTALLING);
+			g_variant_builder_add (&builder, "s", gs_app_get_source_default (app_i));
+		}
+
+		g_variant_builder_close (&builder);
+
+		if (aptd_transaction (plugin, "UpgradePackages", app, g_variant_builder_end (&builder), error)) {
+			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+
+			for (i = 0; i < apps->len; i++)
+				gs_app_set_state (GS_APP (g_ptr_array_index (apps, i)), AS_APP_STATE_INSTALLED);
+		} else {
+			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+
+			for (i = 0; i < apps->len; i++)
+				gs_app_set_state (GS_APP (g_ptr_array_index (apps, i)), AS_APP_STATE_UPDATABLE_LIVE);
+
+			return FALSE;
+		}
+	} else if (app_is_ours (app)) {
+		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
+
+		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, error))
+			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+		else {
+			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+
+			return FALSE;
+		}
 	}
 
 	return TRUE;
