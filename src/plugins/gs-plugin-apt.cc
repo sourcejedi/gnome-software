@@ -143,11 +143,13 @@ version_newer (const gchar *v0, const gchar *v1)
 	return v0 ? _system->VS->CmpVersion(v0, v1) < 0 : TRUE;
 }
 
+/* return FALSE for a fatal error */
 static gboolean
 look_at_pkg (const pkgCache::PkgIterator &P,
 	     pkgSourceList *list,
 	     pkgPolicy *policy,
-	     GsPlugin *plugin)
+	     GsPlugin *plugin,
+	     GError **error)
 {
 	pkgCache::VerIterator current = P.CurrentVer();
 	pkgCache::VerIterator candidate = policy->GetCandidateVer(P);
@@ -159,7 +161,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 	PackageInfo *info;
 
 	if (!candidate || !candidate.FileList ())
-		return false;
+		return TRUE;
 
 	name = g_strdup (P.Name ());
 	info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, name);
@@ -184,15 +186,21 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	pkgCache::PkgFileIterator I = VF.File ();
 
-	if (I.IsOk () == false)
-		return _error->Error (("Package file %s is out of sync."),I.FileName ());
+	if (I.IsOk () == false) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     ("apt DB load failed: package file %s is out of sync."), I.FileName ());
+		return FALSE;
+	}
 
 	PkgF.Open (I.FileName (), FileFd::ReadOnly, FileFd::Extension);
 
 	pkgTagFile TagF (&PkgF);
 
 	if (TagF.Jump (Tags, current.FileList ()->Offset) == false)
-		return _error->Error ("Internal Error, Unable to parse a package record");
+		return TRUE;
+
 
 	if (Tags.FindI ("Installed-Size") > 0)
 		info->installed_size = Tags.FindI ("Installed-Size")*1024;
@@ -239,6 +247,10 @@ load_apt_db (GsPlugin *plugin, GError **error)
 	policy = cachefile.GetPolicy();
 	if (cache == NULL || _error->PendingError()) {
 		_error->DumpErrors();
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "apt DB load failed: error while initialising");
 		return FALSE;
 	}
 
@@ -246,7 +258,8 @@ load_apt_db (GsPlugin *plugin, GError **error)
 		P = grp.FindPreferredPkg();
 		if (P.end())
 			continue;
-		look_at_pkg (P, list, policy, plugin);
+		if (!look_at_pkg (P, list, policy, plugin, error))
+			return FALSE;
 	}
 
 	return TRUE;
@@ -454,7 +467,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 		// FIXME: Since appstream marks all packages as owned by
 		// PackageKit and we are replacing PackageKit we need to accept
 		// those packages
-		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_management_plugin (app, "apt");
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, info->name);
 		gs_app_add_source (app, info->name);
 		gs_app_set_origin (app, origin);
