@@ -774,7 +774,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 }
 
 gboolean
-gs_plugin_app_update (GsPlugin *plugin,
+gs_plugin_update_app (GsPlugin *plugin,
 		      GsApp *app,
 		      GCancellable *cancellable,
 		      GError **error)

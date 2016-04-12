@@ -2711,7 +2711,7 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 		state->state_failure = AS_APP_STATE_UNKNOWN;
 		break;
 	case GS_PLUGIN_LOADER_ACTION_UPDATE:
-		state->function_name = "gs_plugin_app_update";
+		state->function_name = "gs_plugin_update_app";
 		state->state_success = AS_APP_STATE_INSTALLED;
 		state->state_failure = AS_APP_STATE_UPDATABLE_LIVE;
 		break;
