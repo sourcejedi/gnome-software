@@ -275,16 +275,16 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 		else
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-		size = json_object_get_int_member (package, "installed_size");
+		size = json_object_get_int_member (package, "installed-size");
 	}
 	else if (g_strcmp0 (status, "removed") == 0) {
 		// A removed app is only available if it can be downloaded (it might have been sideloaded)
-		size = json_object_get_int_member (package, "download_size");
+		size = json_object_get_int_member (package, "download-size");
 		if (size > 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	} else if (g_strcmp0 (status, "not installed") == 0) {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		size = json_object_get_int_member (package, "download_size");
+		size = json_object_get_int_member (package, "download-size");
 	}
 	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
