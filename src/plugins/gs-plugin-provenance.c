@@ -81,6 +81,7 @@ const gchar **
 gs_plugin_order_after (GsPlugin *plugin)
 {
 	static const gchar *deps[] = {
+		"apt",
 		"packagekit-refine",	/* after the package source is set */
 		NULL };
 	return deps;
@@ -135,8 +136,10 @@ gs_plugin_provenance_refine_app (GsPlugin *plugin, GsApp *app)
 
 	/* simple case */
 	origin = gs_app_get_origin (app);
+	g_debug ("prov: considering %s", gs_app_get_id (app));
 	if (origin != NULL && gs_utils_strv_fnmatch (sources, origin)) {
 		gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
+		g_debug ("prov: %s", gs_app_to_string (app));
 		return;
 	}
 
