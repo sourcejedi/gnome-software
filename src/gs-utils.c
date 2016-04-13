@@ -129,12 +129,6 @@ gs_grab_focus_when_mapped (GtkWidget *widget)
 					G_CALLBACK (grab_focus), NULL);
 }
 
-static gboolean
-is_unity (void)
-{
-	return g_strcmp0 (g_getenv ("XDG_CURRENT_DESKTOP"), "Unity") == 0;
-}
-
 void
 gs_app_notify_installed (GsApp *app)
 {
@@ -145,7 +139,7 @@ gs_app_notify_installed (GsApp *app)
 	 * has been successfully installed */
 	summary = g_strdup_printf (_("%s is now installed"), gs_app_get_name (app));
 	n = g_notification_new (summary);
-	if (!is_unity ()) {
+	if (!gs_utils_is_current_desktop ("Unity")) {
 		if (gs_app_get_kind (app) == AS_APP_KIND_DESKTOP) {
 			/* TRANSLATORS: this is button that opens the newly installed application */
 			g_notification_add_button_with_target (n, _("Launch"),

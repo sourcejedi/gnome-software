@@ -938,12 +938,6 @@ gs_shell_updates_reboot_failed_cb (GObject *source, GAsyncResult *res, gpointer 
 					   self);
 }
 
-static gboolean
-is_unity (void)
-{
-	return g_strcmp0 (g_getenv ("XDG_CURRENT_DESKTOP"), "Unity") == 0;
-}
-
 /**
  * gs_shell_updates_perform_update_cb:
  **/
@@ -982,7 +976,7 @@ gs_shell_updates_perform_update_cb (GsPluginLoader *plugin_loader,
 		n = g_notification_new (_("Updates have been installed"));
 		/* TRANSLATORS: the new apps will not be run until we restart */
 		g_notification_set_body (n, _("A restart is required for them to take effect."));
-		if (!is_unity ()) {
+		if (!gs_utils_is_current_desktop ("Unity")) {
 			/* TRANSLATORS: button text */
 			g_notification_add_button (n, _("Not Now"), "app.nop");
 			/* TRANSLATORS: button text */
