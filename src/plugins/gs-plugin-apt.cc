@@ -522,6 +522,18 @@ is_open_source (PackageInfo *info)
 	return info->component != NULL && g_strv_contains (open_source_components, info->component);
 }
 
+static gchar *
+get_origin (PackageInfo *info)
+{
+	if (!info->origin)
+		return NULL;
+
+	g_autofree gchar *origin_lower = g_strdup (info->origin);
+	for (int i = 0; origin_lower[i]; ++i)
+		origin_lower[i] = g_ascii_tolower (origin_lower[i]);
+
+	return g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
+}
 
 gboolean
 gs_plugin_refine (GsPlugin *plugin,
@@ -547,33 +559,30 @@ gs_plugin_refine (GsPlugin *plugin,
 
 	for (link = *list; link; link = link->next) {
 		app = (GsApp *) link->data;
+		g_autofree gchar *fn = NULL;
+		g_autofree gchar *origin = NULL;
+		gchar *package = NULL;
 
 		if (gs_app_get_source_default (app) == NULL)
-			continue;
+			goto pkg;
 
 		info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
-		if (info != NULL) {
-			if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN) {
-				if (info->installed_version != NULL) {
-					if (info->update_version != NULL) {
-						gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
-					} else {
-						gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-					}
-				} else {
-					gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-				}
-			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0) {
-				gs_app_set_size (app, info->installed_size);
-			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
-				if (info->installed_version != NULL) {
-					gs_app_set_version (app, info->installed_version);
-				}
+		if (info == NULL)
+			continue;
+
+		origin = get_origin (info);
+		gs_app_set_origin (app, origin);
+		gs_app_set_origin_ui (app, info->origin);
+
+		if (gs_app_get_state (app) == AS_APP_STATE_UNKNOWN) {
+			if (info->installed_version != NULL) {
 				if (info->update_version != NULL) {
-					gs_app_set_update_version (app, info->update_version);
+					gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
+				} else {
+					gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 				}
+			} else {
+				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 			}
 			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
 				gs_app_set_provenance (app, TRUE);
@@ -582,21 +591,22 @@ gs_plugin_refine (GsPlugin *plugin,
 				gs_app_set_licence (app, "@LicenseRef-ubuntu", GS_APP_QUALITY_HIGHEST);
 			}
 		}
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && is_open_source(info)) {
+			gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-free=" LICENSE_URL);
+		}
 
 		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0) {
 			get_changelog (plugin, app);
 		}
-	}
 
-	for (link = *list; link != NULL; link = link->next) {
-		g_autofree gchar *fn = NULL;
-		gchar *package = NULL;
-		app = GS_APP (link->data);
 		if (gs_app_get_source_id_default (app) != NULL)
 			continue;
+
 		tmp = gs_app_get_id (app);
 		if (tmp == NULL)
 			continue;
+
+pkg:
 		switch (gs_app_get_kind (app)) {
 		case AS_APP_KIND_DESKTOP:
 			fn = g_strdup_printf ("/usr/share/applications/%s", tmp);
@@ -607,17 +617,21 @@ gs_plugin_refine (GsPlugin *plugin,
 		default:
 			break;
 		}
+
 		if (fn == NULL)
 			continue;
+
 		if (!g_file_test (fn, G_FILE_TEST_EXISTS)) {
 			g_debug ("ignoring %s as does not exist", fn);
 			continue;
 		}
+
 		package = (gchar *) g_hash_table_lookup (plugin->priv->installed_files,
 							 fn);
+
 		if (package == NULL)
 			continue;
-		g_debug ("%s => %s", gs_app_get_id (app), package);
+
 		gs_app_add_source (app, package);
 		gs_app_set_management_plugin (app, "apt");
 	}
@@ -632,19 +646,6 @@ is_allowed_section (PackageInfo *info)
 
 	/* There's no valid apps in the libs section */
 	return info->section == NULL || !g_strv_contains (section_blacklist, info->section);
-}
-
-static gchar *
-get_origin (PackageInfo *info)
-{
-	if (!info->origin)
-		return NULL;
-
-	g_autofree gchar *origin_lower = g_strdup (info->origin);
-	for (int i = 0; origin_lower[i]; ++i)
-		origin_lower[i] = g_ascii_tolower (origin_lower[i]);
-
-	return g_strdup_printf ("%s-%s-%s", origin_lower, info->release, info->component);
 }
 
 gboolean
