@@ -80,7 +80,8 @@ typedef struct {
 #include "ubuntu-unity-launcher-proxy.h"
 
 struct GsPluginPrivate {
-	gsize		 loaded;
+	GMutex		 mutex;
+	gboolean	 loaded;
 	GHashTable	*package_info;
 	GHashTable	*installed_files;
 	GList 		*installed_packages;
@@ -149,6 +150,8 @@ gs_plugin_initialize (GsPlugin *plugin)
 							    g_free,
 							    g_free);
 
+	g_mutex_init (&plugin->priv->mutex);
+
 	pkgInitConfig (*_config);
 	pkgInitSystem (*_config, _system);
 }
@@ -156,10 +159,14 @@ gs_plugin_initialize (GsPlugin *plugin)
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-	g_hash_table_unref (plugin->priv->package_info);
-	g_hash_table_unref (plugin->priv->installed_files);
-	g_list_free (plugin->priv->installed_packages);
-	g_list_free (plugin->priv->updatable_packages);
+	g_mutex_lock (&plugin->priv->mutex);
+	plugin->priv->loaded = FALSE;
+	g_clear_pointer (&plugin->priv->package_info, g_hash_table_unref);
+	g_clear_pointer (&plugin->priv->installed_files, g_hash_table_unref);
+	g_clear_pointer (&plugin->priv->installed_packages, g_list_free);
+	g_clear_pointer (&plugin->priv->updatable_packages, g_list_free);
+	g_mutex_unlock (&plugin->priv->mutex);
+	g_mutex_clear (&plugin->priv->mutex);
 }
 
 
@@ -412,9 +419,14 @@ load_apt_db (GsPlugin *plugin, GError **error)
 	pkgSourceList *list;
 	pkgPolicy *policy;
 	pkgCacheFile cachefile;
-	pkgCache *cache = cachefile.GetPkgCache();
+	pkgCache *cache;
 	pkgCache::PkgIterator P;
+	g_autoptr(GMutexLocker) locker = g_mutex_locker_new (&plugin->priv->mutex);
 
+	if (plugin->priv->loaded)
+		return TRUE;
+
+	cache = cachefile.GetPkgCache();
 	list = cachefile.GetSourceList();
 	policy = cachefile.GetPolicy();
 	if (cache == NULL || _error->PendingError()) {
@@ -437,7 +449,20 @@ load_apt_db (GsPlugin *plugin, GError **error)
 	/* load filename -> package map into plugin->priv->installed_files */
 	look_for_files (plugin);
 
+	plugin->priv->loaded = TRUE;
 	return TRUE;
+}
+
+static void
+unload_apt_db (GsPlugin *plugin)
+{
+	g_autoptr(GMutexLocker) locker = g_mutex_locker_new (&plugin->priv->mutex);
+
+	plugin->priv->loaded = FALSE;
+	g_hash_table_remove_all (plugin->priv->package_info);
+	g_hash_table_remove_all (plugin->priv->installed_files);
+	g_clear_pointer (&plugin->priv->installed_packages, g_list_free);
+	g_clear_pointer (&plugin->priv->updatable_packages, g_list_free);
 }
 
 static void
@@ -546,16 +571,12 @@ gs_plugin_refine (GsPlugin *plugin,
 	GsApp *app;
 	PackageInfo *info;
 	const gchar *tmp;
+	g_autoptr(GMutexLocker) locker = NULL;
 
-	/* Load database once */
-	if (g_once_init_enter (&plugin->priv->loaded)) {
-		gboolean ret;
+	if (!load_apt_db (plugin, error))
+		return FALSE;
 
-		ret = load_apt_db (plugin, error);
-		g_once_init_leave (&plugin->priv->loaded, TRUE);
-		if (!ret)
-			return FALSE;
-	}
+	locker = g_mutex_locker_new (&plugin->priv->mutex);
 
 	for (link = *list; link; link = link->next) {
 		app = (GsApp *) link->data;
@@ -665,17 +686,12 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GError **error)
 {
 	GList *link;
+	g_autoptr(GMutexLocker) locker = NULL;
 
-	/* Load database once */
-	if (g_once_init_enter (&plugin->priv->loaded)) {
-		gboolean ret;
+	if (!load_apt_db (plugin, error))
+		return FALSE;
 
-		ret = load_apt_db (plugin, error);
-		g_once_init_leave (&plugin->priv->loaded, TRUE);
-		if (!ret)
-			return FALSE;
-	}
-
+	locker = g_mutex_locker_new (&plugin->priv->mutex);
 
 	for (link = plugin->priv->installed_packages; link; link = link->next) {
 		PackageInfo *info = (PackageInfo *) link->data;
@@ -962,7 +978,12 @@ gs_plugin_refresh (GsPlugin *plugin,
 	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
 		return TRUE;
 
-	return aptd_transaction (plugin, "UpdateCache", NULL, NULL, NULL, error);
+	if (!aptd_transaction (plugin, "UpdateCache", NULL, NULL, NULL, error))
+		return FALSE;
+
+	unload_apt_db (plugin);
+
+	return TRUE;
 }
 
 gboolean
@@ -972,16 +993,12 @@ gs_plugin_add_updates (GsPlugin *plugin,
                        GError **error)
 {
 	GList *link;
+	g_autoptr(GMutexLocker) locker = NULL;
 
-	/* Load database once */
-	if (g_once_init_enter (&plugin->priv->loaded)) {
-		gboolean ret;
+	if (!load_apt_db (plugin, error))
+		return FALSE;
 
-		ret = load_apt_db (plugin, error);
-		g_once_init_leave (&plugin->priv->loaded, TRUE);
-		if (!ret)
-			return FALSE;
-	}
+	locker = g_mutex_locker_new (&plugin->priv->mutex);
 
 	for (link = plugin->priv->updatable_packages; link; link = link->next) {
 		PackageInfo *info = (PackageInfo *) link->data;
@@ -1037,6 +1054,8 @@ gs_plugin_update (GsPlugin      *plugin,
 	if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(true,)"), error)) {
 		set_list_state (apps, AS_APP_STATE_INSTALLED);
 
+		unload_apt_db (plugin);
+
 		return TRUE;
 	} else {
 		set_list_state (apps, AS_APP_STATE_UPDATABLE_LIVE);
@@ -1077,6 +1096,8 @@ gs_plugin_update_app (GsPlugin *plugin,
 
 			for (i = 0; i < apps->len; i++)
 				gs_app_set_state (GS_APP (g_ptr_array_index (apps, i)), AS_APP_STATE_INSTALLED);
+
+			unload_apt_db (plugin);
 		} else {
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 
@@ -1088,9 +1109,11 @@ gs_plugin_update_app (GsPlugin *plugin,
 	} else if (app_is_ours (app)) {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 
-		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, NULL, error))
+		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, NULL, error)) {
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-		else {
+
+			unload_apt_db (plugin);
+		} else {
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 
 			return FALSE;
