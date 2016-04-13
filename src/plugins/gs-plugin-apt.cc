@@ -46,6 +46,24 @@
 
 #define LICENSE_URL "http://www.ubuntu.com/about/about-ubuntu/licensing"
 
+#define INFO_DIR "/var/lib/dpkg/info"
+
+typedef struct
+{
+	GMutex pending_mutex;
+	GCond pending_cond;
+
+	GMutex dispatched_mutex;
+	GCond dispatched_cond;
+
+	GMutex hashtable_mutex;
+
+	guint still_to_read;
+	guint dispatched_reads;
+
+	GsPlugin *plugin;
+} ReadListData;
+
 typedef struct {
 	gchar		*name;
 	gchar		*section;
@@ -64,6 +82,7 @@ typedef struct {
 struct GsPluginPrivate {
 	gsize		 loaded;
 	GHashTable	*package_info;
+	GHashTable	*installed_files;
 	GList 		*installed_packages;
 	GList 		*updatable_packages;
 };
@@ -125,6 +144,11 @@ gs_plugin_initialize (GsPlugin *plugin)
 							    NULL,
 							    free_package_info);
 
+	plugin->priv->installed_files = g_hash_table_new_full (g_str_hash,
+							    g_str_equal,
+							    g_free,
+							    g_free);
+
 	pkgInitConfig (*_config);
 	pkgInitSystem (*_config, _system);
 }
@@ -133,8 +157,156 @@ void
 gs_plugin_destroy (GsPlugin *plugin)
 {
 	g_hash_table_unref (plugin->priv->package_info);
+	g_hash_table_unref (plugin->priv->installed_files);
 	g_list_free (plugin->priv->installed_packages);
 	g_list_free (plugin->priv->updatable_packages);
+}
+
+
+static void
+read_list_file_cb (GObject *object,
+		   GAsyncResult *res,
+		   gpointer user_data)
+{
+	g_autoptr(GFileInputStream) stream = NULL;
+	g_autoptr(GFile) file = NULL;
+	ReadListData *data;
+	g_autofree gchar *buffer = NULL;
+	g_autofree gchar *filename = NULL;
+	g_autoptr(GFileInfo) info = NULL;
+	g_auto(GStrv) file_lines = NULL;
+	g_auto(GStrv) file_components = NULL;
+	gchar *line;
+
+	file = G_FILE (object);
+	data = (ReadListData *) user_data;
+	stream = g_file_read_finish (file, res, NULL);
+
+	info = g_file_input_stream_query_info (stream,
+					       G_FILE_ATTRIBUTE_STANDARD_SIZE,
+					       NULL,
+					       NULL);
+
+	if (!info)
+		return;
+
+	if (!g_file_info_has_attribute (info, G_FILE_ATTRIBUTE_STANDARD_SIZE))
+		return;
+
+	buffer = (gchar *) g_malloc0 (g_file_info_get_size (info) + 1);
+
+	if (!g_input_stream_read_all (G_INPUT_STREAM (stream),
+				      buffer,
+				      g_file_info_get_size (info),
+				      NULL,
+				      NULL,
+				      NULL))
+		return;
+
+	g_input_stream_close (G_INPUT_STREAM (stream), NULL, NULL);
+
+	file_lines = g_strsplit (buffer, "\n", -1);
+
+	filename = g_file_get_basename (file);
+	file_components = g_strsplit (filename, ".", 2);
+
+	for (int i = 0; file_lines[i]; ++i)
+		if (g_str_has_suffix (file_lines[i], ".desktop") ||
+		    g_str_has_suffix (file_lines[i], ".metainfo.xml") ||
+		    g_str_has_suffix (file_lines[i], ".appdata.xml"))
+		{
+			g_mutex_lock (&data->hashtable_mutex);
+			/* filename -> package */
+			g_hash_table_insert (data->plugin->priv->installed_files,
+					     g_strdup (file_lines[i]),
+					     g_strdup (file_components[0]));
+			g_mutex_unlock (&data->hashtable_mutex);
+		}
+
+	g_mutex_lock (&data->dispatched_mutex);
+	(data->dispatched_reads)--;
+	g_cond_signal(&data->dispatched_cond);
+	g_mutex_unlock(&data->dispatched_mutex);
+
+	g_mutex_lock (&data->pending_mutex);
+	(data->still_to_read)--;
+	g_cond_signal (&data->pending_cond);
+	g_mutex_unlock (&data->pending_mutex);
+}
+
+static void
+read_list_file (GList *files,
+		ReadListData *data)
+{
+	GFile *gfile;
+	GList *files_iter;
+
+	for (files_iter = files; files_iter; files_iter = files_iter->next)
+	{
+		/* freed in read_list_file_cb */
+		gfile = g_file_new_for_path ((gchar *) files_iter->data);
+
+		g_mutex_lock (&data->dispatched_mutex);
+		g_file_read_async (gfile,
+				G_PRIORITY_DEFAULT,
+				NULL,
+				read_list_file_cb,
+				data);
+
+		(data->dispatched_reads)++;
+
+		while (data->dispatched_reads >= 500)
+			g_cond_wait (&data->dispatched_cond, &data->dispatched_mutex);
+
+		g_mutex_unlock (&data->dispatched_mutex);
+	}
+}
+
+static void
+look_for_files (GsPlugin *plugin)
+{
+
+	ReadListData data;
+	GList *files = NULL;
+
+	data.still_to_read = 0;
+	data.dispatched_reads = 0;
+	g_cond_init (&data.pending_cond);
+	g_mutex_init (&data.pending_mutex);
+	g_cond_init (&data.dispatched_cond);
+	g_mutex_init (&data.dispatched_mutex);
+	g_mutex_init (&data.hashtable_mutex);
+	data.plugin = plugin;
+
+	g_autoptr (GDir) dir = NULL;
+	const gchar *file;
+
+	dir = g_dir_open (INFO_DIR, 0, NULL);
+
+	while (file = g_dir_read_name (dir))
+		if (g_str_has_suffix (file, ".list") &&
+		   /* app-install-data contains loads of .desktop files, but they aren't installed by it */
+		   (!g_strcmp0 (file, "app-install-data.list") == 0))
+		{
+			files = g_list_append (files, g_build_filename (INFO_DIR, file, NULL));
+			data.still_to_read++;
+		}
+
+	read_list_file (files, &data);
+
+	/* Wait until all the reads are done */
+	g_mutex_lock (&data.pending_mutex);
+	while (data.still_to_read > 0)
+		g_cond_wait (&data.pending_cond, &data.pending_mutex);
+	g_mutex_unlock (&data.pending_mutex);
+
+	g_mutex_clear (&data.pending_mutex);
+	g_cond_clear (&data.pending_cond);
+	g_mutex_clear (&data.dispatched_mutex);
+	g_cond_clear (&data.dispatched_cond);
+	g_mutex_clear (&data.hashtable_mutex);
+
+	g_list_free_full (files, g_free);
 }
 
 static gboolean
@@ -262,6 +434,9 @@ load_apt_db (GsPlugin *plugin, GError **error)
 			return FALSE;
 	}
 
+	/* load filename -> package map into plugin->priv->installed_files */
+	look_for_files (plugin);
+
 	return TRUE;
 }
 
@@ -356,6 +531,9 @@ gs_plugin_refine (GsPlugin *plugin,
 		  GError **error)
 {
 	GList *link;
+	GsApp *app;
+	PackageInfo *info;
+	const gchar *tmp;
 
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->loaded)) {
@@ -368,8 +546,7 @@ gs_plugin_refine (GsPlugin *plugin,
 	}
 
 	for (link = *list; link; link = link->next) {
-		GsApp *app = (GsApp *) link->data;
-		PackageInfo *info;
+		app = (GsApp *) link->data;
 
 		if (gs_app_get_source_default (app) == NULL)
 			continue;
@@ -409,6 +586,40 @@ gs_plugin_refine (GsPlugin *plugin,
 		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0) {
 			get_changelog (plugin, app);
 		}
+	}
+
+	for (link = *list; link != NULL; link = link->next) {
+		g_autofree gchar *fn = NULL;
+		gchar *package = NULL;
+		app = GS_APP (link->data);
+		if (gs_app_get_source_id_default (app) != NULL)
+			continue;
+		tmp = gs_app_get_id (app);
+		if (tmp == NULL)
+			continue;
+		switch (gs_app_get_kind (app)) {
+		case AS_APP_KIND_DESKTOP:
+			fn = g_strdup_printf ("/usr/share/applications/%s", tmp);
+			break;
+		case AS_APP_KIND_ADDON:
+			fn = g_strdup_printf ("/usr/share/appdata/%s.metainfo.xml", tmp);
+			break;
+		default:
+			break;
+		}
+		if (fn == NULL)
+			continue;
+		if (!g_file_test (fn, G_FILE_TEST_EXISTS)) {
+			g_debug ("ignoring %s as does not exist", fn);
+			continue;
+		}
+		package = (gchar *) g_hash_table_lookup (plugin->priv->installed_files,
+							 fn);
+		if (package == NULL)
+			continue;
+		g_debug ("%s => %s", gs_app_get_id (app), package);
+		gs_app_add_source (app, package);
+		gs_app_set_management_plugin (app, "apt");
 	}
 
 	return TRUE;
