@@ -2094,6 +2094,8 @@ gs_app_subsume (GsApp *app, GsApp *other)
 	}
 
 	/* save any properties we already know */
+	if (other->id != NULL)
+		gs_app_set_id (app, other->id);
 	if (other->sources->len > 0)
 		gs_app_set_sources (app, other->sources);
 	if (other->project_group != NULL)
@@ -2128,11 +2130,19 @@ gs_app_subsume (GsApp *app, GsApp *other)
 			gs_app_add_category (app, tmp);
 		}
 	}
+	if (other->licence != NULL) {
+		/* can't use setter as the incoming text is lost */
+		app->licence = g_strdup (other->licence);
+		app->licence_is_free = other->licence_is_free;
+	}
+	if (other->origin != NULL)
+		gs_app_set_origin (app, other->origin);
 	for (i = 0; i < other->related->len; i++) {
 		app_tmp = g_ptr_array_index (other->related, i);
 		gs_app_add_related (app, app_tmp);
 	}
 	app->kudos |= other->kudos;
+	app->quirk |= other->quirk;
 
 	/* copy metadata from @other to @app unless the app already has a key
 	 * of that name */
