@@ -480,6 +480,7 @@ typedef struct {
 	GsPlugin *plugin;
 	GMainLoop *loop;
 	GsApp *app;
+	GList *apps;
 	gchar **result;
 } TransactionData;
 
@@ -494,12 +495,17 @@ transaction_property_changed_cb (GDBusConnection *connection,
 {
 	TransactionData *data = (TransactionData *) user_data;
 	const gchar *name;
+	GList *i;
 	g_autoptr(GVariant) value = NULL;
 
 	if (g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(sv)"))) {
 		g_variant_get (parameters, "(&sv)", &name, &value);
-		if (data->app && strcmp (name, "Progress") == 0)
-			gs_plugin_progress_update (data->plugin, data->app, g_variant_get_int32 (value));
+		if (g_strcmp0 (name, "Progress") == 0) {
+			if (data->app)
+				gs_plugin_progress_update (data->plugin, data->app, g_variant_get_int32 (value));
+			for (i = data->apps; i != NULL; i = i->next)
+				gs_plugin_progress_update (data->plugin, GS_APP (i->data), g_variant_get_int32 (value));
+		}
 	} else {
 		g_warning ("Unknown parameters in %s.%s: %s", interface_name, signal_name, g_variant_get_type_string (parameters));
 	}
@@ -549,7 +555,12 @@ notify_unity_launcher (GsApp *app, const gchar *transaction_path)
 }
 
 static gboolean
-aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GVariant *parameters, GError **error)
+aptd_transaction (GsPlugin     *plugin,
+		  const gchar  *method,
+		  GsApp        *app,
+		  GList        *apps,
+		  GVariant     *parameters,
+		  GError      **error)
 {
 	g_autoptr(GDBusConnection) conn = NULL;
 	g_autoptr(GVariant) result = NULL;
@@ -588,6 +599,7 @@ aptd_transaction (GsPlugin *plugin, const gchar *method, GsApp *app, GVariant *p
 
 	data.plugin = plugin;
 	data.app = app;
+	data.apps = apps;
 	data.loop = loop;
 	data.result = &transaction_result;
 	property_signal = g_dbus_connection_signal_subscribe (conn,
@@ -669,11 +681,11 @@ gs_plugin_app_install (GsPlugin *plugin,
 	case AS_APP_STATE_AVAILABLE:
 	case AS_APP_STATE_UPDATABLE:
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-		success = aptd_transaction (plugin, "InstallPackages", app, NULL, error);
+		success = aptd_transaction (plugin, "InstallPackages", app, NULL, NULL, error);
 		break;
 	case AS_APP_STATE_AVAILABLE_LOCAL:
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-		success = aptd_transaction (plugin, "InstallFile", app,
+		success = aptd_transaction (plugin, "InstallFile", app, NULL,
 					    g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app)),
 					    error);
 		break;
@@ -708,7 +720,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	if (aptd_transaction (plugin, "RemovePackages", app, NULL, error))
+	if (aptd_transaction (plugin, "RemovePackages", app, NULL, NULL, error))
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	else {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
@@ -728,7 +740,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
 		return TRUE;
 
-	return aptd_transaction (plugin, "UpdateCache", NULL, NULL, error);
+	return aptd_transaction (plugin, "UpdateCache", NULL, NULL, NULL, error);
 }
 
 gboolean
@@ -767,6 +779,50 @@ gs_plugin_add_updates (GsPlugin *plugin,
 	return TRUE;
 }
 
+static void
+set_list_state (GList      *apps,
+		AsAppState  state)
+{
+	GList *i;
+	guint j;
+	GsApp *app_i;
+	GsApp *app_j;
+	GPtrArray *related;
+
+	for (i = apps; i != NULL; i = i->next) {
+		app_i = GS_APP (i->data);
+
+		if (g_strcmp0 (gs_app_get_id (app_i), "os-update.virtual") == 0) {
+			related = gs_app_get_related (app_i);
+
+			for (j = 0; j < related->len; j++) {
+				app_j = GS_APP (g_ptr_array_index (related, j));
+				gs_app_set_state (app_j, state);
+			}
+		} else
+			gs_app_set_state (app_i, state);
+	}
+}
+
+gboolean
+gs_plugin_update (GsPlugin      *plugin,
+		  GList         *apps,
+		  GCancellable  *cancellable,
+		  GError       **error)
+{
+	set_list_state (apps, AS_APP_STATE_INSTALLING);
+
+	if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(true,)"), error)) {
+		set_list_state (apps, AS_APP_STATE_INSTALLED);
+
+		return TRUE;
+	} else {
+		set_list_state (apps, AS_APP_STATE_UPDATABLE_LIVE);
+
+		return FALSE;
+	}
+}
+
 gboolean
 gs_plugin_update_app (GsPlugin *plugin,
 		      GsApp *app,
@@ -794,7 +850,7 @@ gs_plugin_update_app (GsPlugin *plugin,
 
 		g_variant_builder_close (&builder);
 
-		if (aptd_transaction (plugin, "UpgradePackages", app, g_variant_builder_end (&builder), error)) {
+		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, g_variant_builder_end (&builder), error)) {
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 			for (i = 0; i < apps->len; i++)
@@ -810,7 +866,7 @@ gs_plugin_update_app (GsPlugin *plugin,
 	} else if (app_is_ours (app)) {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 
-		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, error))
+		if (aptd_transaction (plugin, "UpgradePackages", app, NULL, NULL, error))
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		else {
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
