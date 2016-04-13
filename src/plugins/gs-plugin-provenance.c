@@ -69,6 +69,7 @@ gs_plugin_initialize (GsPlugin *plugin)
 	priv->sources = gs_plugin_provenance_get_sources (plugin);
 
 	/* after the package source is set */
+	gs_plugin_add_rule (plugin, GS_PLUGIN_RULE_RUN_AFTER, "apt");
 	gs_plugin_add_rule (plugin, GS_PLUGIN_RULE_RUN_AFTER, "dummy");
 	gs_plugin_add_rule (plugin, GS_PLUGIN_RULE_RUN_AFTER, "packagekit-refine");
 }
