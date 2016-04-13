@@ -227,6 +227,9 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\tsummary:\t%s\n", app->summary);
 	if (app->description != NULL)
 		g_string_append_printf (str, "\tdescription:\t%s\n", app->description);
+	g_string_append_printf (str, "\tprovenance:\t%s\n",
+			        gs_app_has_quirk (app,
+						  AS_APP_QUIRK_PROVENANCE) ? "yes" : "no");
 	for (i = 0; i < app->screenshots->len; i++) {
 		ss = g_ptr_array_index (app->screenshots, i);
 		tmp = as_screenshot_get_caption (ss, NULL);
@@ -250,6 +253,8 @@ gs_app_to_string (GsApp *app)
 		g_string_append_printf (str, "\turl{homepage}:\t%s\n", tmp);
 	if (app->licence != NULL)
 		g_string_append_printf (str, "\tlicence:\t%s\n", app->licence);
+	g_string_append_printf (str, "\topen source:\t%s\n",
+			        gs_app_get_license_is_free (app) ? "yes" : "no");
 	if (app->management_plugin != NULL)
 		g_string_append_printf (str, "\tmanagement-plugin:\t%s\n", app->management_plugin);
 	if (app->summary_missing != NULL)
