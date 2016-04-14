@@ -1019,6 +1019,7 @@ set_list_state (GList      *apps,
 
 	for (i = apps; i != NULL; i = i->next) {
 		app_i = GS_APP (i->data);
+		gs_app_set_state (app_i, state);
 
 		if (g_strcmp0 (gs_app_get_id (app_i), "os-update.virtual") == 0) {
 			related = gs_app_get_related (app_i);
@@ -1027,8 +1028,7 @@ set_list_state (GList      *apps,
 				app_j = GS_APP (g_ptr_array_index (related, j));
 				gs_app_set_state (app_j, state);
 			}
-		} else
-			gs_app_set_state (app_i, state);
+		}
 	}
 }
 
