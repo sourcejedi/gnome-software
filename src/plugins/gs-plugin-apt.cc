@@ -1038,19 +1038,30 @@ gs_plugin_update (GsPlugin      *plugin,
 		  GCancellable  *cancellable,
 		  GError       **error)
 {
-	set_list_state (apps, AS_APP_STATE_INSTALLING);
+	GList *i;
+	GsApp *app_i;
 
-	if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(true,)"), error)) {
-		set_list_state (apps, AS_APP_STATE_INSTALLED);
+	for (i = apps; i != NULL; i = i->next) {
+		app_i = GS_APP (i->data);
 
-		unload_apt_db (plugin);
+		if (g_strcmp0 (gs_app_get_id (app_i), "os-update.virtual") == 0) {
+			set_list_state (apps, AS_APP_STATE_INSTALLING);
 
-		return TRUE;
-	} else {
-		set_list_state (apps, AS_APP_STATE_UPDATABLE_LIVE);
+			if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(true,)"), error)) {
+				set_list_state (apps, AS_APP_STATE_INSTALLED);
 
-		return FALSE;
+				unload_apt_db (plugin);
+
+				return TRUE;
+			} else {
+				set_list_state (apps, AS_APP_STATE_UPDATABLE_LIVE);
+
+				return FALSE;
+			}
+		}
 	}
+
+	return TRUE;
 }
 
 gboolean
