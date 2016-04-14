@@ -44,7 +44,8 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_ubuntu-reviews.la			\
 	libgs_plugin_fedora_tagger_usage.la		\
 	libgs_plugin_epiphany.la			\
-	libgs_plugin_icons.la
+	libgs_plugin_icons.la				\
+	libgs_plugin_snappy.la
 
 if HAVE_APT
 plugin_LTLIBRARIES +=					\
@@ -269,6 +270,11 @@ libgs_plugin_packagekit_proxy_la_SOURCES = gs-plugin-packagekit-proxy.c
 libgs_plugin_packagekit_proxy_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_packagekit_proxy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+
+libgs_plugin_snappy_la_SOURCES = gs-plugin-snappy.c
+libgs_plugin_snappy_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS)
+libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
+libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 check_PROGRAMS =					\
 	gs-self-test
