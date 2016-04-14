@@ -970,6 +970,8 @@ gs_shell_updates_perform_update_cb (GsPluginLoader *plugin_loader,
 {
 	g_autoptr(GError) error = NULL;
 
+	gtk_widget_set_sensitive (GTK_WIDGET (self->button_update_all), TRUE);
+
 	/* get the results */
 	if (!gs_plugin_loader_update_finish (plugin_loader, res, &error)) {
 		g_warning ("Failed to perform update: %s", error->message);
@@ -1013,6 +1015,8 @@ gs_shell_updates_button_update_all_cb (GtkButton      *button,
 {
 	g_autoptr(GError) error = NULL;
 	g_autoptr(GList) apps = NULL;
+
+	gtk_widget_set_sensitive (GTK_WIDGET (self->button_update_all), FALSE);
 
 	/* do the offline update */
 	apps = gs_update_list_get_apps (GS_UPDATE_LIST (self->list_box_updates));
