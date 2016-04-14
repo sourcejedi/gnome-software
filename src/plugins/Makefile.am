@@ -157,6 +157,8 @@ ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity
 	                            Launcher \
 	                 $<
 
+CLEANFILES = ubuntu-unity-launcher-proxy.h ubuntu-unity-launcher-proxy.c
+
 libgs_plugin_apt_la_SOURCES = \
 	ubuntu-unity-launcher-proxy.c \
 	ubuntu-unity-launcher-proxy.h \
@@ -291,6 +293,6 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 
-EXTRA_DIST = moduleset-test.xml gs-ubuntuone-dialog.h gs-ubuntuone-dialog.ui
+EXTRA_DIST = moduleset-test.xml gs-ubuntuone-dialog.h gs-ubuntuone-dialog.ui ubuntu-one.png com.canonical.Unity.Launcher.xml
 
 -include $(top_srcdir)/git.mk
