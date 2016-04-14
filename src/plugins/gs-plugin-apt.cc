@@ -584,8 +584,33 @@ gs_plugin_refine (GsPlugin *plugin,
 		g_autofree gchar *origin = NULL;
 		gchar *package = NULL;
 
+		tmp = gs_app_get_id (app);
+		if (gs_app_get_source_id_default (app) == NULL && tmp) {
+			switch (gs_app_get_kind (app)) {
+			case AS_APP_KIND_DESKTOP:
+				fn = g_strdup_printf ("/usr/share/applications/%s", tmp);
+				break;
+			case AS_APP_KIND_ADDON:
+				fn = g_strdup_printf ("/usr/share/appdata/%s.metainfo.xml", tmp);
+				break;
+			default:
+				break;
+			}
+
+			if (!g_file_test (fn, G_FILE_TEST_EXISTS)) {
+				g_debug ("ignoring %s as does not exist", fn);
+			} else {
+				package = (gchar *) g_hash_table_lookup (plugin->priv->installed_files,
+									 fn);
+				if (package != NULL) {
+					gs_app_add_source (app, package);
+					gs_app_set_management_plugin (app, "apt");
+				}
+			}
+		}
+
 		if (gs_app_get_source_default (app) == NULL)
-			goto pkg;
+			continue;
 
 		info = (PackageInfo *) g_hash_table_lookup (plugin->priv->package_info, gs_app_get_source_default (app));
 		if (info == NULL)
@@ -629,42 +654,6 @@ gs_plugin_refine (GsPlugin *plugin,
 		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0) {
 			get_changelog (plugin, app);
 		}
-
-		if (gs_app_get_source_id_default (app) != NULL)
-			continue;
-
-		tmp = gs_app_get_id (app);
-		if (tmp == NULL)
-			continue;
-
-pkg:
-		switch (gs_app_get_kind (app)) {
-		case AS_APP_KIND_DESKTOP:
-			fn = g_strdup_printf ("/usr/share/applications/%s", tmp);
-			break;
-		case AS_APP_KIND_ADDON:
-			fn = g_strdup_printf ("/usr/share/appdata/%s.metainfo.xml", tmp);
-			break;
-		default:
-			break;
-		}
-
-		if (fn == NULL)
-			continue;
-
-		if (!g_file_test (fn, G_FILE_TEST_EXISTS)) {
-			g_debug ("ignoring %s as does not exist", fn);
-			continue;
-		}
-
-		package = (gchar *) g_hash_table_lookup (plugin->priv->installed_files,
-							 fn);
-
-		if (package == NULL)
-			continue;
-
-		gs_app_add_source (app, package);
-		gs_app_set_management_plugin (app, "apt");
 	}
 
 	return TRUE;
