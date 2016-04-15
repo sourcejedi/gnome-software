@@ -213,17 +213,19 @@ ask_refresh (gpointer user_data)
 
 	parent = gtk_application_get_active_window (GTK_APPLICATION (application));
 
-	dialog = gtk_message_dialog_new (parent,
-					 GTK_DIALOG_MODAL |
-					 GTK_DIALOG_DESTROY_WITH_PARENT,
-					 GTK_MESSAGE_QUESTION,
-					 GTK_BUTTONS_YES_NO,
-					 _("An update is needed to show all installable apps. Download now?"));
+	if (gtk_widget_is_visible (GTK_WIDGET (parent))) {
+		dialog = gtk_message_dialog_new (parent,
+						 GTK_DIALOG_MODAL |
+						 GTK_DIALOG_DESTROY_WITH_PARENT,
+						 GTK_MESSAGE_QUESTION,
+						 GTK_BUTTONS_YES_NO,
+						 _("An update is needed to show all installable apps. Download now?"));
 
-	if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_YES)
-		start_refresh (user_data);
+		if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_YES)
+			start_refresh (user_data);
 
-	gtk_widget_destroy (dialog);
+		gtk_widget_destroy (dialog);
+	}
 
 	return G_SOURCE_REMOVE;
 }
