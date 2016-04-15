@@ -34,6 +34,12 @@
 #define TOKEN_KEY       "token-key"
 #define TOKEN_SECRET    "token-secret"
 
+static SecretSchema schema = {
+	SCHEMA_NAME,
+	SECRET_SCHEMA_NONE,
+	{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
+};
+
 typedef struct
 {
 	GCancellable *cancellable;
@@ -174,12 +180,6 @@ show_login_dialog (gpointer user_data)
 gboolean
 gs_ubuntuone_get_credentials (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret)
 {
-	static SecretSchema schema = {
-		SCHEMA_NAME,
-		SECRET_SCHEMA_NONE,
-		{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
-	};
-
 	SecretContext secret_context = { 0 };
 
 	/* Use credentials from libsecret if available */
@@ -244,12 +244,6 @@ gs_ubuntuone_get_credentials (gchar **consumer_key, gchar **consumer_secret, gch
 gboolean
 gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret, GError **error)
 {
-	static SecretSchema schema = {
-		SCHEMA_NAME,
-		SECRET_SCHEMA_NONE,
-		{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
-	};
-
 	LoginContext login_context = { 0 };
 
 	/* Pop up a login dialog */
