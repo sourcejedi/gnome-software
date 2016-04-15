@@ -1052,6 +1052,8 @@ gs_plugin_update (GsPlugin      *plugin,
 
 				unload_apt_db (plugin);
 
+				gs_plugin_updates_changed (plugin);
+
 				return TRUE;
 			} else {
 				set_list_state (apps, AS_APP_STATE_UPDATABLE_LIVE);
@@ -1098,6 +1100,8 @@ gs_plugin_update_app (GsPlugin *plugin,
 				gs_app_set_state (GS_APP (g_ptr_array_index (apps, i)), AS_APP_STATE_INSTALLED);
 
 			unload_apt_db (plugin);
+
+			gs_plugin_updates_changed (plugin);
 		} else {
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 
@@ -1113,6 +1117,8 @@ gs_plugin_update_app (GsPlugin *plugin,
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 			unload_apt_db (plugin);
+
+			gs_plugin_updates_changed (plugin);
 		} else {
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 
