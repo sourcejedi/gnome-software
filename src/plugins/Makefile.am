@@ -203,10 +203,13 @@ libgs_plugin_hardcoded_blacklist_la_LDFLAGS = -module -avoid-version
 libgs_plugin_hardcoded_blacklist_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
-	gs-ubuntuone.c					\
-	gs-ubuntuone.h					\
 	gs-plugin-ubuntu-reviews.c			\
-	gs-ubuntuone-dialog.c
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\
 	$(GS_PLUGIN_LIBS)				\
 	$(SOUP_LIBS)					\
@@ -273,8 +276,19 @@ libgs_plugin_packagekit_proxy_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_packagekit_proxy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_snappy_la_SOURCES = gs-plugin-snappy.c
-libgs_plugin_snappy_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS)
+libgs_plugin_snappy_la_SOURCES =			\
+	gs-plugin-snappy.c				\
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
+libgs_plugin_snappy_la_LIBADD =				\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(LIBSECRET_LIBS)
 libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
