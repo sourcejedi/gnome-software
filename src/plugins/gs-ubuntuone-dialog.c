@@ -355,12 +355,6 @@ entry_edited_cb (GsUbuntuoneDialog *self,
 }
 
 static void
-remember_check_toggled_cb (GsUbuntuoneDialog *self,
-			   GtkToggleButton     *toggle)
-{
-}
-
-static void
 gs_ubuntuone_dialog_init (GsUbuntuoneDialog *self)
 {
 	gtk_widget_init_template (GTK_WIDGET (self));
@@ -371,7 +365,6 @@ gs_ubuntuone_dialog_init (GsUbuntuoneDialog *self)
 	g_signal_connect_swapped (self->login_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
 	g_signal_connect_swapped (self->register_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
 	g_signal_connect_swapped (self->reset_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
-	g_signal_connect_swapped (self->remember_check, "toggled", G_CALLBACK (remember_check_toggled_cb), self);
 	g_signal_connect_swapped (self->email_entry, "notify::text", G_CALLBACK (entry_edited_cb), self);
 	g_signal_connect_swapped (self->password_entry, "notify::text", G_CALLBACK (entry_edited_cb), self);
 	g_signal_connect_swapped (self->passcode_entry, "notify::text", G_CALLBACK (entry_edited_cb), self);
