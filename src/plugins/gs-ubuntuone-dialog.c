@@ -170,12 +170,36 @@ send_request (GsUbuntuoneDialog *self,
 }
 
 static void
+show_status (GsUbuntuoneDialog *self,
+	     const gchar       *text,
+	     gboolean           is_error)
+{
+	PangoAttrList *attributes;
+
+	gtk_widget_set_visible (self->status_stack, TRUE);
+
+	if (is_error) {
+		gtk_stack_set_visible_child_name (GTK_STACK (self->status_stack), "status-image");
+		gtk_image_set_from_icon_name (GTK_IMAGE (self->status_image), "gtk-dialog-error", GTK_ICON_SIZE_BUTTON);
+	} else {
+		gtk_stack_set_visible_child_name (GTK_STACK (self->status_stack), "status-spinner");
+	}
+
+	attributes = pango_attr_list_new ();
+	pango_attr_list_insert (attributes, pango_attr_weight_new (PANGO_WEIGHT_BOLD));
+	pango_attr_list_insert (attributes, pango_attr_foreground_new (is_error ? 65535 : 0, 0, 0));
+	gtk_label_set_attributes (GTK_LABEL (self->status_label), attributes);
+	pango_attr_list_unref (attributes);
+
+	gtk_label_set_text (GTK_LABEL (self->status_label), text);
+}
+
+static void
 receive_login_response_cb (GsUbuntuoneDialog *self,
 			   guint	        status,
 			   GVariant	       *response,
 			   gpointer	        user_data)
 {
-	PangoAttrList *attributes;
 	const gchar *code;
 
 	gtk_label_set_text (GTK_LABEL (self->status_label), NULL);
@@ -224,39 +248,29 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 
 		update_widgets (self);
 
-		gtk_widget_set_visible (self->status_stack, TRUE);
-		gtk_stack_set_visible_child_name (GTK_STACK (self->status_stack), "status-image");
-		gtk_image_set_from_icon_name (GTK_IMAGE (self->status_image), "gtk-dialog-error", GTK_ICON_SIZE_BUTTON);
-
-		attributes = pango_attr_list_new ();
-		pango_attr_list_insert (attributes, pango_attr_weight_new (PANGO_WEIGHT_BOLD));
-		pango_attr_list_insert (attributes, pango_attr_foreground_new (65535, 0, 0));
-		gtk_label_set_attributes (GTK_LABEL (self->status_label), attributes);
-		pango_attr_list_unref (attributes);
-
 		if (g_str_equal (code, "INVALID_CREDENTIALS")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Incorrect email or password"));
+			show_status (self, _("Incorrect email or password"), TRUE);
 			gtk_widget_grab_focus (self->password_entry);
 		} else if (g_str_equal (code, "ACCOUNT_SUSPENDED")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Account suspended"));
+			show_status (self, _("Account suspended"), TRUE);
 			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "ACCOUNT_DEACTIVATED")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Account deactivated"));
+			show_status (self, _("Account deactivated"), TRUE);
 			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "EMAIL_INVALIDATED")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Email invalidated"));
+			show_status (self, _("Email invalidated"), TRUE);
 			gtk_widget_grab_focus (self->email_entry);
 		} else if (g_str_equal (code, "TWOFACTOR_FAILURE")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Two-factor authentication failed"));
+			show_status (self, _("Two-factor authentication failed"), TRUE);
 			gtk_widget_grab_focus (self->passcode_entry);
 		} else if (g_str_equal (code, "PASSWORD_POLICY_ERROR")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Password reset required"));
+			show_status (self, _("Password reset required"), TRUE);
 			gtk_widget_grab_focus (self->reset_radio);
 		} else if (g_str_equal (code, "TOO_MANY_REQUESTS")) {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("Too many requests"));
+			show_status (self, _("Too many requests"), TRUE);
 			gtk_widget_grab_focus (self->password_entry);
 		} else {
-			gtk_label_set_text (GTK_LABEL (self->status_label), _("An error occurred"));
+			show_status (self, _("An error occurred"), TRUE);
 			gtk_widget_grab_focus (self->password_entry);
 		}
 
@@ -267,8 +281,6 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 static void
 send_login_request (GsUbuntuoneDialog *self)
 {
-	PangoAttrList *attributes;
-
 	gtk_widget_set_sensitive (self->cancel_button, FALSE);
 	gtk_widget_set_sensitive (self->next_button, FALSE);
 	gtk_widget_set_sensitive (self->login_radio, FALSE);
@@ -279,15 +291,7 @@ send_login_request (GsUbuntuoneDialog *self)
 	gtk_widget_set_sensitive (self->remember_check, FALSE);
 	gtk_widget_set_sensitive (self->passcode_entry, FALSE);
 
-	gtk_widget_set_visible (self->status_stack, TRUE);
-	gtk_stack_set_visible_child_name (GTK_STACK (self->status_stack), "status-spinner");
-	gtk_label_set_text (GTK_LABEL (self->status_label), _("Signing in…"));
-
-	attributes = pango_attr_list_new ();
-	pango_attr_list_insert (attributes, pango_attr_weight_new (PANGO_WEIGHT_BOLD));
-	pango_attr_list_insert (attributes, pango_attr_foreground_new (0, 0, 0));
-	gtk_label_set_attributes (GTK_LABEL (self->status_label), attributes);
-	pango_attr_list_unref (attributes);
+	show_status (self, _("Signing in…"), FALSE);
 
 	if (gtk_entry_get_text_length (GTK_ENTRY (self->passcode_entry)) > 0) {
 		send_request (self,
