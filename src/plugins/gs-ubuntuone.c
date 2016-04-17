@@ -29,6 +29,7 @@
 #include "gs-ubuntuone-dialog.h"
 
 #define SCHEMA_NAME     "com.ubuntu.UbuntuOne.GnomeSoftware"
+#define MACAROON        "macaroon"
 #define CONSUMER_KEY    "consumer-key"
 #define CONSUMER_SECRET "consumer-secret"
 #define TOKEN_KEY       "token-key"
@@ -39,6 +40,152 @@ static SecretSchema schema = {
 	SECRET_SCHEMA_NONE,
 	{ { "key", SECRET_SCHEMA_ATTRIBUTE_STRING } }
 };
+
+typedef struct
+{
+	GError **error;
+
+	GCond cond;
+	GMutex mutex;
+
+	gboolean get_macaroon;
+
+	gboolean done;
+	gboolean success;
+	gboolean remember;
+
+	GVariant *macaroon;
+	gchar *consumer_key;
+	gchar *consumer_secret;
+	gchar *token_key;
+	gchar *token_secret;
+} LoginContext;
+
+static gboolean
+show_login_dialog (gpointer user_data)
+{
+	LoginContext *context = user_data;
+	GtkWidget *dialog;
+
+	dialog = gs_ubuntuone_dialog_new (context->get_macaroon);
+
+	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
+	case GTK_RESPONSE_DELETE_EVENT:
+	case GTK_RESPONSE_CANCEL:
+		if (context->get_macaroon) {
+			g_set_error (context->error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "Unable to obtain snapd macaroon");
+		} else {
+			g_set_error (context->error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "Unable to sign into Ubuntu One");
+		}
+
+		context->success = FALSE;
+		break;
+
+	case GTK_RESPONSE_OK:
+		context->remember = gs_ubuntuone_dialog_get_do_remember (GS_UBUNTUONE_DIALOG (dialog));
+		context->macaroon = gs_ubuntuone_dialog_get_macaroon (GS_UBUNTUONE_DIALOG (dialog));
+		context->consumer_key = g_strdup (gs_ubuntuone_dialog_get_consumer_key (GS_UBUNTUONE_DIALOG (dialog)));
+		context->consumer_secret = g_strdup (gs_ubuntuone_dialog_get_consumer_secret (GS_UBUNTUONE_DIALOG (dialog)));
+		context->token_key = g_strdup (gs_ubuntuone_dialog_get_token_key (GS_UBUNTUONE_DIALOG (dialog)));
+		context->token_secret = g_strdup (gs_ubuntuone_dialog_get_token_secret (GS_UBUNTUONE_DIALOG (dialog)));
+		context->success = TRUE;
+
+		if (context->macaroon != NULL)
+			g_variant_ref (context->macaroon);
+
+		break;
+	}
+
+	gtk_widget_destroy (dialog);
+
+	g_mutex_lock (&context->mutex);
+	context->done = TRUE;
+	g_cond_signal (&context->cond);
+	g_mutex_unlock (&context->mutex);
+
+	return G_SOURCE_REMOVE;
+}
+
+GVariant *
+gs_ubuntuone_get_macaroon (gboolean   use_cache,
+			   gboolean   show_dialog,
+			   GError   **error)
+{
+	LoginContext login_context = { 0 };
+	g_autofree gchar *password = NULL;
+	g_autofree gchar *printed = NULL;
+	GVariant *macaroon = NULL;
+	GError *error_local = NULL;
+
+	if (use_cache) {
+		password = secret_password_lookup_sync (&schema,
+							NULL,
+							&error_local,
+							"key", MACAROON,
+							NULL);
+
+		if (password) {
+			macaroon = g_variant_parse (G_VARIANT_TYPE ("(sas)"),
+						    password,
+						    NULL,
+						    NULL,
+						    &error_local);
+
+			if (macaroon)
+				return macaroon;
+
+			g_warning ("could not parse macaroon: %s", error_local->message);
+			g_clear_error (&error_local);
+		} else if (error_local != NULL) {
+			g_warning ("could not lookup cached macaroon: %s", error_local->message);
+			g_clear_error (&error_local);
+		}
+	}
+
+	if (show_dialog) {
+		/* Pop up a login dialog */
+		login_context.error = error;
+		login_context.get_macaroon = TRUE;
+		g_cond_init (&login_context.cond);
+		g_mutex_init (&login_context.mutex);
+		g_mutex_lock (&login_context.mutex);
+
+		gdk_threads_add_idle (show_login_dialog, &login_context);
+
+		while (!login_context.done)
+			g_cond_wait (&login_context.cond, &login_context.mutex);
+
+		g_mutex_unlock (&login_context.mutex);
+		g_mutex_clear (&login_context.mutex);
+		g_cond_clear (&login_context.cond);
+
+		if (login_context.macaroon) {
+			printed = g_variant_print (login_context.macaroon, FALSE);
+
+			if (!secret_password_store_sync (&schema,
+							 NULL,
+							 SCHEMA_NAME,
+							 printed,
+							 NULL,
+							 &error_local,
+							 "key", MACAROON,
+							 NULL)) {
+				g_warning ("could not store macaroon: %s", error_local->message);
+				g_clear_error (&error_local);
+			}
+		}
+
+		return login_context.macaroon;
+	}
+
+	return NULL;
+}
 
 typedef struct
 {
@@ -122,61 +269,6 @@ lookup_token_secret (GObject      *source_object,
 	g_mutex_unlock (&context->mutex);
 }
 
-typedef struct
-{
-	GError **error;
-
-	GCond cond;
-	GMutex mutex;
-
-	gboolean done;
-	gboolean success;
-	gboolean remember;
-
-	gchar *consumer_key;
-	gchar *consumer_secret;
-	gchar *token_key;
-	gchar *token_secret;
-} LoginContext;
-
-static gboolean
-show_login_dialog (gpointer user_data)
-{
-	LoginContext *context = user_data;
-	GtkWidget *dialog;
-
-	dialog = gs_ubuntuone_dialog_new ();
-	switch (gtk_dialog_run (GTK_DIALOG (dialog))) {
-	case GTK_RESPONSE_DELETE_EVENT:
-	case GTK_RESPONSE_CANCEL:
-		g_set_error (context->error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to sign into Ubuntu One");
-
-		context->success = FALSE;
-		break;
-
-	case GTK_RESPONSE_OK:
-		context->remember = gs_ubuntuone_dialog_get_do_remember (GS_UBUNTUONE_DIALOG (dialog));
-		context->consumer_key = g_strdup (gs_ubuntuone_dialog_get_consumer_key (GS_UBUNTUONE_DIALOG (dialog)));
-		context->consumer_secret = g_strdup (gs_ubuntuone_dialog_get_consumer_secret (GS_UBUNTUONE_DIALOG (dialog)));
-		context->token_key = g_strdup (gs_ubuntuone_dialog_get_token_key (GS_UBUNTUONE_DIALOG (dialog)));
-		context->token_secret = g_strdup (gs_ubuntuone_dialog_get_token_secret (GS_UBUNTUONE_DIALOG (dialog)));
-		context->success = TRUE;
-		break;
-	}
-
-	gtk_widget_destroy (dialog);
-
-	g_mutex_lock (&context->mutex);
-	context->done = TRUE;
-	g_cond_signal (&context->cond);
-	g_mutex_unlock (&context->mutex);
-
-	return G_SOURCE_REMOVE;
-}
-
 gboolean
 gs_ubuntuone_get_credentials (gchar **consumer_key, gchar **consumer_secret, gchar **token_key, gchar **token_secret)
 {
@@ -248,6 +340,7 @@ gs_ubuntuone_sign_in (gchar **consumer_key, gchar **consumer_secret, gchar **tok
 
 	/* Pop up a login dialog */
 	login_context.error = error;
+	login_context.get_macaroon = FALSE;
 	g_cond_init (&login_context.cond);
 	g_mutex_init (&login_context.mutex);
 	g_mutex_lock (&login_context.mutex);
