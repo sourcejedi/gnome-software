@@ -170,8 +170,10 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	g_autoptr (GString) path = NULL;
 	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root, *result, *packages;
-	GList *package_list, *link;
+	JsonObject *root;
+	JsonArray *result;
+	GList *snaps;
+	GList *i;
 
 	socket = open_snapd_socket (error);
 	if (!socket)
@@ -209,16 +211,18 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	parser = parse_result (response, response_type, error);
 	if (parser == NULL)
 		return FALSE;
-	root = json_node_get_object (json_parser_get_root (parser));
-	result = json_object_get_object_member (root, "result");
-	packages = json_object_get_object_member (result, "snaps");
-	package_list = json_object_get_members (packages);
-	for (link = package_list; link; link = link->next) {
-		const gchar *id = link->data;
-		JsonObject *package;
-		g_autoptr(GsApp) app = NULL;
 
-		package = json_object_get_object_member (packages, id);
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_array_member (root, "result");
+	snaps = json_array_get_elements (result);
+
+	for (i = snaps; i != NULL; i = i->next) {
+		JsonObject *package = json_node_get_object (i->data);
+		g_autoptr(GsApp) app = NULL;
+		const gchar *id;
+
+		id = json_object_get_string_member (package, "name");
+
 		if (filter_func != NULL && !filter_func (id, package, user_data))
 			continue;
 
@@ -271,6 +275,8 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		else {
 			g_autoptr(SoupMessage) message = NULL;
 			g_autoptr(GdkPixbufLoader) loader = NULL;
+
+	g_list_free (snaps);
 
 	return TRUE;
 }
