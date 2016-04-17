@@ -119,12 +119,10 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 	gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 	icon_url = json_object_get_string_member (package, "icon");
 	if (g_str_has_prefix (icon_url, "/")) {
-		g_autoptr(GSocket) icon_socket = NULL;
 		g_autofree gchar *icon_response = NULL;
 		gsize icon_response_length;
 
-		icon_socket = open_snapd_socket (NULL);
-		if (icon_socket && send_snapd_request (icon_socket, TRUE, TRUE, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+		if (send_snapd_request (TRUE, TRUE, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
@@ -164,7 +162,6 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 static gboolean
 get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
-	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
 	GPtrArray *query_fields;
 	g_autoptr (GString) path = NULL;
@@ -174,10 +171,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 	JsonArray *result;
 	GList *snaps;
 	GList *i;
-
-	socket = open_snapd_socket (error);
-	if (!socket)
-		return FALSE;
 
 	/* Get all the apps */
 	query_fields = g_ptr_array_new_with_free_func (g_free);
@@ -197,7 +190,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_string_append (path, fields);
 	}
 	g_ptr_array_free (query_fields, TRUE);
-	if (!send_snapd_request (socket, TRUE, TRUE, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (TRUE, TRUE, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -284,18 +277,13 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 static gboolean
 get_app (GsPlugin *plugin, GsApp *app, GError **error)
 {
-	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
 	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result;
 
-	socket = open_snapd_socket (error);
-	if (!socket)
-		return FALSE;
-
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
-	if (!send_snapd_request (socket, TRUE, TRUE, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (TRUE, TRUE, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -382,20 +370,15 @@ static gboolean
 send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GError **error)
 {
 	g_autofree gchar *content = NULL, *path = NULL;
-	g_autoptr(GSocket) socket = NULL;
 	guint status_code;
 	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL, *status = NULL;
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result;
         const gchar *resource_path;
 
-	socket = open_snapd_socket (error);
-	if (!socket)
-		return FALSE;
-
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
-	if (!send_snapd_request (socket, TRUE, TRUE, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (TRUE, TRUE, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_ACCEPTED) {
@@ -420,7 +403,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		/* Wait for a little bit before polling */
 		g_usleep (100 * 1000);
 
-		if (!send_snapd_request (socket, TRUE, TRUE, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
+		if (!send_snapd_request (TRUE, TRUE, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
 			return FALSE;
 		if (status_code != SOUP_STATUS_OK) {
 			g_set_error (error,

@@ -359,7 +359,6 @@ err:
 static void
 send_login_request (GsUbuntuoneDialog *self)
 {
-	g_autoptr(GSocket) socket = NULL;
 	g_autofree gchar *content = NULL;
 	g_autofree gchar *username = NULL;
 	g_autofree gchar *password = NULL;
@@ -385,18 +384,6 @@ send_login_request (GsUbuntuoneDialog *self)
 	show_status (self, _("Signing in…"), FALSE);
 
 	if (self->get_macaroon) {
-		socket = open_snapd_socket (&error);
-
-		if (socket == NULL) {
-			g_warning ("could not open snapd socket: %s", error->message);
-
-			reenable_widgets (self);
-			show_status (self, _("An error occurred"), TRUE);
-			gtk_widget_grab_focus (self->password_entry);
-
-			return;
-		}
-
 		username = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->email_entry)), NULL);
 		password = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->password_entry)), NULL);
 
@@ -420,8 +407,7 @@ send_login_request (GsUbuntuoneDialog *self)
 						   password);
 		}
 
-		if (send_snapd_request (socket,
-					FALSE,
+		if (send_snapd_request (FALSE,
 					FALSE,
 					SOUP_METHOD_POST,
 					"/v2/login",
