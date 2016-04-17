@@ -31,7 +31,7 @@
 
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
 
-GSocket *
+static GSocket *
 open_snapd_socket (GError **error)
 {
 	GSocket *socket;
@@ -73,8 +73,7 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 }
 
 gboolean
-send_snapd_request (GSocket      *socket,
-		    gboolean      authenticate,
+send_snapd_request (gboolean      authenticate,
 		    gboolean      retry_after_login,
 		    const gchar  *method,
 		    const gchar  *path,
@@ -86,6 +85,7 @@ send_snapd_request (GSocket      *socket,
 		    gsize        *response_length,
 		    GError      **error)
 {
+	g_autoptr (GSocket) socket = NULL;
 	g_autoptr (GString) request = NULL;
 	gssize n_written;
 	gsize max_data_length = 65535, data_length = 0, header_length;
@@ -99,11 +99,16 @@ send_snapd_request (GSocket      *socket,
 	GVariantIter *iter;
 	guint code;
 
+	// NOTE: Would love to use libsoup but it doesn't support unix sockets
+	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
+
 	if (authenticate)
 		macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
 
-	// NOTE: Would love to use libsoup but it doesn't support unix sockets
-	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
+	socket = open_snapd_socket (error);
+
+	if (socket == NULL)
+		return FALSE;
 
 	request = g_string_new ("");
 	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
@@ -166,8 +171,7 @@ send_snapd_request (GSocket      *socket,
 		if (macaroon == NULL)
 			return FALSE;
 
-		return send_snapd_request (socket,
-					   TRUE,
+		return send_snapd_request (TRUE,
 					   FALSE,
 					   method,
 					   path,

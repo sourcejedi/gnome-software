@@ -24,10 +24,7 @@
 
 #include <gio/gio.h>
 
-GSocket * open_snapd_socket  (GError      **error);
-
-gboolean  send_snapd_request (GSocket      *socket,
-			      gboolean      authenticate,
+gboolean  send_snapd_request (gboolean      authenticate,
 			      gboolean      retry_after_login,
 			      const gchar  *method,
 			      const gchar  *path,
