@@ -198,13 +198,8 @@ show_status (GsUbuntuoneDialog *self,
 }
 
 static void
-receive_login_response_cb (GsUbuntuoneDialog *self,
-			   guint	        status,
-			   GVariant	       *response,
-			   gpointer	        user_data)
+reenable_widgets (GsUbuntuoneDialog *self)
 {
-	const gchar *code;
-
 	gtk_label_set_text (GTK_LABEL (self->status_label), NULL);
 	gtk_stack_set_visible_child_name (GTK_STACK (self->status_stack), "status-image");
 	gtk_widget_set_visible (self->status_stack, FALSE);
@@ -218,6 +213,17 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 	gtk_widget_set_sensitive (self->password_entry, TRUE);
 	gtk_widget_set_sensitive (self->remember_check, TRUE);
 	gtk_widget_set_sensitive (self->passcode_entry, TRUE);
+}
+
+static void
+receive_login_response_cb (GsUbuntuoneDialog *self,
+			   guint	        status,
+			   GVariant	       *response,
+			   gpointer	        user_data)
+{
+	const gchar *code;
+
+	reenable_widgets (self);
 
 	switch (status) {
 	case SOUP_STATUS_OK:
