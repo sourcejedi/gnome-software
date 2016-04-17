@@ -351,6 +351,8 @@ check_snapd_response (GsUbuntuoneDialog *self,
 	} else
 		goto err;
 
+	return;
+
 err:
 	show_status (self, _("An error occurred"), TRUE);
 	gtk_widget_grab_focus (self->password_entry);
