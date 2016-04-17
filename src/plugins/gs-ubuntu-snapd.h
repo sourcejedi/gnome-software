@@ -27,6 +27,8 @@
 GSocket * open_snapd_socket  (GError      **error);
 
 gboolean  send_snapd_request (GSocket      *socket,
+			      gboolean      authenticate,
+			      gboolean      retry_after_login,
 			      const gchar  *method,
 			      const gchar  *path,
 			      const gchar  *content,

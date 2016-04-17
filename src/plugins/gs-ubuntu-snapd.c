@@ -25,6 +25,7 @@
 #include <libsoup/soup.h>
 #include <gio/gunixsocketaddress.h>
 #include "gs-ubuntu-snapd.h"
+#include "gs-ubuntuone.h"
 
 #define SNAPD_SOCKET_PATH "/run/snapd.socket"
 
@@ -73,6 +74,8 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 
 gboolean
 send_snapd_request (GSocket      *socket,
+		    gboolean      authenticate,
+		    gboolean      retry_after_login,
 		    const gchar  *method,
 		    const gchar  *path,
 		    const gchar  *content,
@@ -90,6 +93,14 @@ send_snapd_request (GSocket      *socket,
 	g_autoptr (SoupMessageHeaders) headers = NULL;
 	gsize chunk_length, n_required;
 	gchar *chunk_start = NULL;
+	g_autoptr (GVariant) macaroon = NULL;
+	const gchar *root;
+	const gchar *discharge;
+	GVariantIter *iter;
+	guint code;
+
+	if (authenticate)
+		macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
 
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
@@ -97,6 +108,16 @@ send_snapd_request (GSocket      *socket,
 	request = g_string_new ("");
 	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
 	g_string_append (request, "Host:\r\n");
+	if (macaroon != NULL) {
+		g_variant_get (macaroon, "(&sas)", &root, &iter);
+		g_string_append_printf (request, "Authorization: Macaroon root=\"%s\"", root);
+
+		while (g_variant_iter_next (iter, "&s", &discharge))
+			g_string_append_printf (request, ",discharge=\"%s\"", discharge);
+
+		g_variant_iter_free (iter);
+		g_string_append (request, "\r\n");
+	}
 	if (content)
 		g_string_append_printf (request, "Content-Length: %zi\r\n", strlen (content));
 	g_string_append (request, "\r\n");
@@ -128,12 +149,35 @@ send_snapd_request (GSocket      *socket,
 
 	/* Parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
-	if (!soup_headers_parse_response (data, header_length, headers, NULL, status_code, reason_phrase)) {
+	if (!soup_headers_parse_response (data, header_length, headers, NULL, &code, reason_phrase)) {
 		g_set_error_literal (error,
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_FAILED,
 				     "snapd response HTTP headers not parseable");
 		return FALSE;
+	}
+
+	if (status_code != NULL)
+		*status_code = code;
+
+	if (code == 403 && retry_after_login) {
+		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
+
+		if (macaroon == NULL)
+			return FALSE;
+
+		return send_snapd_request (socket,
+					   TRUE,
+					   FALSE,
+					   method,
+					   path,
+					   content,
+					   status_code,
+					   reason_phrase,
+					   response_type,
+					   response,
+					   response_length,
+					   error);
 	}
 
 	/* Work out how much data to follow */
