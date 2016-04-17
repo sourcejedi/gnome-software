@@ -49,6 +49,9 @@ struct _GsUbuntuoneDialog
 
 	SoupSession *session;
 
+	gboolean get_macaroon;
+
+	GVariant *macaroon;
 	gchar *consumer_key;
 	gchar *consumer_secret;
 	gchar *token_key;
@@ -395,6 +398,7 @@ gs_ubuntuone_dialog_finalize (GObject *object)
 	g_clear_pointer (&self->token_key, g_free);
 	g_clear_pointer (&self->consumer_secret, g_free);
 	g_clear_pointer (&self->consumer_key, g_free);
+	g_clear_pointer (&self->macaroon, g_variant_unref);
 
 	G_OBJECT_CLASS (gs_ubuntuone_dialog_parent_class)->finalize (object);
 }
@@ -433,6 +437,13 @@ gs_ubuntuone_dialog_get_do_remember (GsUbuntuoneDialog *dialog)
 	return gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (dialog->remember_check));
 }
 
+GVariant *
+gs_ubuntuone_dialog_get_macaroon (GsUbuntuoneDialog *dialog)
+{
+	g_return_val_if_fail (GS_IS_UBUNTUONE_DIALOG (dialog), NULL);
+	return dialog->macaroon;
+}
+
 const gchar *
 gs_ubuntuone_dialog_get_consumer_key (GsUbuntuoneDialog *dialog)
 {
@@ -462,11 +473,15 @@ gs_ubuntuone_dialog_get_token_secret (GsUbuntuoneDialog *dialog)
 }
 
 GtkWidget *
-gs_ubuntuone_dialog_new (void)
+gs_ubuntuone_dialog_new (gboolean get_macaroon)
 {
-	return GTK_WIDGET (g_object_new (GS_TYPE_UBUNTUONE_DIALOG,
-					 "use-header-bar", TRUE,
-					 NULL));
+	GsUbuntuoneDialog *dialog = g_object_new (GS_TYPE_UBUNTUONE_DIALOG,
+						  "use-header-bar", TRUE,
+						  NULL);
+
+	dialog->get_macaroon = get_macaroon;
+
+	return GTK_WIDGET (dialog);
 }
 
 /* vim: set noexpandtab: */
