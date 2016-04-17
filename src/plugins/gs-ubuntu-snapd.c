@@ -238,8 +238,9 @@ send_snapd_request (gboolean      authenticate,
 	if (response_type)
 		*response_type = g_strdup (soup_message_headers_get_one (headers, "Content-Type"));
 	if (response) {
-		*response = g_malloc (chunk_length + 1);
+		*response = g_malloc (chunk_length + 2);
 		memcpy (*response, chunk_start, chunk_length + 1);
+		(*response)[chunk_length + 1] = '\0';
 	}
 	if (response_length)
 		*response_length = chunk_length;
