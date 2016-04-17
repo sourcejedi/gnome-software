@@ -284,6 +284,8 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 static void
 send_login_request (GsUbuntuoneDialog *self)
 {
+	GVariant *request;
+
 	gtk_widget_set_sensitive (self->cancel_button, FALSE);
 	gtk_widget_set_sensitive (self->next_button, FALSE);
 	gtk_widget_set_sensitive (self->login_radio, FALSE);
@@ -297,34 +299,26 @@ send_login_request (GsUbuntuoneDialog *self)
 	show_status (self, _("Signing in…"), FALSE);
 
 	if (gtk_entry_get_text_length (GTK_ENTRY (self->passcode_entry)) > 0) {
-		send_request (self,
-			      SOUP_METHOD_POST,
-			      "/api/v2/tokens/oauth",
-			      g_variant_new_parsed ("{"
-						    "  'token_name' : <'GNOME Software'>,"
-						    "  'email' : <%s>,"
-						    "  'password' : <%s>,"
-						    "  'otp' : <%s>"
-						    "}",
-						    gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
-						    gtk_entry_get_text (GTK_ENTRY (self->password_entry)),
-						    gtk_entry_get_text (GTK_ENTRY (self->passcode_entry))),
-			      receive_login_response_cb,
-			      NULL);
+		request = g_variant_new_parsed ("{"
+						"  'token_name' : <'GNOME Software'>,"
+						"  'email' : <%s>,"
+						"  'password' : <%s>,"
+						"  'otp' : <%s>"
+						"}",
+						gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
+						gtk_entry_get_text (GTK_ENTRY (self->password_entry)),
+						gtk_entry_get_text (GTK_ENTRY (self->passcode_entry)));
 	} else {
-		send_request (self,
-			      SOUP_METHOD_POST,
-			      "/api/v2/tokens/oauth",
-			      g_variant_new_parsed ("{"
-						    "  'token_name' : <'GNOME Software'>,"
-						    "  'email' : <%s>,"
-						    "  'password' : <%s>"
-						    "}",
-						    gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
-						    gtk_entry_get_text (GTK_ENTRY (self->password_entry))),
-			      receive_login_response_cb,
-			      NULL);
+		request = g_variant_new_parsed ("{"
+						"  'token_name' : <'GNOME Software'>,"
+						"  'email' : <%s>,"
+						"  'password' : <%s>"
+						"}",
+						gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
+						gtk_entry_get_text (GTK_ENTRY (self->password_entry)));
 	}
+
+	send_request (self, SOUP_METHOD_POST, "/api/v2/tokens/oauth", request, receive_login_response_cb, NULL);
 }
 
 static void
