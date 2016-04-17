@@ -30,8 +30,9 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GsUbuntuoneDialog, gs_ubuntuone_dialog, GS, UBUNTUONE_DIALOG, GtkDialog)
 
-GtkWidget	*gs_ubuntuone_dialog_new			(void);
+GtkWidget	*gs_ubuntuone_dialog_new			(gboolean	    get_macaroon);
 gboolean	 gs_ubuntuone_dialog_get_do_remember		(GsUbuntuoneDialog *dialog);
+GVariant	*gs_ubuntuone_dialog_get_macaroon		(GsUbuntuoneDialog *dialog);
 const gchar	*gs_ubuntuone_dialog_get_consumer_key		(GsUbuntuoneDialog *dialog);
 const gchar	*gs_ubuntuone_dialog_get_consumer_secret	(GsUbuntuoneDialog *dialog);
 const gchar	*gs_ubuntuone_dialog_get_token_key		(GsUbuntuoneDialog *dialog);
