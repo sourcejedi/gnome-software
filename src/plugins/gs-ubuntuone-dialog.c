@@ -421,6 +421,8 @@ send_login_request (GsUbuntuoneDialog *self)
 		}
 
 		if (send_snapd_request (socket,
+					FALSE,
+					FALSE,
 					SOUP_METHOD_POST,
 					"/v2/login",
 					content,
