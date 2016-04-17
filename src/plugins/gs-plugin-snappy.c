@@ -124,7 +124,7 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 		gsize icon_response_length;
 
 		icon_socket = open_snapd_socket (NULL);
-		if (icon_socket && send_snapd_request (icon_socket, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+		if (icon_socket && send_snapd_request (icon_socket, TRUE, TRUE, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
@@ -195,7 +195,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_string_append (path, fields);
 	}
 	g_ptr_array_free (query_fields, TRUE);
-	if (!send_snapd_request (socket, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, TRUE, TRUE, "GET", path->str, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -289,7 +289,7 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 		return FALSE;
 
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
-	if (!send_snapd_request (socket, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, TRUE, TRUE, "GET", path, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -389,7 +389,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
-	if (!send_snapd_request (socket, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request (socket, TRUE, TRUE, "POST", path, content, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_ACCEPTED) {
@@ -414,7 +414,7 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 		/* Wait for a little bit before polling */
 		g_usleep (100 * 1000);
 
-		if (!send_snapd_request (socket, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
+		if (!send_snapd_request (socket, TRUE, TRUE, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
 			return FALSE;
 		if (status_code != SOUP_STATUS_OK) {
 			g_set_error (error,
