@@ -165,7 +165,7 @@ gs_ubuntuone_get_macaroon (gboolean   use_cache,
 		g_mutex_clear (&login_context.mutex);
 		g_cond_clear (&login_context.cond);
 
-		if (login_context.macaroon) {
+		if (login_context.macaroon != NULL && login_context.remember) {
 			printed = g_variant_print (login_context.macaroon, FALSE);
 
 			if (!secret_password_store_sync (&schema,
