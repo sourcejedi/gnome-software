@@ -27,6 +27,8 @@
 
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
 
+#define SNAPD_SOCKET "/run/snapd.socket"
+
 struct GsPluginPrivate {
 };
 
@@ -43,6 +45,12 @@ gs_plugin_initialize (GsPlugin *plugin)
 {
 	/* create private area */
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
+
+	if (!g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS)) {
+		g_debug ("disabling '%s' as no %s available",
+			 plugin->name, SNAPD_SOCKET);
+		gs_plugin_set_enabled (plugin, FALSE);
+	}
 }
 
 static JsonParser *
