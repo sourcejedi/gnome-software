@@ -172,8 +172,11 @@ send_snapd_request (gboolean      authenticate,
 
 		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
 
-		if (macaroon == NULL)
+		if (macaroon == NULL) {
+			g_set_error_literal (error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
+					     "failed to authenticate");
 			return FALSE;
+		}
 
 		return send_snapd_request (TRUE,
 					   FALSE,
