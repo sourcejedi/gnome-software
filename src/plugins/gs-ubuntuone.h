@@ -30,6 +30,8 @@ GVariant	*gs_ubuntuone_get_macaroon	(gboolean	  use_cache,
 						 gboolean	  show_dialog,
 						 GError		**error);
 
+void		 gs_ubuntuone_clear_macaroon	(void);
+
 gboolean	 gs_ubuntuone_get_credentials	(gchar	**consumer_key,
 						 gchar	**consumer_secret,
 						 gchar	**token_key,
