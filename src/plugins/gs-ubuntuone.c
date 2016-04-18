@@ -187,6 +187,12 @@ gs_ubuntuone_get_macaroon (gboolean   use_cache,
 	return NULL;
 }
 
+void
+gs_ubuntuone_clear_macaroon (void)
+{
+	secret_password_clear_sync (&schema, NULL, NULL, "key", MACAROON, NULL);
+}
+
 typedef struct
 {
 	GCancellable *cancellable;

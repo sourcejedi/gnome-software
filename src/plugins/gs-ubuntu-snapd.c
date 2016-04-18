@@ -168,6 +168,8 @@ send_snapd_request (gboolean      authenticate,
 	if (code == 403 && retry_after_login) {
 		g_socket_close (socket, NULL);
 
+		gs_ubuntuone_clear_macaroon ();
+
 		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
 
 		if (macaroon == NULL)
