@@ -72,18 +72,19 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 	return TRUE;
 }
 
-static gboolean
-real_send_snapd_request (GVariant     *macaroon,
-			 gboolean      retry_after_login,
-			 const gchar  *method,
-			 const gchar  *path,
-			 const gchar  *content,
-			 guint        *status_code,
-			 gchar       **reason_phrase,
-			 gchar       **response_type,
-			 gchar       **response,
-			 gsize        *response_length,
-			 GError      **error)
+gboolean
+send_snapd_request (const gchar  *method,
+		    const gchar  *path,
+		    const gchar  *content,
+		    gboolean      authenticate,
+		    GVariant     *macaroon,
+		    gboolean      retry_after_login,
+		    guint        *status_code,
+		    gchar       **reason_phrase,
+		    gchar       **response_type,
+		    gchar       **response,
+		    gsize        *response_length,
+		    GError      **error)
 {
 	g_autoptr (GSocket) socket = NULL;
 	g_autoptr (GString) request = NULL;
@@ -91,6 +92,7 @@ real_send_snapd_request (GVariant     *macaroon,
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
 	g_autoptr (SoupMessageHeaders) headers = NULL;
+	g_autoptr(GVariant) auto_macaroon = NULL;
 	gsize chunk_length, n_required;
 	gchar *chunk_start = NULL;
 	const gchar *root;
@@ -98,6 +100,11 @@ real_send_snapd_request (GVariant     *macaroon,
 	GVariantIter *iter;
 	guint code;
 	gboolean ret;
+
+	if (macaroon == NULL && authenticate) {
+		auto_macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
+		macaroon = auto_macaroon;
+	}
 
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
@@ -175,17 +182,18 @@ real_send_snapd_request (GVariant     *macaroon,
 			return FALSE;
 		}
 
-		ret = real_send_snapd_request (macaroon,
-					       FALSE,
-					       method,
-					       path,
-					       content,
-					       status_code,
-					       reason_phrase,
-					       response_type,
-					       response,
-					       response_length,
-					       error);
+		ret = send_snapd_request (method,
+					  path,
+					  content,
+					  TRUE,
+					  macaroon,
+					  FALSE,
+					  status_code,
+					  reason_phrase,
+					  response_type,
+					  response,
+					  response_length,
+					  error);
 
 		g_variant_unref (macaroon);
 
@@ -252,35 +260,4 @@ real_send_snapd_request (GVariant     *macaroon,
 		*response_length = chunk_length;
 
 	return TRUE;
-}
-
-gboolean
-send_snapd_request (gboolean      authenticate,
-		    gboolean      retry_after_login,
-		    const gchar  *method,
-		    const gchar  *path,
-		    const gchar  *content,
-		    guint        *status_code,
-		    gchar       **reason_phrase,
-		    gchar       **response_type,
-		    gchar       **response,
-		    gsize        *response_length,
-		    GError      **error)
-{
-	g_autoptr(GVariant) macaroon = NULL;
-
-	if (authenticate)
-		macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
-
-	return real_send_snapd_request (macaroon,
-					retry_after_login,
-					method,
-					path,
-					content,
-					status_code,
-					reason_phrase,
-					response_type,
-					response,
-					response_length,
-					error);
 }

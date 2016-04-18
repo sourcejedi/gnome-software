@@ -24,16 +24,17 @@
 
 #include <gio/gio.h>
 
-gboolean  send_snapd_request (gboolean      authenticate,
-			      gboolean      retry_after_login,
-			      const gchar  *method,
-			      const gchar  *path,
-			      const gchar  *content,
-			      guint        *status_code,
-			      gchar       **reason_phrase,
-			      gchar       **response_type,
-			      gchar       **response,
-			      gsize        *response_length,
-			      GError      **error);
+gboolean send_snapd_request (const gchar  *method,
+			     const gchar  *path,
+			     const gchar  *content,
+			     gboolean      authenticate,
+			     GVariant     *macaroon,
+			     gboolean      retry_after_login,
+			     guint        *status_code,
+			     gchar       **reason_phrase,
+			     gchar       **response_type,
+			     gchar       **response,
+			     gsize        *response_length,
+			     GError      **error);
 
 #endif /* __GS_UBUNTU_SNAPD_H__ */
