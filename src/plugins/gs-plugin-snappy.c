@@ -107,7 +107,7 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 		size = json_object_get_int_member (package, "download-size");
 		if (size > 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-	} else if (g_strcmp0 (status, "not installed") == 0) {
+	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 		size = json_object_get_int_member (package, "download-size");
 	}
