@@ -404,7 +404,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	/* no upgrade */
 	if (g_strcmp0 (info->installed_version, info->update_version) == 0)
-		info->update_version = NULL;
+		g_clear_pointer (&info->update_version, g_free);
 
 	if (info->update_version)
 		plugin->priv->updatable_packages =
