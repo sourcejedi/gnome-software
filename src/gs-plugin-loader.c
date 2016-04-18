@@ -432,8 +432,7 @@ gs_plugin_loader_app_is_valid (GsApp *app, gpointer user_data)
 
 	/* don't show unconverted packages in the application view */
 	if (((state->flags & GS_PLUGIN_REFINE_FLAGS_ALLOW_PACKAGES) == 0) &&
-	    (gs_app_get_kind (app) == AS_APP_KIND_GENERIC) &&
-	    (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)) {
+	    (gs_app_get_kind (app) == AS_APP_KIND_GENERIC)) {
 //		g_debug ("app invalid as only a %s: %s",
 //			 as_app_kind_to_string (gs_app_get_kind (app)),
 //			 gs_plugin_loader_get_app_str (app));
