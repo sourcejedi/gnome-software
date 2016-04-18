@@ -2136,6 +2136,7 @@ gs_app_subsume (GsApp *app, GsApp *other)
 	}
 	if (other->licence != NULL) {
 		/* can't use setter as the incoming text is lost */
+		g_free (app->licence);
 		app->licence = g_strdup (other->licence);
 		app->licence_is_free = other->licence_is_free;
 	}
