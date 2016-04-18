@@ -133,6 +133,7 @@ free_package_info (gpointer data)
 	g_free (info->origin);
 	g_free (info->release);
 	g_free (info->component);
+	g_free (info->name);
 	g_free (info);
 }
 
@@ -348,7 +349,8 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 		info = g_new0 (PackageInfo, 1);
 		info->name = name;
 		g_hash_table_insert (plugin->priv->package_info, name, info);
-	}
+	} else
+		g_free (name);
 
 	for (VF = candidate.FileList (); VF.IsGood (); VF++) {
 		// see InRelease for the fields
