@@ -367,14 +367,19 @@ gs_plugin_refine (GsPlugin *plugin,
 }
 
 static gboolean
-send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GError **error)
+send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *action, GError **error)
 {
 	g_autofree gchar *content = NULL, *path = NULL;
 	guint status_code;
 	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL, *status = NULL;
 	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root, *result;
+	JsonObject *root, *result, *task, *progress;
+	JsonArray *tasks;
+	GList *task_list, *l;
+	gint64 done, total, task_done, task_total;
         const gchar *resource_path;
+	const gchar *type;
+	const gchar *change_id;
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
@@ -392,37 +397,71 @@ send_package_action (GsPlugin *plugin, const char *id, const gchar *action, GErr
 	parser = parse_result (response, response_type, error);
 	if (parser == NULL)
 		return FALSE;
+
 	root = json_node_get_object (json_parser_get_root (parser));
-	result = json_object_get_object_member (root, "result");
-	resource_path = json_object_get_string_member (result, "resource");
-	status = g_strdup (json_object_get_string_member (result, "status"));
-	while (g_strcmp0 (status, "running") == 0) {
-		g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
-		g_autoptr(JsonParser) status_parser = NULL;
+	type = json_object_get_string_member (root, "type");
 
-		/* Wait for a little bit before polling */
-		g_usleep (100 * 1000);
+	if (g_strcmp0 (type, "async") == 0) {
+		change_id = json_object_get_string_member (root, "change");
+		resource_path = g_strdup_printf ("/v2/changes/%s", change_id);
 
-		if (!send_snapd_request (TRUE, TRUE, "GET", resource_path, NULL, &status_code, &status_reason_phrase, &status_response_type, &status_response, NULL, error))
-			return FALSE;
-		if (status_code != SOUP_STATUS_OK) {
-			g_set_error (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "snapd returned status code %d: %s", status_code, status_reason_phrase);
-			return FALSE;
+		while (TRUE) {
+			g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
+			g_autoptr(JsonParser) status_parser = NULL;
+
+			/* Wait for a little bit before polling */
+			g_usleep (100 * 1000);
+
+			if (!send_snapd_request (TRUE, TRUE, "GET", resource_path, NULL,
+						 &status_code, &status_reason_phrase, &status_response_type,
+						 &status_response, NULL, error)) {
+				return FALSE;
+			}
+
+			if (status_code != SOUP_STATUS_OK) {
+				g_set_error (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_FAILED,
+					     "snapd returned status code %d: %s", status_code, status_reason_phrase);
+				return FALSE;
+			}
+
+			status_parser = parse_result (status_response, status_response_type, error);
+			if (status_parser == NULL)
+				return FALSE;
+
+			root = json_node_get_object (json_parser_get_root (status_parser));
+			result = json_object_get_object_member (root, "result");
+
+			g_free (status);
+			status = g_strdup (json_object_get_string_member (result, "status"));
+
+			if (g_strcmp0 (status, "Done") == 0)
+				break;
+
+			tasks = json_object_get_array_member (result, "tasks");
+			task_list = json_array_get_elements (tasks);
+
+			done = 0;
+			total = 0;
+
+			for (l = task_list; l != NULL; l = l->next) {
+				task = json_node_get_object (l->data);
+				progress = json_object_get_object_member (task, "progress");
+				task_done = json_object_get_int_member (progress, "done");
+				task_total = json_object_get_int_member (progress, "total");
+
+				done += task_done;
+				total += task_total;
+			}
+
+			gs_plugin_progress_update (plugin, app, 100 * done / total);
+
+			g_list_free (task_list);
 		}
-		status_parser = parse_result (status_response, status_response_type, error);
-		if (status_parser == NULL)
-			return FALSE;
-
-		root = json_node_get_object (json_parser_get_root (status_parser));
-		result = json_object_get_object_member (root, "result");
-		g_free (status);
-		status = g_strdup (json_object_get_string_member (result, "status"));
 	}
 
-	if (g_strcmp0 (status, "succeeded") != 0) {
+	if (g_strcmp0 (status, "Done") != 0) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
@@ -446,7 +485,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	result = send_package_action (plugin, gs_app_get_id (app), "install", error);
+	result = send_package_action (plugin, app, gs_app_get_id (app), "install", error);
 	if (result)
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 	else
@@ -468,7 +507,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	result = send_package_action (plugin, gs_app_get_id (app), "remove", error);
+	result = send_package_action (plugin, app, gs_app_get_id (app), "remove", error);
 	if (result)
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	else
