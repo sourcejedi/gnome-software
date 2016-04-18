@@ -223,7 +223,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		app = gs_app_new (id);
 		gs_app_set_management_plugin (app, "snappy");
 		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
-		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		refine_app (plugin, app, package);
 		gs_plugin_add_app (list, app);
 	}
