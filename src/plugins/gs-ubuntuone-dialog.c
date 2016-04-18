@@ -409,11 +409,12 @@ send_login_request (GsUbuntuoneDialog *self)
 						   password);
 		}
 
-		if (send_snapd_request (FALSE,
-					FALSE,
-					SOUP_METHOD_POST,
+		if (send_snapd_request (SOUP_METHOD_POST,
 					"/v2/login",
 					content,
+					FALSE,
+					NULL,
+					FALSE,
 					&status_code,
 					&reason_phrase,
 					&response_type,
