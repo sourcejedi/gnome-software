@@ -415,6 +415,7 @@ send_login_request (GsUbuntuoneDialog *self)
 					FALSE,
 					NULL,
 					FALSE,
+					NULL,
 					&status_code,
 					&reason_phrase,
 					&response_type,
