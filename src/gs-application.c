@@ -243,23 +243,6 @@ gs_application_dbus_unregister (GApplication    *application,
 }
 
 static void
-refreshed_cb (GObject      *source_object,
-	      GAsyncResult *res,
-	      gpointer      user_data)
-{
-	GsPluginLoader *loader = GS_PLUGIN_LOADER (source_object);
-
-	if (gs_plugin_loader_refresh_finish (loader, res, NULL)) {
-		gs_plugin_loader_refresh_async (loader,
-						0,
-						GS_PLUGIN_REFRESH_FLAGS_UPDATES,
-						NULL,
-						NULL,
-						NULL);
-	}
-}
-
-static void
 start_refresh (GsApplication *app)
 {
 	g_action_group_activate_action (G_ACTION_GROUP (app),
@@ -270,8 +253,8 @@ start_refresh (GsApplication *app)
 					0,
 					GS_PLUGIN_REFRESH_FLAGS_UPDATES,
 					NULL,
-					refreshed_cb,
-					app);
+					NULL,
+					NULL);
 }
 
 #define APP_INFO_PATH "/var/lib/app-info"
