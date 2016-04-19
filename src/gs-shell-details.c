@@ -1343,17 +1343,6 @@ gs_shell_details_set_app (GsShellDetails *self, GsApp *app)
 		g_signal_handlers_disconnect_by_func (self->app, gs_shell_details_notify_state_changed_cb, self);
 		g_signal_handlers_disconnect_by_func (self->app, gs_shell_details_progress_changed_cb, self);
 	}
-
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") == 0) {
-		self->enable_reviews = FALSE;
-		gtk_widget_set_visible (self->button_review, FALSE);
-	} else {
-		/* show review widgets if we have plugins that provide them */
-		self->enable_reviews =
-			gs_plugin_loader_get_plugin_supported (self->plugin_loader,
-							       "gs_plugin_review_submit");
-	}
-
 	/* save app */
 	g_set_object (&self->app, app);
 
