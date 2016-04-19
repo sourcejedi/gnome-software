@@ -79,6 +79,7 @@ send_snapd_request (const gchar  *method,
 		    gboolean      authenticate,
 		    GVariant     *macaroon,
 		    gboolean      retry_after_login,
+		    GVariant    **out_macaroon,
 		    guint        *status_code,
 		    gchar       **reason_phrase,
 		    gchar       **response_type,
@@ -188,6 +189,7 @@ send_snapd_request (const gchar  *method,
 					  TRUE,
 					  macaroon,
 					  FALSE,
+					  NULL,
 					  status_code,
 					  reason_phrase,
 					  response_type,
@@ -195,7 +197,11 @@ send_snapd_request (const gchar  *method,
 					  response_length,
 					  error);
 
-		g_variant_unref (macaroon);
+		if (ret && out_macaroon != NULL) {
+			*out_macaroon = macaroon;
+		} else {
+			g_variant_unref (macaroon);
+		}
 
 		return ret;
 	}
@@ -249,6 +255,8 @@ send_snapd_request (const gchar  *method,
 		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, error))
 			return FALSE;
 
+	if (out_macaroon != NULL)
+		*out_macaroon = g_variant_ref (macaroon);
 	if (response_type)
 		*response_type = g_strdup (soup_message_headers_get_one (headers, "Content-Type"));
 	if (response) {

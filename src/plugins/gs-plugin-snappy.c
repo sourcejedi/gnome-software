@@ -131,7 +131,7 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 		g_autofree gchar *icon_response = NULL;
 		gsize icon_response_length;
 
-		if (send_snapd_request ("GET", icon_url, NULL, TRUE, NULL, TRUE, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+		if (send_snapd_request ("GET", icon_url, NULL, TRUE, NULL, TRUE, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
@@ -199,7 +199,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_string_append (path, fields);
 	}
 	g_ptr_array_free (query_fields, TRUE);
-	if (!send_snapd_request ("GET", path->str, NULL, TRUE, NULL, TRUE, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request ("GET", path->str, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -292,7 +292,7 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 	JsonObject *root, *result;
 
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
-	if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -391,10 +391,9 @@ send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *
 	const gchar *change_id;
 	g_autoptr(GVariant) macaroon = NULL;
 
-	macaroon = gs_ubuntuone_get_macaroon (TRUE, TRUE, NULL);
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
-	if (!send_snapd_request ("POST", path, content, TRUE, macaroon, TRUE, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!send_snapd_request ("POST", path, content, TRUE, NULL, TRUE, &macaroon, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_ACCEPTED) {
@@ -423,7 +422,7 @@ send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *
 			/* Wait for a little bit before polling */
 			g_usleep (100 * 1000);
 
-			if (!send_snapd_request ("GET", resource_path, NULL, TRUE, macaroon, TRUE,
+			if (!send_snapd_request ("GET", resource_path, NULL, TRUE, macaroon, TRUE, NULL,
 						 &status_code, &status_reason_phrase, &status_response_type,
 						 &status_response, NULL, error)) {
 				return FALSE;
