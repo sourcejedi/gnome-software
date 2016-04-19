@@ -964,6 +964,8 @@ gs_plugin_refresh (GsPlugin *plugin,
 
 	unload_apt_db (plugin);
 
+	gs_plugin_updates_changed (plugin);
+
 	return TRUE;
 }
 
