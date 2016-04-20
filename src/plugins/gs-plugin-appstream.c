@@ -67,8 +67,6 @@ gs_plugin_appstream_store_changed_cb (AsStore *store, GsPlugin *plugin)
 	gs_plugin_updates_changed (plugin);
 }
 
-static gboolean gs_plugin_appstream_startup (GsPlugin *plugin, GError **error);
-
 gboolean
 gs_plugin_refresh (GsPlugin              *plugin,
 		   guint                  cache_age,
@@ -77,8 +75,7 @@ gs_plugin_refresh (GsPlugin              *plugin,
 		   GError               **error)
 {
 	if (flags & GS_PLUGIN_REFRESH_FLAGS_UI) {
-		plugin->priv->done_init = FALSE;
-		gs_plugin_appstream_startup (plugin, NULL);
+		gs_plugin_setup (plugin, cancellable, error);
 		gs_plugin_updates_changed (plugin);
 	}
 

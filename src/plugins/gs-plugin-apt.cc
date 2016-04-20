@@ -627,14 +627,26 @@ gs_plugin_refine (GsPlugin *plugin,
 			} else {
 				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE) != 0 && info->is_official) {
-				gs_app_set_provenance (app, TRUE);
+		}
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_ORIGIN) != 0) {
+			g_autofree gchar *origin = get_origin (info);
+			gs_app_set_origin (app, origin);
+			gs_app_set_origin_ui (app, info->origin);
+		}
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE) != 0 && gs_app_get_size (app) == 0) {
+			gs_app_set_size (app, info->installed_size);
+		}
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) != 0) {
+			if (info->installed_version != NULL) {
+				gs_app_set_version (app, info->installed_version);
+			} else {
+				gs_app_set_version (app, info->update_version);
 			}
-			if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && info->is_open_source) {
-				gs_app_set_licence (app, "@LicenseRef-ubuntu", GS_APP_QUALITY_HIGHEST);
+			if (info->update_version != NULL) {
+				gs_app_set_update_version (app, info->update_version);
 			}
 		}
-		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && is_open_source(info)) {
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENSE) != 0 && is_open_source(info)) {
 			gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-free=" LICENSE_URL);
 		}
 
@@ -953,7 +965,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GCancellable *cancellable,
 		   GError **error)
 {
-	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
+	if ((flags & GS_PLUGIN_REFRESH_FLAGS_PAYLOAD) == 0)
 		return TRUE;
 
 	if (!aptd_transaction (plugin, "UpdateCache", NULL, NULL, NULL, error))
