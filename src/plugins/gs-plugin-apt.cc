@@ -1052,7 +1052,7 @@ gs_plugin_update (GsPlugin      *plugin,
 		if (g_strcmp0 (gs_app_get_id (app_i), "os-update.virtual") == 0) {
 			set_list_state (apps, AS_APP_STATE_INSTALLING);
 
-			if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(true,)"), error)) {
+			if (aptd_transaction (plugin, "UpgradeSystem", NULL, apps, g_variant_new_parsed ("(false,)"), error)) {
 				set_list_state (apps, AS_APP_STATE_INSTALLED);
 
 				unload_apt_db (plugin);
