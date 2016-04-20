@@ -433,7 +433,7 @@ load_apt_db (GsPlugin *plugin, GError **error)
 	list = cachefile.GetSourceList();
 	policy = cachefile.GetPolicy();
 	if (cache == NULL || _error->PendingError()) {
-		/* _error->DumpErrors(); */
+		_error->DumpErrors();
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
