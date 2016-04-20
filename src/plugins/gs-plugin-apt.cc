@@ -428,6 +428,7 @@ load_apt_db (GsPlugin *plugin, GError **error)
 	if (plugin->priv->loaded)
 		return TRUE;
 
+	_error->Discard();
 	cache = cachefile.GetPkgCache();
 	list = cachefile.GetSourceList();
 	policy = cachefile.GetPolicy();
