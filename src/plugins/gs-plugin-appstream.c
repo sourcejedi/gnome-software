@@ -76,9 +76,11 @@ gs_plugin_refresh (GsPlugin              *plugin,
 		   GCancellable          *cancellable,
 		   GError               **error)
 {
-	plugin->priv->done_init = FALSE;
-	gs_plugin_appstream_startup (plugin, NULL);
-	gs_plugin_updates_changed (plugin);
+	if (flags & GS_PLUGIN_REFRESH_FLAGS_UI) {
+		plugin->priv->done_init = FALSE;
+		gs_plugin_appstream_startup (plugin, NULL);
+		gs_plugin_updates_changed (plugin);
+	}
 
 	return TRUE;
 }
