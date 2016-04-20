@@ -67,6 +67,22 @@ gs_plugin_appstream_store_changed_cb (AsStore *store, GsPlugin *plugin)
 	gs_plugin_updates_changed (plugin);
 }
 
+static gboolean gs_plugin_appstream_startup (GsPlugin *plugin, GError **error);
+
+gboolean
+gs_plugin_refresh (GsPlugin              *plugin,
+		   guint                  cache_age,
+		   GsPluginRefreshFlags   flags,
+		   GCancellable          *cancellable,
+		   GError               **error)
+{
+	plugin->priv->done_init = FALSE;
+	gs_plugin_appstream_startup (plugin, NULL);
+	gs_plugin_updates_changed (plugin);
+
+	return TRUE;
+}
+
 /**
  * gs_plugin_initialize:
  */
