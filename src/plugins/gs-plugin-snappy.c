@@ -230,53 +230,13 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 
 		app = gs_app_new (id);
 		gs_app_set_management_plugin (app, "snappy");
-		gs_app_set_kind (app, GS_APP_KIND_NORMAL);
-		status = json_object_get_string_member (package, "status");
-		if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
-			const gchar *update_available;
-
-			update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
-			if (update_available)
-				gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
-			else
-				gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-			size = json_object_get_int_member (package, "installed_size");
-		}
-		else if (g_strcmp0 (status, "removed") == 0) {
-			// A removed app is only available if it can be downloaded (it might have been sideloaded)
-			size = json_object_get_int_member (package, "download_size");
-			if (size > 0)
-				gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		} else if (g_strcmp0 (status, "not installed") == 0) {
-			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-			size = json_object_get_int_member (package, "download_size");
-		}
-		gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
-		gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
-		gs_app_set_version (app, json_object_get_string_member (package, "version"));
-		gs_app_set_provenance (app, TRUE);
-		gs_app_set_id_kind (app, AS_ID_KIND_DESKTOP);
-		icon_url = json_object_get_string_member (package, "icon");
-		if (g_str_has_prefix (icon_url, "/")) {
-			g_autoptr(GSocket) icon_socket = NULL;
-			g_autofree gchar *icon_response = NULL;
-			gsize icon_response_length;
-
-			icon_socket = open_snapd_socket (NULL);
-			if (icon_socket && send_snapd_request (icon_socket, "GET", icon_url, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
-				g_autoptr(GdkPixbufLoader) loader = NULL;
-
-				loader = gdk_pixbuf_loader_new ();
-				gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
-				gdk_pixbuf_loader_close (loader, NULL);
-				icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
-			}
-			else
-				g_printerr ("Failed to get icon\n");
-		}
-		else {
-			g_autoptr(SoupMessage) message = NULL;
-			g_autoptr(GdkPixbufLoader) loader = NULL;
+		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_LAUNCHABLE);
+		refine_app (plugin, app, package);
+		gs_plugin_add_app (list, app);
+	}
 
 	g_list_free (snaps);
 

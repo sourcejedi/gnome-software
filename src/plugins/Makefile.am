@@ -145,6 +145,27 @@ libgs_plugin_odrs_la_LDFLAGS = -module -avoid-version
 libgs_plugin_odrs_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
+if HAVE_APT
+ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity.Launcher.xml Makefile
+	$(AM_V_GEN) gdbus-codegen --interface-prefix com.canonical.Unity.Launcher \
+	                 --generate-c-code ubuntu-unity-launcher-proxy \
+	                 --c-namespace UbuntuUnity \
+	                 --annotate 'com.canonical.Unity.Launcher' \
+	                            org.gtk.GDBus.C.Name \
+	                            Launcher \
+	                 $<
+
+CLEANFILES = ubuntu-unity-launcher-proxy.h ubuntu-unity-launcher-proxy.c
+
+libgs_plugin_apt_la_SOURCES = \
+	ubuntu-unity-launcher-proxy.c \
+	ubuntu-unity-launcher-proxy.h \
+	gs-plugin-apt.cc
+libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS) -lapt-pkg
+libgs_plugin_apt_la_LDFLAGS = -module -avoid-version
+libgs_plugin_apt_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+endif
+
 libgs_plugin_moduleset_la_SOURCES =			\
 	gs-moduleset.c					\
 	gs-moduleset.h					\
@@ -270,6 +291,22 @@ libgs_plugin_packagekit_proxy_la_SOURCES = gs-plugin-packagekit-proxy.c
 libgs_plugin_packagekit_proxy_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_packagekit_proxy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+
+libgs_plugin_snappy_la_SOURCES =			\
+	gs-plugin-snappy.c				\
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
+libgs_plugin_snappy_la_LIBADD =				\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(LIBSECRET_LIBS)
+libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
+libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 check_PROGRAMS =						\
 	gs-self-test
