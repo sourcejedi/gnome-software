@@ -61,11 +61,12 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 			   GError **error)
 {
 	GsApp *app;
+	guint i;
 	g_autofree gchar *content_type = NULL;
-	g_autofree gchar *description = NULL;
 	g_autofree gchar *output = NULL;
 	g_auto(GStrv) argv = NULL;
 	g_auto(GStrv) tokens = NULL;
+	g_autoptr(GString) str = NULL;
 	const gchar *mimetypes[] = {
 		"application/vnd.debian.binary-package",
 		NULL };
@@ -116,8 +117,20 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	gs_app_set_management_plugin (app, "apt");
 
 	/* multiline text */
-	description = g_strjoinv (NULL, tokens + 5);
-	gs_app_set_description (app, GS_APP_QUALITY_LOWEST, description + 1);
+	str = g_string_new ("");
+	for (i = 5; tokens[i] != NULL; i++) {
+		if (g_strcmp0 (tokens[i], " .") == 0) {
+			if (str->len > 0)
+				g_string_truncate (str, str->len - 1);
+			g_string_append (str, "\n");
+			continue;
+		}
+		g_strstrip (tokens[i]);
+		g_string_append_printf (str, "%s ", tokens[i]);
+	}
+	if (str->len > 0)
+		g_string_truncate (str, str->len - 1);
+	gs_app_set_description (app, GS_APP_QUALITY_LOWEST, str->str);
 
 	/* success */
 	gs_plugin_add_app (list, app);
