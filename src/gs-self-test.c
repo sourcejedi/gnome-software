@@ -23,7 +23,6 @@
 
 #include <glib.h>
 #include <glib-object.h>
-#include <gtk/gtk.h>
 #include <glib/gstdio.h>
 
 #include "gs-app.h"
@@ -679,10 +678,58 @@ gs_plugin_loader_webapps_func (void)
 	g_unlink (path);
 }
 
+static void
+gs_plugin_loader_dpkg_func (GsPluginLoader *plugin_loader)
+{
+	g_autoptr(GsApp) app = NULL;
+	g_autoptr(GError) error = NULL;
+	g_autofree gchar *fn = NULL;
+
+	/* no dpkg, abort */
+	if (!gs_plugin_loader_get_enabled (plugin_loader, "dpkg"))
+		return;
+
+	/* load local file */
+	fn = gs_test_get_filename ("tests/chiron-1.1-1.deb");
+	g_assert (fn != NULL);
+	app = gs_plugin_loader_filename_to_app (plugin_loader,
+						fn,
+						GS_PLUGIN_REFINE_FLAGS_DEFAULT,
+						NULL,
+						&error);
+	g_assert_no_error (error);
+	g_assert (app != NULL);
+	g_assert_cmpstr (gs_app_get_id (app), ==, NULL);
+	g_assert_cmpstr (gs_app_get_source_default (app), ==, "chiron");
+	g_assert_cmpstr (gs_app_get_url (app, AS_URL_KIND_HOMEPAGE), ==, "http://127.0.0.1/");
+	g_assert_cmpstr (gs_app_get_name (app), ==, "chiron");
+	g_assert_cmpstr (gs_app_get_version (app), ==, "1.1-1");
+	g_assert_cmpstr (gs_app_get_summary (app), ==, "Single line synopsis");
+	g_assert_cmpstr (gs_app_get_description (app), ==,
+			 "This is the first paragraph in the example "
+			 "package control file.\nThis is the second paragraph.");
+}
+
 int
 main (int argc, char **argv)
 {
-	gtk_init (&argc, &argv);
+	gboolean ret;
+	g_autofree gchar *fn = NULL;
+	g_autofree gchar *xml = NULL;
+	g_autoptr(GError) error = NULL;
+	g_autoptr(GsPluginLoader) plugin_loader = NULL;
+	const gchar *whitelist[] = {
+		"appstream",
+		"dpkg",
+		"dummy",
+		"epiphany",
+		"hardcoded-blacklist",
+		"icons",
+		"menu-spec-refine",
+		"provenance",
+		NULL
+	};
+
 	g_test_init (&argc, &argv, NULL);
 	g_setenv ("G_MESSAGES_DEBUG", "all", TRUE);
 	g_setenv ("GNOME_SOFTWARE_SELF_TEST", "1", TRUE);
@@ -701,6 +748,7 @@ main (int argc, char **argv)
 	g_test_add_func ("/gnome-software/plugin-loader{dedupe}", gs_plugin_loader_dedupe_func);
 	if(0)g_test_add_func ("/gnome-software/plugin-loader", gs_plugin_loader_func);
 	if(0)g_test_add_func ("/gnome-software/plugin-loader{webapps}", gs_plugin_loader_webapps_func);
+	if(0)g_test_add_func ("/gnome-software/plugin-loader{dpkg}", gs_plugin_loader_dpkg_func);
 
 	return g_test_run ();
 }
