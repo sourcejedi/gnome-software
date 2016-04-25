@@ -64,6 +64,9 @@ gs_plugin_get_name (void)
 // FIXME: Much shorter time?
 #define REVIEW_STATS_AGE_MAX		(60 * 60 * 24 * 7 * 4 * 3)
 
+/* Number of pages of reviews to download */
+#define N_PAGES				3
+
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
@@ -676,7 +679,7 @@ get_language (GsPlugin *plugin)
 }
 
 static gboolean
-download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, GError **error)
+download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, gint page_number, GError **error)
 {
 	g_autofree gchar *language = NULL, *path = NULL;
 	g_autoptr(JsonParser) result = NULL;
@@ -684,7 +687,7 @@ download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, GErro
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
 	language = get_language (plugin);
-	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/", language, package_name);
+	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/page/%d/", language, package_name, page_number + 1);
 	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, FALSE, &result, error))
 		return FALSE;
 
@@ -777,7 +780,7 @@ static gboolean
 refine_reviews (GsPlugin *plugin, GsApp *app, GError **error)
 {
 	GPtrArray *sources;
-	guint i;
+	guint i, j;
 
 	if (!get_ubuntuone_credentials (plugin, FALSE, error))
 		return FALSE;
@@ -789,12 +792,15 @@ refine_reviews (GsPlugin *plugin, GsApp *app, GError **error)
 	sources = gs_app_get_sources (app);
 	for (i = 0; i < sources->len; i++) {
 		const gchar *package_name;
-		gboolean ret;
 
 		package_name = g_ptr_array_index (sources, i);
-		ret = download_reviews (plugin, app, package_name, error);
-		if (!ret)
-			return FALSE;
+		for (j = 0; j < N_PAGES; j++) {
+			gboolean ret;
+
+			ret = download_reviews (plugin, app, package_name, j, error);
+			if (!ret)
+				return FALSE;
+		}
 	}
 
 	return TRUE;
