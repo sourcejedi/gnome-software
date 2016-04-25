@@ -87,7 +87,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 			    "${Homepage}\\n"
 			    "${Description}");
 	argv[2] = g_strdup ("-W");
-	argv[3] = g_strdup (g_file_get_path (file));
+	argv[3] = g_file_get_path (file);
 	if (!g_spawn_sync (NULL, argv, NULL,
 			   G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL,
 			   NULL, NULL, &output, NULL, NULL, error))
