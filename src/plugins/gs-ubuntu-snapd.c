@@ -134,6 +134,9 @@ send_snapd_request (const gchar  *method,
 	if (content)
 		g_string_append (request, content);
 
+	if (g_strcmp0 (g_getenv ("GNOME_SOFTWARE_SNAPPY"), "debug") == 0)
+		g_print ("===== begin snapd request =====\n%s\n===== end snapd request =====\n", request->str);
+
 	/* Send HTTP request */
 	n_written = g_socket_send (socket, request->str, request->len, NULL, error);
 	if (n_written < 0)
@@ -263,6 +266,9 @@ send_snapd_request (const gchar  *method,
 		*response = g_malloc (chunk_length + 2);
 		memcpy (*response, chunk_start, chunk_length + 1);
 		(*response)[chunk_length + 1] = '\0';
+
+		if (g_strcmp0 (g_getenv ("GNOME_SOFTWARE_SNAPPY"), "debug") == 0)
+			g_info ("===== begin snapd response =====\nStatus %u\n%s\n===== end snapd response =====\n", code, *response);
 	}
 	if (response_length)
 		*response_length = chunk_length;
