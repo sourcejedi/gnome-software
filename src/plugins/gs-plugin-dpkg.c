@@ -78,7 +78,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 		return TRUE;
 
 	/* exec sync */
-	argv = g_new0 (gchar *, 4);
+	argv = g_new0 (gchar *, 5);
 	argv[0] = g_strdup (DPKG_DEB_BINARY);
 	argv[1] = g_strdup ("--showformat=${Package}\\n"
 			    "${Version}\\n"
@@ -87,6 +87,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 			    "${Description}");
 	argv[2] = g_strdup ("-W");
 	argv[3] = g_strdup (filename);
+	argv[4] = NULL;
 	if (!g_spawn_sync (NULL, argv, NULL,
 			   G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL,
 			   NULL, NULL, &output, NULL, NULL, error))
