@@ -378,9 +378,10 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	pkgTagFile TagF (&PkgF);
 
-	if (TagF.Jump (Tags, current.FileList ()->Offset) == false)
-		return TRUE;
-
+	if (TagF.Jump (Tags, current.FileList ()->Offset) == false) {
+		if (TagF.Jump (Tags, current.FileList ()->Offset) == false)
+			return TRUE;
+	}
 
 	if (Tags.FindI ("Installed-Size") > 0)
 		info->installed_size = Tags.FindI ("Installed-Size")*1024;
