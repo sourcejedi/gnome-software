@@ -74,7 +74,6 @@ typedef struct {
 	gchar		*release;
 	gchar		*component;
 	gint		 installed_size;
-	gint		 package_size;
 } PackageInfo;
 
 #include "ubuntu-unity-launcher-proxy.h"
@@ -387,11 +386,6 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 		info->installed_size = Tags.FindI ("Installed-Size")*1024;
 	else
 		info->installed_size = 0;
-
-	if (Tags.FindI ("Size") > 0)
-		info->package_size = Tags.FindI ("Size");
-	else
-		info->package_size = 0;
 
 	if (current)
 		info->installed_version = g_strdup (current.VerStr ());
