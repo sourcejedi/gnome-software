@@ -46,7 +46,11 @@ gs_plugin_initialize (GsPlugin *plugin)
 	/* create private area */
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
 
-	gs_plugin_set_enabled (plugin, FALSE);
+	if (!g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS)) {
+		g_debug ("disabling '%s' as no %s available",
+			 plugin->name, SNAPD_SOCKET);
+		gs_plugin_set_enabled (plugin, FALSE);
+	}
 }
 
 static JsonParser *
