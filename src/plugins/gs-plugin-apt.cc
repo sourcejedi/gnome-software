@@ -379,7 +379,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 	pkgTagFile TagF (&PkgF);
 
 	if (TagF.Jump (Tags, current.FileList ()->Offset) == false) {
-		if (TagF.Jump (Tags, current.FileList ()->Offset) == false)
+		if (TagF.Jump (Tags, candidate.FileList ()->Offset) == false)
 			return TRUE;
 	}
 
