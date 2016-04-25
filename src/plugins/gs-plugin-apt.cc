@@ -906,7 +906,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 	case AS_APP_STATE_AVAILABLE_LOCAL:
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		success = aptd_transaction (plugin, "InstallFile", app, NULL,
-					    g_variant_new_parsed ("(%s, true)", gs_app_get_origin (app)),
+					    g_variant_new_parsed ("(%s, true)", gs_app_get_source_default (app)),
 					    error);
 		break;
 	default:
