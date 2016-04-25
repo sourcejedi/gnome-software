@@ -67,7 +67,6 @@ typedef struct
 typedef struct {
 	gchar		*name;
 	gchar		*section;
-	gchar		*architecture;
 	gchar		*installed_version;
 	gchar		*update_version;
 	gchar		*origin;
@@ -394,7 +393,6 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 		info->update_version = g_strdup (candidate.VerStr ());
 
 	info->section = g_strdup (candidate.Section ());
-	info->architecture = g_strdup (P.Arch ());
 	if (info->installed_version) {
 		plugin->priv->installed_packages =
 			g_list_append (plugin->priv->installed_packages, info);
