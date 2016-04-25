@@ -322,7 +322,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	data.ptask = NULL;
 
 	/* get details */
-	files = g_strsplit (filename, "\t", -1);
+	files = g_strsplit (g_file_get_path (file), "\t", -1);
 	pk_client_set_cache_age (PK_CLIENT (plugin->priv->task), G_MAXUINT);
 	results = pk_client_get_details_local (PK_CLIENT (plugin->priv->task),
 					       files,
@@ -338,7 +338,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "no details for %s", filename);
+			     "no details for %s", g_file_get_path (file));
 		return FALSE;
 	}
 	if (array->len > 1) {
@@ -346,7 +346,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
 			     "too many details [%i] for %s",
-			     array->len, filename);
+			     array->len, g_file_get_path (file));
 		return FALSE;
 	}
 
@@ -379,7 +379,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	/* look for a desktop file so we can use a valid application id */
 	if (!gs_plugin_packagekit_refresh_guess_app_id (plugin,
 							app,
-							filename,
+							g_file_get_path (file),
 							cancellable,
 							error))
 		return FALSE;
