@@ -170,7 +170,7 @@ send_snapd_request (const gchar  *method,
 	if (status_code != NULL)
 		*status_code = code;
 
-	if ((code == 401 || code == 403 || code == 500) && retry_after_login) {
+	if ((code == 401 || code == 403) && retry_after_login) {
 		g_socket_close (socket, NULL);
 
 		gs_ubuntuone_clear_macaroon ();
