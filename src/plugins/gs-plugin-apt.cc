@@ -390,11 +390,12 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	if (current)
 		info->installed_version = g_strdup (current.VerStr ());
+	if (candidate)
+		info->update_version = g_strdup (candidate.VerStr ());
 
 	info->section = g_strdup (candidate.Section ());
 	info->architecture = g_strdup (P.Arch ());
 	if (info->installed_version) {
-		info->update_version = g_strdup (candidate.VerStr ());
 		plugin->priv->installed_packages =
 			g_list_append (plugin->priv->installed_packages, info);
 	}
@@ -403,7 +404,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 	if (g_strcmp0 (info->installed_version, info->update_version) == 0)
 		g_clear_pointer (&info->update_version, g_free);
 
-	if (info->update_version)
+	if (info->installed_version && info->update_version)
 		plugin->priv->updatable_packages =
 			g_list_append (plugin->priv->updatable_packages, info);
 
