@@ -326,6 +326,8 @@ gs_plugin_app_install (GsPlugin *plugin,
 	g_autoptr(PkResults) results = NULL;
 	g_autoptr(GPtrArray) array_package_ids = NULL;
 	g_auto(GStrv) package_ids = NULL;
+	g_autoptr(GPtrArray) array_package_ids = NULL;
+	g_autoptr(PkResults) results = NULL;
 
 	data.app = app;
 	data.plugin = plugin;
@@ -449,7 +451,8 @@ gs_plugin_app_install (GsPlugin *plugin,
 					     "local package, but no filename");
 			return FALSE;
 		}
-		package_ids = g_strsplit (package_id, "\t", -1);
+		local_filename = g_file_get_path (gs_app_get_local_file (app));
+		package_ids = g_strsplit (local_filename, "\t", -1);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		results = pk_task_install_files_sync (plugin->priv->task,
 						      package_ids,
