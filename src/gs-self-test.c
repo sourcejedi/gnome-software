@@ -431,10 +431,6 @@ gs_plugin_loader_dpkg_func (GsPluginLoader *plugin_loader)
 	g_autofree gchar *fn = NULL;
 	g_autoptr(GFile) file = NULL;
 
-	/* no dpkg, abort */
-	if (!gs_plugin_loader_get_enabled (plugin_loader, "dpkg"))
-		return;
-
 	/* load local file */
 	fn = gs_test_get_filename ("tests/chiron-1.1-1.deb");
 	g_assert (fn != NULL);
