@@ -268,7 +268,7 @@ send_snapd_request (const gchar  *method,
 		(*response)[chunk_length + 1] = '\0';
 
 		if (g_strcmp0 (g_getenv ("GNOME_SOFTWARE_SNAPPY"), "debug") == 0)
-			g_info ("===== begin snapd response =====\nStatus %u\n%s\n===== end snapd response =====\n", code, *response);
+			g_print ("===== begin snapd response =====\nStatus %u\n%s\n===== end snapd response =====\n", code, *response);
 	}
 	if (response_length)
 		*response_length = chunk_length;
