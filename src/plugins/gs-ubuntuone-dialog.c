@@ -308,6 +308,15 @@ check_snapd_response (GsUbuntuoneDialog *self,
 	GVariantIter iter;
 	GVariant *discharge = NULL;
 
+	if (status_code == 401) {
+		/* snapd isn't giving us enough information to tell why the authentication failed... */
+		if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-1")) {
+			show_status (self, _("Two-factor authentication failed"), TRUE);
+			gtk_widget_grab_focus (self->passcode_entry);
+			return;
+		}
+	}
+
 	variant = json_gvariant_deserialize_data (response, -1, NULL, NULL);
 
 	if (variant == NULL)
@@ -355,7 +364,8 @@ check_snapd_response (GsUbuntuoneDialog *self,
 	return;
 
 err:
-	show_status (self, _("An error occurred"), TRUE);
+	/* snapd isn't giving us enough information to tell why the authentication failed... */
+	show_status (self, status_code == 401 ? _("Incorrect email or password") : _("An error occurred"), TRUE);
 	gtk_widget_grab_focus (self->password_entry);
 }
 
