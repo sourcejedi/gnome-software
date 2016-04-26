@@ -505,9 +505,20 @@ entry_edited_cb (GsUbuntuoneDialog *self,
 static void
 gs_ubuntuone_dialog_init (GsUbuntuoneDialog *self)
 {
+	GList *focus_chain = NULL;
+
 	gtk_widget_init_template (GTK_WIDGET (self));
 
 	gtk_window_set_default (GTK_WINDOW (self), self->next_button);
+
+	focus_chain = g_list_append (focus_chain, self->email_entry);
+	focus_chain = g_list_append (focus_chain, self->password_entry);
+	focus_chain = g_list_append (focus_chain, self->remember_check);
+	focus_chain = g_list_append (focus_chain, self->login_radio);
+	focus_chain = g_list_append (focus_chain, self->register_radio);
+	focus_chain = g_list_append (focus_chain, self->reset_radio);
+	gtk_container_set_focus_chain (GTK_CONTAINER (gtk_widget_get_parent (self->email_entry)), focus_chain);
+	g_list_free (focus_chain);
 
 	g_signal_connect_swapped (self->next_button, "clicked", G_CALLBACK (next_button_clicked_cb), self);
 	g_signal_connect_swapped (self->login_radio, "toggled", G_CALLBACK (radio_button_toggled_cb), self);
