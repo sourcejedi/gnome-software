@@ -24,6 +24,7 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gstdio.h>
+#include <stdlib.h>
 
 #include "gs-app.h"
 #include "gs-markdown.h"
@@ -31,6 +32,22 @@
 #include "gs-plugin-loader.h"
 #include "gs-plugin-loader-sync.h"
 #include "gs-utils.h"
+
+/**
+ * gs_test_get_filename:
+ **/
+static gchar *
+gs_test_get_filename (const gchar *filename)
+{
+	gchar *tmp;
+	char full_tmp[PATH_MAX];
+	g_autofree gchar *path = NULL;
+	path = g_build_filename (TESTDATADIR, filename, NULL);
+	tmp = realpath (path, full_tmp);
+	if (tmp == NULL)
+		return NULL;
+	return g_strdup (full_tmp);
+}
 
 static void
 gs_markdown_func (void)
@@ -685,10 +702,6 @@ gs_plugin_loader_dpkg_func (GsPluginLoader *plugin_loader)
 	g_autoptr(GError) error = NULL;
 	g_autofree gchar *fn = NULL;
 	g_autoptr(GFile) file = NULL;
-
-	/* no dpkg, abort */
-	if (!gs_plugin_loader_get_enabled (plugin_loader, "dpkg"))
-		return;
 
 	/* load local file */
 	fn = gs_test_get_filename ("tests/chiron-1.1-1.deb");
