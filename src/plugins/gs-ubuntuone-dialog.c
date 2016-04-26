@@ -41,6 +41,7 @@ struct _GsUbuntuoneDialog
 	GtkWidget *status_image;
 	GtkWidget *status_label;
 	GtkWidget *page_stack;
+	GtkWidget *prompt_label;
 	GtkWidget *login_radio;
 	GtkWidget *register_radio;
 	GtkWidget *reset_radio;
@@ -561,6 +562,7 @@ gs_ubuntuone_dialog_class_init (GsUbuntuoneDialogClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, status_image);
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, status_label);
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, page_stack);
+	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, prompt_label);
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, login_radio);
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, register_radio);
 	gtk_widget_class_bind_template_child (widget_class, GsUbuntuoneDialog, reset_radio);
@@ -620,6 +622,13 @@ gs_ubuntuone_dialog_new (gboolean get_macaroon)
 						  NULL);
 
 	dialog->get_macaroon = get_macaroon;
+
+	if (dialog->get_macaroon)
+		gtk_label_set_label (GTK_LABEL (dialog->prompt_label),
+			_("To install and remove snaps, you need an Ubuntu Single Sign-On account."));
+	else
+		gtk_label_set_label (GTK_LABEL (dialog->prompt_label),
+			_("To rate and review software, you need an Ubuntu Single Sign-On account."));
 
 	return GTK_WIDGET (dialog);
 }
