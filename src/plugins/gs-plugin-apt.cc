@@ -883,6 +883,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
+	g_autofree gchar *filename = NULL;
 	gboolean success = FALSE;
 
 	if (!app_is_ours (app))
@@ -898,9 +899,10 @@ gs_plugin_app_install (GsPlugin *plugin,
 		success = aptd_transaction (plugin, "InstallPackages", app, NULL, NULL, error);
 		break;
 	case AS_APP_STATE_AVAILABLE_LOCAL:
+		filename = g_file_get_path (gs_app_get_local_file (app));
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		success = aptd_transaction (plugin, "InstallFile", app, NULL,
-					    g_variant_new_parsed ("(%s, true)", gs_app_get_source_default (app)),
+					    g_variant_new_parsed ("(%s, true)", filename),
 					    error);
 		break;
 	default:
