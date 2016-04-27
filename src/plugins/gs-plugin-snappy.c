@@ -233,6 +233,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
 		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_LAUNCHABLE);
 		refine_app (plugin, app, package);
 		gs_plugin_add_app (list, app);
 	}
