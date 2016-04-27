@@ -22,6 +22,7 @@
 #ifndef __GS_UTILS_H
 #define __GS_UTILS_H
 
+#include <gio/gdesktopappinfo.h>
 #include <gtk/gtk.h>
 
 #include "gs-app.h"
@@ -66,6 +67,8 @@ gchar		*gs_utils_get_user_hash		(GError		**error);
 GPermission	*gs_utils_get_permission	(const gchar	*id);
 
 gboolean	 gs_utils_is_current_desktop	(const gchar	*name);
+
+GDesktopAppInfo *gs_utils_get_desktop_app_info	(const gchar	*id);
 
 G_END_DECLS
 
