@@ -1128,7 +1128,7 @@ gs_plugin_add_popular (GsPlugin *plugin,
 		if (entry->rating < 80)
 			break;
 
-		app = gs_app_new (entry->package_name);
+		app = gs_app_new (NULL);
 		gs_app_add_source (app, entry->package_name);
 		gs_app_list_add (list, app);
 	}
