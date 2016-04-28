@@ -130,7 +130,9 @@ response_received_cb (SoupSession *session,
 		      NULL);
 
 	body = g_bytes_unref_to_data (bytes, &length);
-	response = json_gvariant_deserialize_data (body, length, NULL, NULL);
+
+	if (body)
+		response = json_gvariant_deserialize_data (body, length, NULL, NULL);
 
 	if (response)
 		g_variant_ref_sink (response);
@@ -228,65 +230,71 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 
 	reenable_widgets (self);
 
-	switch (status) {
-	case SOUP_STATUS_OK:
-	case SOUP_STATUS_CREATED:
-		g_clear_pointer (&self->token_secret, g_free);
-		g_clear_pointer (&self->token_key, g_free);
-		g_clear_pointer (&self->consumer_secret, g_free);
-		g_clear_pointer (&self->consumer_key, g_free);
+	if (response) {
+		switch (status) {
+		case SOUP_STATUS_OK:
+		case SOUP_STATUS_CREATED:
+			g_clear_pointer (&self->token_secret, g_free);
+			g_clear_pointer (&self->token_key, g_free);
+			g_clear_pointer (&self->consumer_secret, g_free);
+			g_clear_pointer (&self->consumer_key, g_free);
 
-		g_variant_lookup (response, "consumer_key", "s", &self->consumer_key);
-		g_variant_lookup (response, "consumer_secret", "s", &self->consumer_secret);
-		g_variant_lookup (response, "token_key", "s", &self->token_key);
-		g_variant_lookup (response, "token_secret", "s", &self->token_secret);
+			g_variant_lookup (response, "consumer_key", "s", &self->consumer_key);
+			g_variant_lookup (response, "consumer_secret", "s", &self->consumer_secret);
+			g_variant_lookup (response, "token_key", "s", &self->token_key);
+			g_variant_lookup (response, "token_secret", "s", &self->token_secret);
 
-		gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
-		update_widgets (self);
-		break;
-
-	default:
-		g_variant_lookup (response, "code", "&s", &code);
-
-		if (!code)
-			code = "";
-
-		if (g_str_equal (code, "TWOFACTOR_REQUIRED")) {
-			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
-			gtk_widget_grab_focus (self->passcode_entry);
+			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
 			update_widgets (self);
 			break;
-		}
 
+		default:
+			g_variant_lookup (response, "code", "&s", &code);
+
+			if (!code)
+				code = "";
+
+			if (g_str_equal (code, "TWOFACTOR_REQUIRED")) {
+				gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
+				gtk_widget_grab_focus (self->passcode_entry);
+				update_widgets (self);
+				break;
+			}
+
+			update_widgets (self);
+
+			if (g_str_equal (code, "INVALID_CREDENTIALS")) {
+				show_status (self, _("Incorrect email or password"), TRUE);
+				gtk_widget_grab_focus (self->password_entry);
+			} else if (g_str_equal (code, "ACCOUNT_SUSPENDED")) {
+				show_status (self, _("Account suspended"), TRUE);
+				gtk_widget_grab_focus (self->email_entry);
+			} else if (g_str_equal (code, "ACCOUNT_DEACTIVATED")) {
+				show_status (self, _("Account deactivated"), TRUE);
+				gtk_widget_grab_focus (self->email_entry);
+			} else if (g_str_equal (code, "EMAIL_INVALIDATED")) {
+				show_status (self, _("Email invalidated"), TRUE);
+				gtk_widget_grab_focus (self->email_entry);
+			} else if (g_str_equal (code, "TWOFACTOR_FAILURE")) {
+				show_status (self, _("Two-factor authentication failed"), TRUE);
+				gtk_widget_grab_focus (self->passcode_entry);
+			} else if (g_str_equal (code, "PASSWORD_POLICY_ERROR")) {
+				show_status (self, _("Password reset required"), TRUE);
+				gtk_widget_grab_focus (self->reset_radio);
+			} else if (g_str_equal (code, "TOO_MANY_REQUESTS")) {
+				show_status (self, _("Too many requests"), TRUE);
+				gtk_widget_grab_focus (self->password_entry);
+			} else {
+				show_status (self, _("An error occurred"), TRUE);
+				gtk_widget_grab_focus (self->password_entry);
+			}
+
+			break;
+		}
+	} else {
 		update_widgets (self);
-
-		if (g_str_equal (code, "INVALID_CREDENTIALS")) {
-			show_status (self, _("Incorrect email or password"), TRUE);
-			gtk_widget_grab_focus (self->password_entry);
-		} else if (g_str_equal (code, "ACCOUNT_SUSPENDED")) {
-			show_status (self, _("Account suspended"), TRUE);
-			gtk_widget_grab_focus (self->email_entry);
-		} else if (g_str_equal (code, "ACCOUNT_DEACTIVATED")) {
-			show_status (self, _("Account deactivated"), TRUE);
-			gtk_widget_grab_focus (self->email_entry);
-		} else if (g_str_equal (code, "EMAIL_INVALIDATED")) {
-			show_status (self, _("Email invalidated"), TRUE);
-			gtk_widget_grab_focus (self->email_entry);
-		} else if (g_str_equal (code, "TWOFACTOR_FAILURE")) {
-			show_status (self, _("Two-factor authentication failed"), TRUE);
-			gtk_widget_grab_focus (self->passcode_entry);
-		} else if (g_str_equal (code, "PASSWORD_POLICY_ERROR")) {
-			show_status (self, _("Password reset required"), TRUE);
-			gtk_widget_grab_focus (self->reset_radio);
-		} else if (g_str_equal (code, "TOO_MANY_REQUESTS")) {
-			show_status (self, _("Too many requests"), TRUE);
-			gtk_widget_grab_focus (self->password_entry);
-		} else {
-			show_status (self, _("An error occurred"), TRUE);
-			gtk_widget_grab_focus (self->password_entry);
-		}
-
-		break;
+		show_status (self, _("An error occurred"), TRUE);
+		gtk_widget_grab_focus (self->password_entry);
 	}
 }
 
