@@ -270,7 +270,8 @@ start_refresh (GsApplication *app)
 
 	gs_plugin_loader_refresh_async (gs_application_get_plugin_loader (app),
 					0,
-					GS_PLUGIN_REFRESH_FLAGS_PAYLOAD | GS_PLUGIN_REFRESH_FLAGS_UI,
+					GS_PLUGIN_REFRESH_FLAGS_METADATA |
+					GS_PLUGIN_REFRESH_FLAGS_PAYLOAD,
 					NULL,
 					refreshed_cb,
 					app);
