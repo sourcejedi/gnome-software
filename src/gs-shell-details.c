@@ -1197,9 +1197,9 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 	}
 	/* save app */
 	g_set_object (&self->app,
-		      gs_plugin_loader_filename_to_app_finish(plugin_loader,
-							      res,
-							      &error));
+		      gs_plugin_loader_file_to_app_finish(plugin_loader,
+							  res,
+							  &error));
 	if (self->app == NULL) {
 		GtkWidget *dialog;
 
@@ -1251,16 +1251,19 @@ gs_shell_details_filename_to_app_cb (GObject *source,
 void
 gs_shell_details_set_filename (GsShellDetails *self, const gchar *filename)
 {
+	g_autoptr(GFile) file = NULL;
+
 	gs_shell_details_set_state (self, GS_SHELL_DETAILS_STATE_LOADING);
-	gs_plugin_loader_filename_to_app_async (self->plugin_loader,
-						filename,
-						GS_PLUGIN_REFINE_FLAGS_DEFAULT |
-						GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING |
-						GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS |
-						GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
-						self->cancellable,
-						gs_shell_details_filename_to_app_cb,
-						self);
+	file = g_file_new_for_path (filename);
+	gs_plugin_loader_file_to_app_async (self->plugin_loader,
+					    file,
+					    GS_PLUGIN_REFINE_FLAGS_DEFAULT |
+					    GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING |
+					    GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS |
+					    GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS,
+					    self->cancellable,
+					    gs_shell_details_filename_to_app_cb,
+					    self);
 }
 
 /**

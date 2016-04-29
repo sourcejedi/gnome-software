@@ -623,4 +623,28 @@ gs_utils_widget_set_custom_css (GtkWidget *widget, const gchar *css)
 				g_object_unref);
 }
 
+/**
+ * gs_utils_get_desktop_app_info:
+ */
+GDesktopAppInfo *
+gs_utils_get_desktop_app_info (const gchar *id)
+{
+	GDesktopAppInfo *app_info;
+
+	/* try to get the standard app-id */
+	app_info = g_desktop_app_info_new (id);
+
+	/* KDE is a special project because it believes /usr/share/applications
+	 * isn't KDE enough. For this reason we support falling back to the
+	 * "kde4-" prefixed ID to avoid educating various self-righteous
+	 * upstreams about the correct ID to use in the AppData file. */
+	if (app_info == NULL) {
+		g_autofree gchar *kde_id = NULL;
+		kde_id = g_strdup_printf ("%s-%s", "kde4", id);
+		app_info = g_desktop_app_info_new (kde_id);
+	}
+
+	return app_info;
+}
+
 /* vim: set noexpandtab: */

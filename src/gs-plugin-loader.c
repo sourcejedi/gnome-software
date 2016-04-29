@@ -2676,8 +2676,6 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 		break;
 	case GS_PLUGIN_LOADER_ACTION_SET_REVIEW:
 		state->function_name = "gs_plugin_app_set_review";
-		state->state_success = AS_APP_STATE_UNKNOWN;
-		state->state_failure = AS_APP_STATE_UNKNOWN;
 		break;
 	default:
 		g_assert_not_reached ();
@@ -3665,7 +3663,7 @@ gs_plugin_loader_file_to_app_thread_cb (GTask *task,
 					  plugin->name,
 					  function_name);
 		g_rw_lock_reader_lock (&plugin->rwlock);
-		ret = plugin_func (plugin, &state->list, state->filename,
+		ret = plugin_func (plugin, &state->list, state->file,
 				   cancellable, &error_local);
 		g_rw_lock_reader_unlock (&plugin->rwlock);
 		if (!ret) {
@@ -3755,7 +3753,7 @@ gs_plugin_loader_file_to_app_async (GsPluginLoader *plugin_loader,
 	/* run in a thread */
 	task = g_task_new (plugin_loader, cancellable, callback, user_data);
 	g_task_set_task_data (task, state, (GDestroyNotify) gs_plugin_loader_free_async_state);
-	g_task_run_in_thread (task, gs_plugin_loader_filename_to_app_thread_cb);
+	g_task_run_in_thread (task, gs_plugin_loader_file_to_app_thread_cb);
 }
 
 /**
@@ -3907,7 +3905,7 @@ gs_plugin_loader_update_async (GsPluginLoader *plugin_loader,
 	/* run in a thread */
 	task = g_task_new (plugin_loader, cancellable, callback, user_data);
 	g_task_set_task_data (task, state, (GDestroyNotify) gs_plugin_loader_free_async_state);
-	g_task_run_in_thread (task, gs_plugin_loader_offline_update_thread_cb);
+	g_task_run_in_thread (task, gs_plugin_loader_update_thread_cb);
 }
 
 /**
