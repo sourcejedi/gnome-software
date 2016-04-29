@@ -954,7 +954,7 @@ gs_shell_updates_reboot_failed_cb (GObject *source, GAsyncResult *res, gpointer 
 	apps = gs_update_list_get_apps (GS_UPDATE_LIST (self->list_box_updates));
 	gs_plugin_loader_app_action_async (self->plugin_loader,
 					   GS_APP (apps->data),
-					   GS_PLUGIN_LOADER_ACTION_UPDATE_CANCEL,
+					   GS_PLUGIN_LOADER_ACTION_OFFLINE_UPDATE_CANCEL,
 					   self->cancellable,
 					   cancel_trigger_failed_cb,
 					   self);
@@ -1133,7 +1133,7 @@ upgrade_reboot_failed_cb (GObject *source,
 	apps = gs_update_list_get_apps (GS_UPDATE_LIST (self->list_box_updates));
 	gs_plugin_loader_app_action_async (self->plugin_loader,
 					   GS_APP (apps->data),
-					   GS_PLUGIN_LOADER_ACTION_UPDATE_CANCEL,
+					   GS_PLUGIN_LOADER_ACTION_OFFLINE_UPDATE_CANCEL,
 					   self->cancellable,
 					   cancel_trigger_failed_cb,
 					   self);
