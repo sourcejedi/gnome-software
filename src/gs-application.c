@@ -254,7 +254,7 @@ refreshed_cb (GObject      *source_object,
 	if (gs_plugin_loader_refresh_finish (loader, res, NULL)) {
 		gs_plugin_loader_refresh_async (loader,
 						0,
-						GS_PLUGIN_REFRESH_FLAGS_UPDATES | GS_PLUGIN_REFRESH_FLAGS_UI,
+						GS_PLUGIN_REFRESH_FLAGS_UI,
 						NULL,
 						NULL,
 						NULL);
@@ -270,7 +270,7 @@ start_refresh (GsApplication *app)
 
 	gs_plugin_loader_refresh_async (gs_application_get_plugin_loader (app),
 					0,
-					GS_PLUGIN_REFRESH_FLAGS_UPDATES | GS_PLUGIN_REFRESH_FLAGS_UI,
+					GS_PLUGIN_REFRESH_FLAGS_PAYLOAD | GS_PLUGIN_REFRESH_FLAGS_UI,
 					NULL,
 					refreshed_cb,
 					app);
@@ -524,7 +524,7 @@ offline_update_cb (GsPluginLoader *plugin_loader,
 {
 	g_autoptr(GDBusConnection) bus = NULL;
 	g_autoptr(GError) error = NULL;
-	if (!gs_plugin_loader_offline_update_finish (plugin_loader, res, &error)) {
+	if (!gs_plugin_loader_update_finish (plugin_loader, res, &error)) {
 		g_warning ("Failed to trigger offline update: %s", error->message);
 		return;
 	}
