@@ -1730,7 +1730,7 @@ gs_app_get_management_plugin (GsApp *app)
  * gs_app_set_management_plugin:
  *
  * The management plugin is the plugin that can handle doing install and remove
- * operations on the #GsApp. Typical values include "PackageKit" and "jhbuild"
+ * operations on the #GsApp. Typical values include "packagekit" and "jhbuild"
  */
 void
 gs_app_set_management_plugin (GsApp *app, const gchar *management_plugin)
