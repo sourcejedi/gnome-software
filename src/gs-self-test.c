@@ -464,6 +464,7 @@ main (int argc, char **argv)
 	g_autoptr(GsPluginLoader) plugin_loader = NULL;
 	const gchar *whitelist[] = {
 		"appstream",
+		"dpkg",
 		"dummy",
 		"epiphany",
 		"hardcoded-blacklist",
@@ -578,6 +579,9 @@ main (int argc, char **argv)
 	g_test_add_data_func ("/gnome-software/plugin-loader{distro-upgrades}",
 			      plugin_loader,
 			      (GTestDataFunc) gs_plugin_loader_distro_upgrades_func);
+	g_test_add_data_func ("/gnome-software/plugin-loader{dpkg}",
+			      plugin_loader,
+			      (GTestDataFunc) gs_plugin_loader_dpkg_func);
 	return g_test_run ();
 }
 

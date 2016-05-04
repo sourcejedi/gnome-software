@@ -31,12 +31,17 @@
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
+#include "gs-ubuntuone.h"
 #include "gs-os-release.h"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
 	sqlite3		*db;
 	gsize		 db_loaded;
+	gchar		*consumer_key;
+	gchar		*consumer_secret;
+	gchar		*token_key;
+	gchar		*token_secret;
 };
 
 typedef struct {
@@ -85,6 +90,7 @@ const gchar **
 gs_plugin_order_after (GsPlugin *plugin)
 {
 	static const gchar *deps[] = {
+		"odrs",
 		"appstream",
 		NULL };
 	return deps;
@@ -107,6 +113,10 @@ gs_plugin_destroy (GsPlugin *plugin)
 {
 	GsPluginPrivate *priv = plugin->priv;
 
+	g_clear_pointer (&priv->token_secret, g_free);
+	g_clear_pointer (&priv->token_key, g_free);
+	g_clear_pointer (&priv->consumer_secret, g_free);
+	g_clear_pointer (&priv->consumer_key, g_free);
 	g_clear_pointer (&priv->db, sqlite3_close);
 	g_free (priv->db_path);
 }
@@ -361,381 +371,6 @@ parse_review_entries (GsPlugin *plugin, JsonParser *parser, GError **error)
 	return TRUE;
 }
 
-static gboolean
-send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, JsonBuilder *request, JsonParser **result, GError **error)
-{
-	g_autofree gchar *uri = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
-	guint status_code;
-
-	uri = g_strdup_printf ("%s%s",
-			       UBUNTU_REVIEWS_SERVER, path);
-	msg = soup_message_new (method, uri);
-
-	if (request != NULL) {
-		g_autoptr(JsonGenerator) generator = NULL;
-		gchar *data;
-		gsize length;
-
-		generator = json_generator_new ();
-		json_generator_set_root (generator, json_builder_get_root (request));
-		data = json_generator_to_data (generator, &length);
-		soup_message_set_request (msg, "application/json", SOUP_MEMORY_TAKE, data, length);
-	}
-
-	status_code = soup_session_send_message (plugin->soup_session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Got status code %s from reviews.ubuntu.com",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
-
-	if (result != NULL) {
-		g_autoptr(JsonParser) parser = NULL;
-		const gchar *content_type;
-
-		content_type = soup_message_headers_get_content_type (msg->response_headers, NULL);
-		if (g_strcmp0 (content_type, "application/json") != 0) {
-			g_set_error (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "Got unknown content type %s from reviews.ubuntu.com",
-				     content_type);
-			return FALSE;
-		}
-
-		parser = json_parser_new ();
-		if (!json_parser_load_from_data (parser, msg->response_body->data, -1, error)) {
-			return FALSE;
-		}
-		*result = g_steal_pointer (&parser);
-	}
-
-	return TRUE;
-}
-
-static gboolean
-download_review_stats (GsPlugin *plugin, GError **error)
-{
-	g_autofree gchar *uri = NULL;
-	g_autoptr(SoupMessage) msg = NULL;
-	g_autoptr(JsonParser) result = NULL;
-
-	if (!send_review_request (plugin, SOUP_METHOD_GET, "/api/1.0/review-stats/any/any/", NULL, &result, error))
-		return FALSE;
-
-	/* Extract the stats from the data */
-	if (!parse_review_entries (plugin, result, error))
-		return FALSE;
-
-	/* Record the time we downloaded it */
-	return set_timestamp (plugin, "stats_mtime", error);
-}
-
-static gboolean
-load_database (GsPlugin *plugin, GError **error)
-{
-	const gchar *statement;
-	gboolean rebuild_ratings = FALSE;
-	char *error_msg = NULL;
-	gint result;
-	gint64 stats_mtime = 0;
-	gint64 now;
-	g_autoptr(GError) error_local = NULL;
-
-	g_debug ("trying to open database '%s'", plugin->priv->db_path);
-	if (!gs_mkdir_parent (plugin->priv->db_path, error))
-		return FALSE;
-	result = sqlite3_open (plugin->priv->db_path, &plugin->priv->db);
-	if (result != SQLITE_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Can't open Ubuntu review statistics database: %s",
-			     sqlite3_errmsg (plugin->priv->db));
-		return FALSE;
-	}
-
-	/* We don't need to keep doing fsync */
-	sqlite3_exec (plugin->priv->db, "PRAGMA synchronous=OFF",
-		      NULL, NULL, NULL);
-
-	/* Create a table to store the stats */
-	result = sqlite3_exec (plugin->priv->db, "SELECT * FROM review_stats LIMIT 1", NULL, NULL, &error_msg);
-	if (result != SQLITE_OK) {
-		g_debug ("creating table to repair: %s", error_msg);
-		sqlite3_free (error_msg);
-		statement = "CREATE TABLE review_stats ("
-			    "package_name TEXT PRIMARY KEY,"
-			    "one_star_count INTEGER DEFAULT 0,"
-			    "two_star_count INTEGER DEFAULT 0,"
-			    "three_star_count INTEGER DEFAULT 0,"
-			    "four_star_count INTEGER DEFAULT 0,"
-			    "five_star_count INTEGER DEFAULT 0);";
-		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
-		rebuild_ratings = TRUE;
-	}
-
-	/* Create a table to store local reviews */
-	result = sqlite3_exec (plugin->priv->db, "SELECT * FROM reviews LIMIT 1", NULL, NULL, &error_msg);
-	if (result != SQLITE_OK) {
-		g_debug ("creating table to repair: %s", error_msg);
-		sqlite3_free (error_msg);
-		statement = "CREATE TABLE reviews ("
-			    "package_name TEXT PRIMARY KEY,"
-			    "id TEXT,"
-			    "version TEXT,"
-			    "date TEXT,"
-			    "rating INTEGER,"
-			    "summary TEXT,"
-			    "text TEXT);";
-		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
-		rebuild_ratings = TRUE;
-	}
-
-	/* Create a table to store timestamps */
-	result = sqlite3_exec (plugin->priv->db,
-			       "SELECT value FROM timestamps WHERE key = 'stats_mtime' LIMIT 1",
-			       get_timestamp_sqlite_cb, &stats_mtime,
-			       &error_msg);
-	if (result != SQLITE_OK) {
-		g_debug ("creating table to repair: %s", error_msg);
-		sqlite3_free (error_msg);
-		statement = "CREATE TABLE timestamps ("
-			    "key TEXT PRIMARY KEY,"
-			    "value INTEGER DEFAULT 0);";
-		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
-
-		/* Set the time of database creation */
-		if (!set_timestamp (plugin, "stats_ctime", error))
-			return FALSE;
-	}
-
-	/* Download data if we have none or it is out of date */
-	now = g_get_real_time () / G_USEC_PER_SEC;
-	if (stats_mtime == 0 || rebuild_ratings) {
-		g_debug ("No Ubuntu review statistics");
-		if (!download_review_stats (plugin, &error_local)) {
-			g_warning ("Failed to get Ubuntu review statistics: %s",
-				   error_local->message);
-			return TRUE;
-		}
-	} else if (now - stats_mtime > REVIEW_STATS_AGE_MAX) {
-		g_debug ("Ubuntu review statistics was %" G_GINT64_FORMAT
-			 " days old, so regetting",
-			 (now - stats_mtime) / ( 60 * 60 * 24));
-		if (!download_review_stats (plugin, error))
-			return FALSE;
-	} else {
-		g_debug ("Ubuntu review statistics %" G_GINT64_FORMAT
-			 " days old, so no need to redownload",
-			 (now - stats_mtime) / ( 60 * 60 * 24));
-	}
-	return TRUE;
-}
-
-static gint
-get_timestamp_sqlite_cb (void *data, gint argc,
-			 gchar **argv, gchar **col_name)
-{
-	gint64 *timestamp = (gint64 *) data;
-	*timestamp = g_ascii_strtoll (argv[0], NULL, 10);
-	return 0;
-}
-
-static gboolean
-set_package_stats (GsPlugin *plugin,
-		   const gchar *package_name,
-		   Histogram *histogram,
-		   GError **error)
-{
-	char *error_msg = NULL;
-	gint result;
-	g_autofree gchar *statement = NULL;
-
-	statement = g_strdup_printf ("INSERT OR REPLACE INTO review_stats (package_name, "
-				     "one_star_count, two_star_count, three_star_count, "
-                                     "four_star_count, five_star_count) "
-				     "VALUES ('%s', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT"', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "', '%" G_GINT64_FORMAT "');",
-				     package_name, histogram->one_star_count, histogram->two_star_count,
-				     histogram->three_star_count, histogram->four_star_count, histogram->five_star_count);
-	result = sqlite3_exec (plugin->priv->db, statement, NULL, NULL, &error_msg);
-	if (result != SQLITE_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "SQL error: %s", error_msg);
-		sqlite3_free (error_msg);
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-static gboolean
-set_timestamp (GsPlugin *plugin,
-	       const gchar *type,
-	       GError **error)
-{
-	char *error_msg = NULL;
-	gint result;
-	g_autofree gchar *statement = NULL;
-
-	statement = g_strdup_printf ("INSERT OR REPLACE INTO timestamps (key, value) "
-				     "VALUES ('%s', '%" G_GINT64_FORMAT "');",
-				     type,
-				     g_get_real_time () / G_USEC_PER_SEC);
-	result = sqlite3_exec (plugin->priv->db, statement, NULL, NULL, &error_msg);
-	if (result != SQLITE_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "SQL error: %s", error_msg);
-		sqlite3_free (error_msg);
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static gint
-get_rating_sqlite_cb (void *data,
-		      gint argc,
-		      gchar **argv,
-		      gchar **col_name)
-{
-	Histogram *histogram = (Histogram *) data;
-	histogram->one_star_count = g_ascii_strtoll (argv[0], NULL, 10);
-	histogram->two_star_count = g_ascii_strtoll (argv[1], NULL, 10);
-	histogram->three_star_count = g_ascii_strtoll (argv[2], NULL, 10);
-	histogram->four_star_count = g_ascii_strtoll (argv[3], NULL, 10);
-	histogram->five_star_count = g_ascii_strtoll (argv[4], NULL, 10);
-	return 0;
-}
-
-static gboolean
-get_review_stats (GsPlugin *plugin,
-		  const gchar *package_name,
-		  gint *rating,
-		  guint *count1,
-		  guint *count2,
-		  guint *count3,
-		  guint *count4,
-		  guint *count5,
-		  GError **error)
-{
-	Histogram histogram = { 0, 0, 0, 0, 0 };
-	gchar *error_msg = NULL;
-	gint result, n_ratings;
-	g_autofree gchar *statement = NULL;
-
-	/* Get histogram from the database */
-	statement = g_strdup_printf ("SELECT one_star_count, two_star_count, three_star_count, four_star_count, five_star_count FROM review_stats "
-				     "WHERE package_name = '%s'", package_name);
-	result = sqlite3_exec (plugin->priv->db,
-			       statement,
-			       get_rating_sqlite_cb,
-			       &histogram,
-			       &error_msg);
-	if (result != SQLITE_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "SQL error: %s", error_msg);
-		sqlite3_free (error_msg);
-		return FALSE;
-	}
-
-	/* Convert to a rating */
-	// FIXME: Convert to a Wilson score
-	n_ratings = histogram.one_star_count + histogram.two_star_count + histogram.three_star_count + histogram.four_star_count + histogram.five_star_count;
-	if (n_ratings == 0)
-		*rating = -1;
-	else
-		*rating = ((histogram.one_star_count * 20) + (histogram.two_star_count * 40) + (histogram.three_star_count * 60) + (histogram.four_star_count * 80) + (histogram.five_star_count * 100)) / n_ratings;
-	*count1 = histogram.one_star_count;
-	*count2 = histogram.two_star_count;
-	*count3 = histogram.three_star_count;
-	*count4 = histogram.four_star_count;
-	*count5 = histogram.five_star_count;
-
-	return TRUE;
-}
-
-static gboolean
-parse_histogram (const gchar *text, Histogram *histogram)
-{
-	g_autoptr(JsonParser) parser = NULL;
-	JsonArray *array;
-
-	/* Histogram is a five element JSON array, e.g. "[1, 3, 5, 8, 4]" */
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, text, -1, NULL))
-		return FALSE;
-	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
-		return FALSE;
-	array = json_node_get_array (json_parser_get_root (parser));
-	if (json_array_get_length (array) != 5)
-		return FALSE;
-	histogram->one_star_count = json_array_get_int_element (array, 0);
-	histogram->two_star_count = json_array_get_int_element (array, 1);
-	histogram->three_star_count = json_array_get_int_element (array, 2);
-	histogram->four_star_count = json_array_get_int_element (array, 3);
-	histogram->five_star_count = json_array_get_int_element (array, 4);
-
-	return TRUE;
-}
-
-static gboolean
-parse_review_entry (JsonNode *node, const gchar **package_name, Histogram *histogram)
-{
-	JsonObject *object;
-	const gchar *name = NULL, *histogram_text = NULL;
-
-	if (!JSON_NODE_HOLDS_OBJECT (node))
-		return FALSE;
-
-	object = json_node_get_object (node);
-
-	name = json_object_get_string_member (object, "package_name");
-	histogram_text = json_object_get_string_member (object, "histogram");
-	if (!name || !histogram_text)
-		return FALSE;
-
-	if (!parse_histogram (histogram_text, histogram))
-		return FALSE;
-	*package_name = name;
-
-	return TRUE;
-}
-
-static gboolean
-parse_review_entries (GsPlugin *plugin, JsonParser *parser, GError **error)
-{
-	JsonArray *array;
-	guint i;
-
-	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
-		return FALSE;
-	array = json_node_get_array (json_parser_get_root (parser));
-	for (i = 0; i < json_array_get_length (array); i++) {
-		const gchar *package_name;
-		Histogram histogram;
-
-		/* Read in from JSON... (skip bad entries) */
-		if (!parse_review_entry (json_array_get_element (array, i), &package_name, &histogram))
-			continue;
-
-		/* ...write into the database (abort everything if can't write) */
-		if (!set_package_stats (plugin, package_name, &histogram, error))
-			return FALSE;
-	}
-
-	return TRUE;
-}
-
 static void
 sign_message (SoupMessage *message, OAuthMethod method,
 	      const gchar *consumer_key, const gchar *consumer_secret,
@@ -898,8 +533,8 @@ load_database (GsPlugin *plugin, GError **error)
 			    "version TEXT,"
 			    "date TEXT,"
 			    "rating INTEGER,"
-                            "summary TEXT,"
-                            "text TEXT);";
+			    "summary TEXT,"
+			    "text TEXT);";
 		sqlite3_exec (plugin->priv->db, statement, NULL, NULL, NULL);
 		rebuild_ratings = TRUE;
 	}
@@ -1053,8 +688,8 @@ download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, gint 
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
 	language = get_language (plugin);
-	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/", language, package_name);
-	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, &result, error))
+	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/page/%d/", language, package_name, page_number + 1);
+	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, FALSE, &result, error))
 		return FALSE;
 
 	/* Extract the stats from the data */
@@ -1108,7 +743,7 @@ refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
 		}
 	}
 
-	return ret;
+	return TRUE;
 }
 
 static gboolean
@@ -1187,6 +822,310 @@ gs_plugin_refine_app (GsPlugin *plugin,
 		if (!refine_reviews (plugin, app, error))
 			return FALSE;
 	}
+
+	return TRUE;
+}
+
+static void
+add_string_member (JsonBuilder *builder, const gchar *name, const gchar *value)
+{
+	json_builder_set_member_name (builder, name);
+	json_builder_add_string_value (builder, value);
+}
+
+static void
+add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
+{
+	json_builder_set_member_name (builder, name);
+	json_builder_add_int_value (builder, value);
+}
+
+static gboolean
+set_package_review (GsPlugin *plugin,
+		    GsReview *review,
+		    const gchar *package_name,
+		    GError **error)
+{
+	gint rating;
+	gint n_stars;
+	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
+	g_autoptr(JsonBuilder) request = NULL;
+
+	/* Ubuntu reviews require a summary and description - just make one up for now */
+	rating = gs_review_get_rating (review);
+	if (rating > 80)
+		n_stars = 5;
+	else if (rating > 60)
+		n_stars = 4;
+	else if (rating > 40)
+		n_stars = 3;
+	else if (rating > 20)
+		n_stars = 2;
+	else
+		n_stars = 1;
+
+	os_id = gs_os_release_get_id (error);
+	if (os_id == NULL)
+		return FALSE;
+	os_ubuntu_codename = gs_os_release_get ("UBUNTU_CODENAME", error);
+	if (os_ubuntu_codename == NULL)
+		return FALSE;
+
+	language = get_language (plugin);
+
+	// FIXME: Need to get Apt::Architecture configuration value from APT
+	architecture = g_strdup ("amd64");
+
+	/* Create message for reviews.ubuntu.com */
+	request = json_builder_new ();
+	json_builder_begin_object (request);
+	add_string_member (request, "package_name", package_name);
+	add_string_member (request, "summary", gs_review_get_summary (review));
+	add_string_member (request, "review_text", gs_review_get_text (review));
+	add_string_member (request, "language", language);
+	add_string_member (request, "origin", os_id);
+	add_string_member (request, "distroseries", os_ubuntu_codename);
+	add_string_member (request, "version", gs_review_get_version (review));
+	add_int_member (request, "rating", n_stars);
+	add_string_member (request, "arch_tag", architecture);
+	json_builder_end_object (request);
+
+	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/", request, TRUE, NULL, error);
+}
+
+static gboolean
+set_review_usefulness (GsPlugin *plugin,
+		       const gchar *review_id,
+		       gboolean is_useful,
+		       GError **error)
+{
+	g_autofree gchar *path = NULL;
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+}
+
+static gboolean
+report_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       const gchar *reason,
+	       const gchar *text,
+	       GError **error)
+{
+	g_autofree gchar *path = NULL;
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	// FIXME: escape reason / text properly
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+}
+
+static gboolean
+remove_review (GsPlugin *plugin,
+	       const gchar *review_id,
+	       GError **error)
+{
+	g_autofree gchar *path = NULL;
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
+	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+}
+
+gboolean
+gs_plugin_review_submit (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->db_loaded)) {
+		gboolean ret = load_database (plugin, error);
+		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
+		if (!ret)
+			return FALSE;
+	}
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
+
+	return set_package_review (plugin,
+				   review,
+				   gs_app_get_source_default (app),
+				   error);
+}
+
+gboolean
+gs_plugin_review_report (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", error))
+		return FALSE;
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
+	return TRUE;
+}
+
+gboolean
+gs_plugin_review_upvote (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!set_review_usefulness (plugin, review_id, TRUE, error))
+		return FALSE;
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
+	return TRUE;
+}
+
+gboolean
+gs_plugin_review_downvote (GsPlugin *plugin,
+			   GsApp *app,
+			   GsReview *review,
+			   GCancellable *cancellable,
+			   GError **error)
+{
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!set_review_usefulness (plugin, review_id, FALSE, error))
+		return FALSE;
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
+	return TRUE;
+}
+
+gboolean
+gs_plugin_review_remove (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	const gchar *review_id;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	return remove_review (plugin, review_id, error);
+}
+
+typedef struct {
+	gchar		*package_name;
+	gint		 rating;
+} PopularEntry;
+
+static gint
+popular_sqlite_cb (void *data,
+		   gint argc,
+		   gchar **argv,
+		   gchar **col_name)
+{
+	GList **list = data;
+	PopularEntry *entry;
+
+	entry = g_slice_new (PopularEntry);
+	entry->package_name = g_strdup (argv[0]);
+	entry->rating = get_rating (g_ascii_strtoll (argv[1], NULL, 10), g_ascii_strtoll (argv[2], NULL, 10), g_ascii_strtoll (argv[3], NULL, 10), g_ascii_strtoll (argv[4], NULL, 10), g_ascii_strtoll (argv[5], NULL, 10));
+	*list = g_list_prepend (*list, entry);
+
+	return 0;
+}
+
+static gint
+compare_popular_entry (gconstpointer a, gconstpointer b)
+{
+	PopularEntry *ea = a, *eb = b;
+	return eb->rating - ea->rating;
+}
+
+static void
+free_popular_entry (gpointer data)
+{
+	PopularEntry *entry = data;
+	g_free (entry->package_name);
+	g_slice_free (PopularEntry, entry);
+}
+
+gboolean
+gs_plugin_add_popular (GsPlugin *plugin,
+		       GList **list,
+		       GCancellable *cancellable,
+		       GError **error)
+{
+	gint result;
+	GList *entries = NULL, *link;
+	char *error_msg = NULL;
+
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->db_loaded)) {
+		gboolean ret = load_database (plugin, error);
+		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
+		if (!ret)
+			return FALSE;
+	}
+
+	result = sqlite3_exec (plugin->priv->db,
+			       "SELECT package_name, one_star_count, two_star_count, three_star_count, four_star_count, five_star_count FROM review_stats",
+			       popular_sqlite_cb,
+			       &entries,
+			       &error_msg);
+	if (result != SQLITE_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "SQL error: %s", error_msg);
+		sqlite3_free (error_msg);
+		return FALSE;
+	}
+
+	entries = g_list_sort (entries, compare_popular_entry);
+	for (link = entries; link; link = link->next) {
+		PopularEntry *entry = link->data;
+		g_autoptr(GsApp) app = NULL;
+
+		/* Need four stars to show */
+		if (entry->rating < 80)
+			break;
+
+		app = gs_app_new (NULL);
+		gs_app_add_source (app, entry->package_name);
+		gs_plugin_add_app (list, app);
+	}
+	g_list_free_full (entries, free_popular_entry);
 
 	return TRUE;
 }

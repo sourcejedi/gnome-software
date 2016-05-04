@@ -157,8 +157,10 @@ gs_plugin_update (GsPlugin *plugin,
 		/* only process this app if was created by this plugin */
 		if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
 			continue;
-		return pk_offline_trigger (PK_OFFLINE_ACTION_REBOOT,
-					   cancellable, error);
+		if (gs_app_get_state (app) == AS_APP_STATE_UPDATABLE) {
+			return pk_offline_trigger (PK_OFFLINE_ACTION_REBOOT,
+						   cancellable, error);
+		}
 	}
 	return TRUE;
 }

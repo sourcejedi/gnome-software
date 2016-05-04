@@ -919,6 +919,8 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
+	filename = g_file_get_path (gs_app_get_local_file (app));
+
 	/* not set */
 	if (gs_app_get_local_file (app) == NULL) {
 		g_set_error (error,
@@ -928,7 +930,6 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 			     filename);
 		return FALSE;
 	}
-	filename = g_file_get_path (gs_app_get_local_file (app));
 
 	/* limit to single device? */
 	device_id = gs_app_get_metadata_item (app, "fwupd::DeviceID");
@@ -1034,9 +1035,9 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	GVariant *val;
 	GVariant *variant;
 	const gchar *key;
+	g_autofree gchar *content_type = NULL;
 	gint fd;
 	gint retval;
-	g_autofree gchar *content_type = NULL;
 	g_autoptr(AsIcon) icon = NULL;
 	g_autoptr(GDBusConnection) conn = NULL;
 	g_autoptr(GDBusMessage) message = NULL;

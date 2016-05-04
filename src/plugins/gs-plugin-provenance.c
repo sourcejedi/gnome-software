@@ -161,6 +161,7 @@ gs_plugin_refine_app (GsPlugin *plugin,
 	g_debug ("prov: considering %s", gs_app_get_id (app));
 	if (origin != NULL && gs_utils_strv_fnmatch (sources, origin)) {
 		gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
+		g_debug ("prov: %s", gs_app_to_string (app));
 		return TRUE;
 	}
 

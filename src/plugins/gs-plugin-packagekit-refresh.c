@@ -367,7 +367,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	else
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, split[PK_PACKAGE_ID_NAME]);
 	gs_app_set_version (app, split[PK_PACKAGE_ID_VERSION]);
-	gs_app_set_metadata (app, "packagekit::local-filename", filename);
+	gs_app_set_local_file (app, file);
 	gs_app_set_origin (app, basename);
 	gs_app_add_source (app, split[PK_PACKAGE_ID_NAME]);
 	gs_app_add_source_id (app, package_id);

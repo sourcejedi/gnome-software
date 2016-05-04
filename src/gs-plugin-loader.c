@@ -50,8 +50,6 @@ typedef struct
 
 	guint			 updates_changed_id;
 	gboolean		 online; 
-
-	gboolean		 supports_reviews;
 } GsPluginLoaderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (GsPluginLoader, gs_plugin_loader, G_TYPE_OBJECT)
@@ -2674,9 +2672,6 @@ gs_plugin_loader_app_action_async (GsPluginLoader *plugin_loader,
 	case GS_PLUGIN_LOADER_ACTION_UPDATE_CANCEL:
 		state->function_name = "gs_plugin_update_cancel";
 		break;
-	case GS_PLUGIN_LOADER_ACTION_SET_REVIEW:
-		state->function_name = "gs_plugin_app_set_review";
-		break;
 	default:
 		g_assert_not_reached ();
 		break;
@@ -2924,7 +2919,6 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	GsPluginGetDepsFunc order_before = NULL;
 	GsPluginGetDepsFunc plugin_conflicts = NULL;
 	GsPlugin *plugin = NULL;
-	gpointer set_review;
 
 	module = g_module_open (filename, 0);
 	if (module == NULL) {
@@ -2953,12 +2947,6 @@ gs_plugin_loader_open_plugin (GsPluginLoader *plugin_loader,
 	g_module_symbol (module,
 			 "gs_plugin_get_conflicts",
 			 (gpointer *) &plugin_conflicts);
-
-	/* Check if this plugin can do reviews */
-	if (g_module_symbol (module,
-	                     "gs_plugin_app_set_review",
-	                     &set_review))
-		priv->supports_reviews = TRUE;
 
 	/* print what we know */
 	plugin = g_slice_new0 (GsPlugin);

@@ -75,8 +75,10 @@ gs_plugin_refresh (GsPlugin              *plugin,
 		   GError               **error)
 {
 	if (flags & GS_PLUGIN_REFRESH_FLAGS_UI) {
-		gs_plugin_setup (plugin, cancellable, error);
-		gs_plugin_updates_changed (plugin);
+		if (gs_plugin_setup (plugin, cancellable, error))
+			gs_plugin_updates_changed (plugin);
+		else
+			return FALSE;
 	}
 
 	return TRUE;
