@@ -338,6 +338,8 @@ gboolean	 gs_plugin_update			(GsPlugin	*plugin,
 							 GList		*apps,
 							 GCancellable	*cancellable,
 							 GError		**error);
+gboolean	 gs_plugin_needs_refresh		(GsPlugin	*plugin,
+							 GsPluginRefreshFlags *out_flags);
 
 G_END_DECLS
 

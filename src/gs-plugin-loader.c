@@ -117,6 +117,8 @@ typedef gboolean	 (*GsPluginUpdateFunc)		(GsPlugin	*plugin,
 							 GError		**error);
 typedef void		 (*GsPluginAdoptAppFunc)	(GsPlugin	*plugin,
 							 GsApp		*app);
+typedef gboolean	 (*GsPluginNeedsRefreshFunc)	(GsPlugin	*plugin,
+							 GsPluginRefreshFlags *out_flags);
 
 /* async state */
 typedef struct {
@@ -3787,6 +3789,63 @@ gs_plugin_loader_refresh_finish (GsPluginLoader *plugin_loader,
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
 	return g_task_propagate_boolean (G_TASK (res), error);
+}
+
+/**
+ * gs_plugin_loader_needs_refresh:
+ * @plugin_loader: a #GsPluginLoader
+ * @out_flags: (out) (optional): the type of refresh needed
+ *
+ * Returns: %TRUE if any plugin is requesting a refresh
+ */
+gboolean
+gs_plugin_loader_needs_refresh (GsPluginLoader *plugin_loader,
+				GsPluginRefreshFlags *out_flags)
+{
+	GsPluginLoaderPrivate *priv = gs_plugin_loader_get_instance_private (plugin_loader);
+	GsPlugin *plugin;
+	GsPluginNeedsRefreshFunc plugin_func = NULL;
+	const gchar *function_name = "gs_plugin_needs_refresh";
+	gboolean needs_refresh = FALSE;
+	GsPluginRefreshFlags all_flags = GS_PLUGIN_REFRESH_FLAGS_NONE;
+	GsPluginRefreshFlags flags;
+	gboolean exists;
+	gboolean ret;
+	guint i;
+
+	g_return_val_if_fail (GS_IS_PLUGIN_LOADER (plugin_loader), FALSE);
+
+	/* run each plugin */
+	for (i = 0; i < priv->plugins->len; i++) {
+		g_autoptr(AsProfileTask) ptask = NULL;
+
+		plugin = g_ptr_array_index (priv->plugins, i);
+		if (!gs_plugin_get_enabled (plugin))
+			continue;
+
+		exists = g_module_symbol (gs_plugin_get_module (plugin),
+					  function_name,
+					  (gpointer *) &plugin_func);
+		if (!exists)
+			continue;
+		ptask = as_profile_start (priv->profile,
+					  "GsPlugin::%s(%s)",
+					  gs_plugin_get_name (plugin),
+					  function_name);
+		gs_plugin_loader_action_start (plugin_loader, plugin, TRUE);
+		flags = GS_PLUGIN_REFRESH_FLAGS_NONE;
+		ret = plugin_func (plugin, &flags);
+		gs_plugin_loader_action_stop (plugin_loader, plugin);
+		if (ret) {
+			needs_refresh = TRUE;
+			all_flags |= flags;
+		}
+	}
+
+	if (out_flags != NULL)
+		*out_flags = all_flags;
+
+	return needs_refresh;
 }
 
 /******************************************************************************/

@@ -240,6 +240,8 @@ void		 gs_plugin_loader_set_network_status    (GsPluginLoader *plugin_loader,
 							 gboolean        online);
 gboolean	 gs_plugin_loader_get_plugin_supported	(GsPluginLoader	*plugin_loader,
 							 const gchar	*plugin_func);
+gboolean	 gs_plugin_loader_needs_refresh		(GsPluginLoader	*plugin_loader,
+							 GsPluginRefreshFlags *out_flags);
 
 G_END_DECLS
 
