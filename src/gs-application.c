@@ -246,15 +246,109 @@ gs_application_dbus_unregister (GApplication    *application,
 }
 
 static void
+refresh_finished_cb (GObject      *source_object,
+		     GAsyncResult *res,
+		     gpointer      user_data)
+{
+	GsApplication *app = user_data;
+	g_autoptr(GError) error = NULL;
+
+	if (!gs_plugin_loader_refresh_finish (app->plugin_loader, res, &error)) {
+		g_warning ("failed to refresh: %s", error->message);
+		return;
+	}
+
+	/* do one more local refresh to update plugin caches */
+	gs_plugin_loader_refresh_async (app->plugin_loader,
+					-1,
+					GS_PLUGIN_REFRESH_FLAGS_NONE,
+					NULL,
+					NULL,
+					NULL);
+}
+
+typedef struct {
+	GsApplication		*app;
+	GsPluginRefreshFlags	 flags;
+} RefreshHelper;
+
+static void
+response_received_cb (GtkDialog     *dialog,
+		      gint           response_id,
+		      RefreshHelper *helper)
+{
+	if (response_id == GTK_RESPONSE_ACCEPT) {
+		gs_shell_set_mode (helper->app->shell, GS_SHELL_MODE_UPDATES);
+		gs_plugin_loader_refresh_async (helper->app->plugin_loader,
+						-1,
+						helper->flags,
+						NULL,
+						refresh_finished_cb,
+						helper->app);
+	}
+
+	g_slice_free (RefreshHelper, helper);
+}
+
+static void
+check_needs_refresh (GtkWidget     *widget,
+		     GsApplication *app)
+{
+	gboolean needs_refresh;
+	GsPluginRefreshFlags flags;
+	GtkWidget *dialog;
+	RefreshHelper *helper;
+
+	needs_refresh = gs_plugin_loader_needs_refresh (app->plugin_loader, &flags);
+
+	if (!needs_refresh)
+		return;
+
+	if (app->network_monitor != NULL && !g_network_monitor_get_network_available (app->network_monitor))
+		flags = GS_PLUGIN_REFRESH_FLAGS_NONE;
+
+	if (flags == GS_PLUGIN_REFRESH_FLAGS_NONE) {
+		gs_plugin_loader_refresh_async (app->plugin_loader,
+						-1,
+						flags,
+						NULL,
+						NULL,
+						NULL);
+		return;
+	}
+
+	helper = g_slice_new (RefreshHelper);
+	helper->app = app;
+	helper->flags = flags;
+
+	dialog = gtk_message_dialog_new (gtk_application_get_active_window (GTK_APPLICATION (app)),
+					 GTK_DIALOG_MODAL |
+					 GTK_DIALOG_USE_HEADER_BAR |
+					 GTK_DIALOG_DESTROY_WITH_PARENT,
+					 GTK_MESSAGE_ERROR,
+					 GTK_BUTTONS_CANCEL,
+					 /* TRANSLATORS: we need to check for updates */
+					 _("Check for updates"));
+	gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog),
+						  /* TRANSLATORS: ask if it's ok to check for updates */
+						  _("Check for available apps over the network? This requires network access and may take a while."));
+	gtk_dialog_add_button (GTK_DIALOG (dialog), _("Download"), GTK_RESPONSE_ACCEPT);
+	g_signal_connect (dialog, "response", G_CALLBACK (response_received_cb), helper);
+	gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
+}
+
+static void
 gs_application_show_first_run_dialog (GsApplication *app)
 {
 	GtkWidget *dialog;
 
 	if (g_settings_get_boolean (app->settings, "first-run") == TRUE) {
 		dialog = gs_first_run_dialog_new ();
+		g_signal_connect (dialog, "destroy", G_CALLBACK (check_needs_refresh), app);
 		gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
 		g_settings_set_boolean (app->settings, "first-run", FALSE);
-	}
+	} else
+		check_needs_refresh (NULL, app);
 }
 
 static void
