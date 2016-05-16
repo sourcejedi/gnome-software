@@ -26,9 +26,6 @@ AM_CPPFLAGS =						\
 	-DTESTDATADIR=\""$(top_srcdir)/data/tests"\"	\
 	-I$(top_srcdir)/src
 
-noinst_LTLIBRARIES =					\
-	libgs_plugin_self_test.la
-
 plugindir = $(libdir)/gs-plugins-${GS_PLUGIN_API_VERSION}
 plugin_LTLIBRARIES =					\
 	libgs_plugin_appstream.la			\
@@ -77,7 +74,7 @@ plugin_LTLIBRARIES += libgs_plugin_limba.la
 endif
 
 if HAVE_ODRS
-plugin_LTLIBRARIES += libgs_plugin_xdg_app_reviews.la
+plugin_LTLIBRARIES += libgs_plugin_odrs.la
 endif
 
 libgs_plugin_dummy_la_SOURCES = gs-plugin-dummy.c
@@ -115,11 +112,6 @@ libgs_plugin_icons_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS)
 libgs_plugin_icons_la_LDFLAGS = -module -avoid-version
 libgs_plugin_icons_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_self_test_la_SOURCES = gs-plugin-self-test.c
-libgs_plugin_self_test_la_LIBADD = $(GS_PLUGIN_LIBS)
-libgs_plugin_self_test_la_LDFLAGS = -module -avoid-version
-libgs_plugin_self_test_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
-
 libgs_plugin_appstream_la_SOURCES =			\
 	gs-appstream.c					\
 	gs-appstream.h					\
@@ -141,10 +133,10 @@ libgs_plugin_xdg_app_la_LIBADD = $(GS_PLUGIN_LIBS) $(XDG_APP_LIBS)
 libgs_plugin_xdg_app_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_xdg_app_reviews_la_SOURCES = gs-plugin-xdg-app-reviews.c
-libgs_plugin_xdg_app_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(JSON_GLIB_LIBS)
-libgs_plugin_xdg_app_reviews_la_LDFLAGS = -module -avoid-version
-libgs_plugin_xdg_app_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+libgs_plugin_odrs_la_SOURCES = gs-plugin-odrs.c
+libgs_plugin_odrs_la_LIBADD = $(GS_PLUGIN_LIBS) $(JSON_GLIB_LIBS)
+libgs_plugin_odrs_la_LDFLAGS = -module -avoid-version
+libgs_plugin_odrs_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
 if HAVE_APT
@@ -230,6 +222,8 @@ libgs_plugin_packagekit_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_packagekit_refine_la_SOURCES =		\
 	gs-plugin-packagekit-refine.c			\
+	gs-markdown.c					\
+	gs-markdown.h					\
 	packagekit-common.c				\
 	packagekit-common.h
 libgs_plugin_packagekit_refine_la_LIBADD = $(GS_PLUGIN_LIBS) $(PACKAGEKIT_LIBS)
@@ -292,15 +286,16 @@ libgs_plugin_snappy_la_LIBADD =				\
 libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-check_PROGRAMS =					\
+check_PROGRAMS =						\
 	gs-self-test
 
-gs_self_test_SOURCES =					\
-	gs-moduleset.c					\
+gs_self_test_SOURCES =						\
+	gs-markdown.c						\
+	gs-moduleset.c						\
 	gs-self-test.c
 
-gs_self_test_LDADD =					\
-	$(GLIB_LIBS)					\
+gs_self_test_LDADD =						\
+	$(GLIB_LIBS)						\
 	$(GTK_LIBS)
 
 gs_self_test_CFLAGS = $(WARN_CFLAGS)

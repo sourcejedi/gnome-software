@@ -23,9 +23,6 @@ dist_resources_DATA =					\
 	featured-weather.png				\
 	featured-weather-bg.png
 
-generatedresourcesdir = $(datadir)/gnome-software
-generatedresources_DATA = featured.ini
-
 @GSETTINGS_RULES@
 gsettings_SCHEMAS = org.gnome.software.gschema.xml
 

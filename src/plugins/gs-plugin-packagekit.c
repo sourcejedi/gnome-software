@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2013 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2013-2016 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -152,8 +152,10 @@ gs_plugin_add_installed (GsPlugin *plugin,
 					  cancellable,
 					  gs_plugin_packagekit_progress_cb, &data,
 					  error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* add results */
 	return gs_plugin_packagekit_add_results (plugin, list, results, error);
@@ -195,6 +197,7 @@ gs_plugin_add_sources_related (GsPlugin *plugin,
 					   gs_plugin_packagekit_progress_cb, &data,
 					   error);
 	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		ret = FALSE;
 		goto out;
 	}
@@ -255,8 +258,10 @@ gs_plugin_add_sources (GsPlugin *plugin,
 					   cancellable,
 					   gs_plugin_packagekit_progress_cb, &data,
 					   error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 	hash = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
 	array = pk_results_get_repo_detail_array (results);
 	for (i = 0; i < array->len; i++) {
@@ -264,7 +269,7 @@ gs_plugin_add_sources (GsPlugin *plugin,
 		rd = g_ptr_array_index (array, i);
 		id = pk_repo_detail_get_id (rd);
 		app = gs_app_new (id);
-		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_management_plugin (app, plugin->name);
 		gs_app_set_kind (app, AS_APP_KIND_SOURCE);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		gs_app_set_name (app,
@@ -308,7 +313,11 @@ gs_plugin_app_source_enable (GsPlugin *plugin,
 					 cancellable,
 					 gs_plugin_packagekit_progress_cb, &data,
 					 error);
-	return results != NULL;
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /**
@@ -326,17 +335,16 @@ gs_plugin_app_install (GsPlugin *plugin,
 	const gchar *package_id;
 	guint i, j;
 	g_autoptr(PkError) error_code = NULL;
-	g_autofree gchar *local_filename = NULL;
-	g_auto(GStrv) package_ids = NULL;
-	g_autoptr(GPtrArray) array_package_ids = NULL;
 	g_autoptr(PkResults) results = NULL;
+	g_autoptr(GPtrArray) array_package_ids = NULL;
+	g_auto(GStrv) package_ids = NULL;
 
 	data.app = app;
 	data.plugin = plugin;
 	data.ptask = NULL;
 
 	/* only process this app if was created by this plugin */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	/* we enable the repo */
@@ -365,13 +373,16 @@ gs_plugin_app_install (GsPlugin *plugin,
 							 gs_plugin_packagekit_progress_cb, &data,
 							 error);
 		if (results == NULL) {
-			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+			gs_plugin_packagekit_convert_gerror (error);
+			gs_app_set_state_recover (app);
 			return FALSE;
 		}
 
+		/* state is known */
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+
 		/* no longer valid */
 		gs_app_clear_source_ids (app);
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		return TRUE;
 	}
 
@@ -431,30 +442,43 @@ gs_plugin_app_install (GsPlugin *plugin,
 							 cancellable,
 							 gs_plugin_packagekit_progress_cb, &data,
 							 error);
-		if (results == NULL)
+		if (results == NULL) {
+			gs_plugin_packagekit_convert_gerror (error);
+			gs_app_set_state_recover (app);
 			return FALSE;
+		}
+
+		/* state is known */
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+
 		break;
 	case AS_APP_STATE_AVAILABLE_LOCAL:
-		if (gs_app_get_local_file (app) == NULL) {
+		package_id = gs_app_get_metadata_item (app, "packagekit::local-filename");
+		if (package_id == NULL) {
 			g_set_error_literal (error,
 					     GS_PLUGIN_ERROR,
 					     GS_PLUGIN_ERROR_NOT_SUPPORTED,
 					     "local package, but no filename");
 			return FALSE;
 		}
-		local_filename = g_file_get_path (gs_app_get_local_file (app));
-		package_ids = g_strsplit (local_filename, "\t", -1);
+		package_ids = g_strsplit (package_id, "\t", -1);
 		gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 		results = pk_task_install_files_sync (plugin->priv->task,
 						      package_ids,
 						      cancellable,
 						      gs_plugin_packagekit_progress_cb, &data,
 						      error);
-		if (results == NULL)
+		if (results == NULL) {
+			gs_plugin_packagekit_convert_gerror (error);
+			gs_app_set_state_recover (app);
 			return FALSE;
+		}
+
+		/* state is known */
+		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 		/* get the new icon from the package */
-		gs_app_set_local_file (app, NULL);
+		gs_app_set_metadata (app, "packagekit::local-filename", NULL);
 		gs_app_set_icon (app, NULL);
 		gs_app_set_pixbuf (app, NULL);
 		break;
@@ -508,7 +532,11 @@ gs_plugin_app_source_disable (GsPlugin *plugin,
 					 cancellable,
 					 gs_plugin_packagekit_progress_cb, &data,
 					 error);
-	return results != NULL;
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /**
@@ -570,7 +598,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 	data.ptask = NULL;
 
 	/* only process this app if was created by this plugin */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	/* remove repo and all apps in it */
@@ -611,8 +639,14 @@ gs_plugin_app_remove (GsPlugin *plugin,
 						cancellable,
 						gs_plugin_packagekit_progress_cb, &data,
 						error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
+		gs_app_set_state_recover (app);
 		return FALSE;
+	}
+
+	/* state is not known: we don't know if we can re-install this app */
+	gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
 
 	/* no longer valid */
 	gs_app_clear_source_ids (app);
@@ -643,6 +677,10 @@ gs_plugin_app_upgrade_download (GsPlugin *plugin,
 	ProgressData data;
 	g_autoptr(PkResults) results = NULL;
 
+	/* only process this app if was created by this plugin */
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
+		return TRUE;
+
 	data.app = app;
 	data.plugin = plugin;
 	data.ptask = NULL;
@@ -666,7 +704,15 @@ gs_plugin_app_upgrade_download (GsPlugin *plugin,
 					    cancellable,
 					    gs_plugin_packagekit_progress_cb, &data,
 					    error);
-	return results != NULL;
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
+		gs_app_set_state_recover (app);
+		return FALSE;
+	}
+
+	/* state is known */
+	gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
+	return TRUE;
 }
 
 /**
@@ -698,8 +744,10 @@ gs_plugin_add_search_files (GsPlugin *plugin,
 	                                  cancellable,
 	                                  gs_plugin_packagekit_progress_cb, &data,
 	                                  error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* add results */
 	return gs_plugin_packagekit_add_results (plugin, list, results, error);
@@ -734,8 +782,10 @@ gs_plugin_add_search_what_provides (GsPlugin *plugin,
 	                                   cancellable,
 	                                   gs_plugin_packagekit_progress_cb, &data,
 	                                   error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* add results */
 	return gs_plugin_packagekit_add_results (plugin, list, results, error);
@@ -751,7 +801,7 @@ gs_plugin_launch (GsPlugin *plugin,
 		  GError **error)
 {
 	/* only process this app if was created by this plugin */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 	return gs_plugin_app_launch (plugin, app, error);
 }

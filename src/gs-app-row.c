@@ -27,7 +27,6 @@
 
 #include "gs-app-row.h"
 #include "gs-star-widget.h"
-#include "gs-markdown.h"
 #include "gs-progress-button.h"
 #include "gs-utils.h"
 #include "gs-folders.h"
@@ -84,6 +83,17 @@ gs_app_row_get_description (GsAppRow *app_row)
 	GsAppRowPrivate *priv = gs_app_row_get_instance_private (app_row);
 	const gchar *tmp = NULL;
 	g_autofree gchar *escaped = NULL;
+
+#if 0
+	/* convert the markdown update description into PangoMarkup */
+	if (priv->show_update &&
+	    (gs_app_get_state (priv->app) == AS_APP_STATE_UPDATABLE ||
+	     gs_app_get_state (priv->app) == AS_APP_STATE_UPDATABLE_LIVE)) {
+		tmp = gs_app_get_update_details (priv->app);
+		if (tmp != NULL && tmp[0] != '\0')
+			return g_string_new (tmp);
+	}
+#endif
 
 	if (gs_app_get_state (priv->app) == AS_APP_STATE_UNAVAILABLE)
 		return g_string_new (gs_app_get_summary_missing (priv->app));

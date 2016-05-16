@@ -60,7 +60,7 @@ typedef enum {
 	GS_PLUGIN_LOADER_ACTION_UPGRADE_DOWNLOAD,
 	GS_PLUGIN_LOADER_ACTION_UPGRADE_TRIGGER,
 	GS_PLUGIN_LOADER_ACTION_LAUNCH,
-	GS_PLUGIN_LOADER_ACTION_UPDATE_CANCEL,
+	GS_PLUGIN_LOADER_ACTION_OFFLINE_UPDATE_CANCEL,
 	GS_PLUGIN_LOADER_ACTION_LAST
 } GsPluginLoaderAction;
 
@@ -189,11 +189,11 @@ gboolean	 gs_plugin_loader_update_finish		(GsPluginLoader	*plugin_loader,
 							 GAsyncResult	*res,
 							 GError		**error);
 gboolean	 gs_plugin_loader_setup			(GsPluginLoader	*plugin_loader,
+							 gchar		**whitelist,
 							 GError		**error);
 void		 gs_plugin_loader_dump_state		(GsPluginLoader	*plugin_loader);
-gboolean	 gs_plugin_loader_set_enabled		(GsPluginLoader	*plugin_loader,
-							 const gchar	*plugin_name,
-							 gboolean	 enabled);
+gboolean	 gs_plugin_loader_get_enabled		(GsPluginLoader	*plugin_loader,
+							 const gchar	*plugin_name);
 void		 gs_plugin_loader_set_location		(GsPluginLoader	*plugin_loader,
 							 const gchar	*location);
 gint		 gs_plugin_loader_get_scale		(GsPluginLoader	*plugin_loader);
@@ -237,8 +237,6 @@ void		 gs_plugin_loader_refresh_async		(GsPluginLoader	*plugin_loader,
 							 GAsyncReadyCallback callback,
 							 gpointer	 user_data);
 GPtrArray	*gs_plugin_loader_get_pending		(GsPluginLoader	*plugin_loader);
-GsApp		*gs_plugin_loader_dedupe		(GsPluginLoader	*plugin_loader,
-							 GsApp		*app);
 void		 gs_plugin_loader_set_network_status    (GsPluginLoader *plugin_loader,
 							 gboolean        online);
 gboolean	 gs_plugin_loader_get_plugin_supported	(GsPluginLoader	*plugin_loader,

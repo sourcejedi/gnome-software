@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2013-2014 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2013-2016 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -28,6 +28,7 @@
 #include <gs-utils.h>
 #include <glib/gi18n.h>
 
+#include "gs-markdown.h"
 #include "packagekit-common.h"
 
 /*
@@ -155,7 +156,7 @@ gs_plugin_packagekit_set_metadata_from_package (GsPlugin *plugin,
 {
 	const gchar *data;
 
-	gs_app_set_management_plugin (app, "PackageKit");
+	gs_app_set_management_plugin (app, "packagekit");
 	gs_app_add_source (app, pk_package_get_name (package));
 	gs_app_add_source_id (app, pk_package_get_id (package));
 	switch (pk_package_get_info (package)) {
@@ -295,8 +296,10 @@ gs_plugin_packagekit_resolve_packages (GsPlugin *plugin,
 				     cancellable,
 				     gs_plugin_packagekit_progress_cb, &data,
 				     error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* check error code */
 	error_code = pk_results_get_error_code (results);
@@ -314,7 +317,7 @@ gs_plugin_packagekit_resolve_packages (GsPlugin *plugin,
 	packages = pk_results_get_package_array (results);
 	for (l = list; l != NULL; l = l->next) {
 		app = GS_APP (l->data);
-		if (gs_app_get_local_file (app) != NULL)
+		if (gs_app_get_metadata_item (app, "packagekit::local-filename") != NULL)
 			continue;
 		gs_plugin_packagekit_resolve_packages_app (plugin, packages, app);
 	}
@@ -345,8 +348,10 @@ gs_plugin_packagekit_refine_from_desktop (GsPlugin *plugin,
 					  cancellable,
 					  gs_plugin_packagekit_progress_cb, &data,
 					  error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* check error code */
 	error_code = pk_results_get_error_code (results);
@@ -371,6 +376,33 @@ gs_plugin_packagekit_refine_from_desktop (GsPlugin *plugin,
 			   gs_app_get_id (app), filename, packages->len);
 	}
 	return TRUE;
+}
+
+/**
+ * gs_plugin_packagekit_fixup_update_description:
+ *
+ * Lets assume Fedora is sending us valid markdown, but fall back to
+ * plain text if this fails.
+ */
+static gchar *
+gs_plugin_packagekit_fixup_update_description (const gchar *text)
+{
+	gchar *tmp;
+	g_autoptr(GsMarkdown) markdown = NULL;
+
+	/* nothing to do */
+	if (text == NULL)
+		return NULL;
+
+	/* try to parse */
+	markdown = gs_markdown_new (GS_MARKDOWN_OUTPUT_TEXT);
+	gs_markdown_set_smart_quoting (markdown, FALSE);
+	gs_markdown_set_autocode (markdown, FALSE);
+	gs_markdown_set_autolinkify (markdown, FALSE);
+	tmp = gs_markdown_parse (markdown, text);
+	if (tmp != NULL)
+		return tmp;
+	return g_strdup (text);
 }
 
 /**
@@ -411,8 +443,10 @@ gs_plugin_packagekit_refine_updatedetails (GsPlugin *plugin,
 					       cancellable,
 					       gs_plugin_packagekit_progress_cb, &data,
 					       error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* set the update details for the update */
 	array = pk_results_get_update_detail_array (results);
@@ -420,11 +454,16 @@ gs_plugin_packagekit_refine_updatedetails (GsPlugin *plugin,
 		app = GS_APP (l->data);
 		package_id = gs_app_get_source_id_default (app);
 		for (i = 0; i < array->len; i++) {
+			const gchar *tmp;
+			g_autofree gchar *desc = NULL;
 			/* right package? */
 			update_detail = g_ptr_array_index (array, i);
 			if (g_strcmp0 (package_id, pk_update_detail_get_package_id (update_detail)) != 0)
 				continue;
-			gs_app_set_update_details (app, pk_update_detail_get_update_text (update_detail));
+			tmp = pk_update_detail_get_update_text (update_detail);
+			desc = gs_plugin_packagekit_fixup_update_description (tmp);
+			if (desc != NULL)
+				gs_app_set_update_details (app, desc);
 			break;
 		}
 	}
@@ -544,8 +583,10 @@ gs_plugin_packagekit_refine_details (GsPlugin *plugin,
 					 cancellable,
 					 gs_plugin_packagekit_progress_cb, &data,
 					 error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* set the update details for the update */
 	array = pk_results_get_details_array (results);
@@ -584,8 +625,10 @@ gs_plugin_packagekit_refine_update_urgency (GsPlugin *plugin,
 					 cancellable,
 					 gs_plugin_packagekit_progress_cb, &data,
 					 error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 
 	/* set the update severity for the app */
 	sack = pk_results_get_package_sack (results);
@@ -630,7 +673,7 @@ gs_plugin_packagekit_refine_update_urgency (GsPlugin *plugin,
 static gboolean
 gs_plugin_refine_app_needs_details (GsPlugin *plugin, GsPluginRefineFlags flags, GsApp *app)
 {
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) > 0 &&
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENSE) > 0 &&
 	    gs_app_get_license (app) == NULL)
 		return TRUE;
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_URL) > 0 &&
@@ -658,12 +701,12 @@ gs_plugin_refine_require_details (GsPlugin *plugin,
 	g_autoptr(GList) list_tmp = NULL;
 	g_autoptr(AsProfileTask) ptask = NULL;
 
-	ptask = as_profile_start_literal (plugin->profile, "packagekit-refine[source->licence]");
+	ptask = as_profile_start_literal (plugin->profile, "packagekit-refine[source->license]");
 	for (l = list; l != NULL; l = l->next) {
 		app = GS_APP (l->data);
 		if (gs_app_get_kind (app) == AS_APP_KIND_WEB_APP)
 			continue;
-		if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
 			continue;
 		if (gs_app_get_source_id_default (app) == NULL)
 			continue;
@@ -735,7 +778,7 @@ gs_plugin_refine_requires_package_id (GsApp *app, GsPluginRefineFlags flags)
 		return FALSE;
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_VERSION) > 0)
 		return TRUE;
-	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) > 0)
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENSE) > 0)
 		return TRUE;
 	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_URL) > 0)
 		return TRUE;
@@ -779,8 +822,10 @@ gs_plugin_packagekit_refine_distro_upgrade (GsPlugin *plugin,
 					    cancellable,
 					    gs_plugin_packagekit_progress_cb, &data,
 					    error);
-	if (results == NULL)
+	if (results == NULL) {
+		gs_plugin_packagekit_convert_gerror (error);
 		return FALSE;
+	}
 	if (!gs_plugin_packagekit_add_results (plugin, &list, results, error))
 		return FALSE;
 
@@ -835,7 +880,7 @@ gs_plugin_refine (GsPlugin *plugin,
 		app = GS_APP (l->data);
 		if (gs_app_get_kind (app) == AS_APP_KIND_WEB_APP)
 			continue;
-		if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
 			continue;
 		sources = gs_app_get_sources (app);
 		if (sources->len == 0)
@@ -903,7 +948,7 @@ gs_plugin_refine (GsPlugin *plugin,
 		app = GS_APP (l->data);
 		if (gs_app_get_state (app) != AS_APP_STATE_UPDATABLE)
 			continue;
-		if (g_strcmp0 (gs_app_get_management_plugin (app), "PackageKit") != 0)
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
 			continue;
 		if (gs_plugin_refine_requires_update_details (app, flags))
 			updatedetails_all = g_list_prepend (updatedetails_all, app);

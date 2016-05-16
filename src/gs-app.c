@@ -68,12 +68,13 @@ struct _GsApp
 	gchar			*summary_missing;
 	gchar			*description;
 	GsAppQuality		 description_quality;
+	GError			*last_error;
 	GPtrArray		*screenshots;
 	GPtrArray		*categories;
 	GPtrArray		*keywords;
 	GHashTable		*urls;
-	gchar			*licence;
-	GsAppQuality		 licence_quality;
+	gchar			*license;
+	GsAppQuality		 license_quality;
 	gchar			**menu_path;
 	gchar			*origin;
 	gchar			*origin_ui;
@@ -89,6 +90,7 @@ struct _GsApp
 	guint64			 size;
 	AsAppKind		 kind;
 	AsAppState		 state;
+	AsAppState		 state_recover;
 	guint			 progress;
 	GHashTable		*metadata;
 	GdkPixbuf		*pixbuf;
@@ -101,7 +103,7 @@ struct _GsApp
 	guint64			 kudos;
 	gboolean		 to_be_installed;
 	AsAppQuirk		 quirk;
-	gboolean		 licence_is_free;
+	gboolean		 license_is_free;
 	GsApp			*runtime;
 	GFile			*local_file;
 };
@@ -130,6 +132,34 @@ G_DEFINE_TYPE (GsApp, gs_app, G_TYPE_OBJECT)
 G_DEFINE_QUARK (gs-app-error-quark, gs_app_error)
 
 /**
+ * gs_app_kv_lpad:
+ **/
+static void
+gs_app_kv_lpad (GString *str, const gchar *key, const gchar *value)
+{
+	guint i;
+	g_string_append_printf (str, "  %s:", key);
+	for (i = strlen (key); i < 18; i++)
+		g_string_append (str, " ");
+	g_string_append_printf (str, " %s\n", value);
+}
+
+/**
+ * gs_app_kv_printf:
+ **/
+G_GNUC_PRINTF (3, 4)
+static void
+gs_app_kv_printf (GString *str, const gchar *key, const gchar *fmt, ...)
+{
+	va_list args;
+	g_autofree gchar *tmp = NULL;
+	va_start (args, fmt);
+	tmp = g_strdup_vprintf (fmt, args);
+	va_end (args);
+	gs_app_kv_lpad (str, key, tmp);
+}
+
+/**
  * gs_app_to_string:
  **/
 gchar *
@@ -146,108 +176,107 @@ gs_app_to_string (GsApp *app)
 	g_return_val_if_fail (GS_IS_APP (app), NULL);
 
 	str = g_string_new ("GsApp:\n");
-	g_string_append_printf (str, "\tkind:\t%s\n",
-				as_app_kind_to_string (app->kind));
-	g_string_append_printf (str, "\tcompulsory:\t%s\n",
-				gs_app_has_quirk (app, AS_APP_QUIRK_COMPULSORY)
-				? "True" : "False");
-	g_string_append_printf (str, "\tstate:\t%s\n",
-				as_app_state_to_string (app->state));
+	gs_app_kv_lpad (str, "kind", as_app_kind_to_string (app->kind));
+	if (app->last_error != NULL)
+		gs_app_kv_lpad (str, "last-error", app->last_error->message);
+	gs_app_kv_lpad (str, "compulsory",
+			gs_app_has_quirk (app, AS_APP_QUIRK_COMPULSORY)
+			? "True" : "False");
+	gs_app_kv_lpad (str, "state", as_app_state_to_string (app->state));
 	if (app->progress > 0)
-		g_string_append_printf (str, "\tprogress:\t%i%%\n", app->progress);
+		gs_app_kv_printf (str, "progress", "%i%%", app->progress);
 	if (app->id != NULL)
-		g_string_append_printf (str, "\tid:\t%s\n", app->id);
+		gs_app_kv_lpad (str, "id", app->id);
 	if ((app->kudos & GS_APP_KUDO_MY_LANGUAGE) > 0)
-		g_string_append (str, "\tkudo:\tmy-language\n");
+		gs_app_kv_lpad (str, "kudo", "my-language");
 	if ((app->kudos & GS_APP_KUDO_RECENT_RELEASE) > 0)
-		g_string_append (str, "\tkudo:\trecent-release\n");
+		gs_app_kv_lpad (str, "kudo", "recent-release");
 	if ((app->kudos & GS_APP_KUDO_FEATURED_RECOMMENDED) > 0)
-		g_string_append (str, "\tkudo:\tfeatured-recommended\n");
+		gs_app_kv_lpad (str, "kudo", "featured-recommended");
 	if ((app->kudos & GS_APP_KUDO_MODERN_TOOLKIT) > 0)
-		g_string_append (str, "\tkudo:\tmodern-toolkit\n");
+		gs_app_kv_lpad (str, "kudo", "modern-toolkit");
 	if ((app->kudos & GS_APP_KUDO_SEARCH_PROVIDER) > 0)
-		g_string_append (str, "\tkudo:\tsearch-provider\n");
+		gs_app_kv_lpad (str, "kudo", "search-provider");
 	if ((app->kudos & GS_APP_KUDO_INSTALLS_USER_DOCS) > 0)
-		g_string_append (str, "\tkudo:\tinstalls-user-docs\n");
+		gs_app_kv_lpad (str, "kudo", "installs-user-docs");
 	if ((app->kudos & GS_APP_KUDO_USES_NOTIFICATIONS) > 0)
-		g_string_append (str, "\tkudo:\tuses-notifications\n");
+		gs_app_kv_lpad (str, "kudo", "uses-notifications");
 	if ((app->kudos & GS_APP_KUDO_USES_APP_MENU) > 0)
-		g_string_append (str, "\tkudo:\tuses-app-menu\n");
+		gs_app_kv_lpad (str, "kudo", "uses-app-menu");
 	if ((app->kudos & GS_APP_KUDO_HAS_KEYWORDS) > 0)
-		g_string_append (str, "\tkudo:\thas-keywords\n");
+		gs_app_kv_lpad (str, "kudo", "has-keywords");
 	if ((app->kudos & GS_APP_KUDO_HAS_SCREENSHOTS) > 0)
-		g_string_append (str, "\tkudo:\thas-screenshots\n");
+		gs_app_kv_lpad (str, "kudo", "has-screenshots");
 	if ((app->kudos & GS_APP_KUDO_POPULAR) > 0)
-		g_string_append (str, "\tkudo:\tpopular\n");
+		gs_app_kv_lpad (str, "kudo", "popular");
 	if ((app->kudos & GS_APP_KUDO_IBUS_HAS_SYMBOL) > 0)
-		g_string_append (str, "\tkudo:\tibus-has-symbol\n");
+		gs_app_kv_lpad (str, "kudo", "ibus-has-symbol");
 	if ((app->kudos & GS_APP_KUDO_PERFECT_SCREENSHOTS) > 0)
-		g_string_append (str, "\tkudo:\tperfect-screenshots\n");
+		gs_app_kv_lpad (str, "kudo", "perfect-screenshots");
 	if ((app->kudos & GS_APP_KUDO_HIGH_CONTRAST) > 0)
-		g_string_append (str, "\tkudo:\thigh-contrast\n");
+		gs_app_kv_lpad (str, "kudo", "high-contrast");
 	if ((app->kudos & GS_APP_KUDO_HI_DPI_ICON) > 0)
-		g_string_append (str, "\tkudo:\thi-dpi-icon\n");
-	g_string_append_printf (str, "\tkudo-percentage:\t%i\n",
-				gs_app_get_kudos_percentage (app));
+		gs_app_kv_lpad (str, "kudo", "hi-dpi-icon");
+	gs_app_kv_printf (str, "kudo-percentage", "%i",
+			  gs_app_get_kudos_percentage (app));
 	if (app->name != NULL)
-		g_string_append_printf (str, "\tname:\t%s\n", app->name);
+		gs_app_kv_lpad (str, "name", app->name);
 	if (app->icon != NULL) {
-		g_string_append_printf (str, "\ticon-kind:\t%s\n",
-					as_icon_kind_to_string (as_icon_get_kind (app->icon)));
+		gs_app_kv_lpad (str, "icon-kind",
+				as_icon_kind_to_string (as_icon_get_kind (app->icon)));
 		if (as_icon_get_name (app->icon) != NULL)
-			g_string_append_printf (str, "\ticon-name:\t%s\n",
-						as_icon_get_name (app->icon));
+			gs_app_kv_lpad (str, "icon-name",
+					as_icon_get_name (app->icon));
 		if (as_icon_get_prefix (app->icon) != NULL)
-			g_string_append_printf (str, "\ticon-prefix:\t%s\n",
-						as_icon_get_prefix (app->icon));
+			gs_app_kv_lpad (str, "icon-prefix",
+					as_icon_get_prefix (app->icon));
 		if (as_icon_get_filename (app->icon) != NULL)
-			g_string_append_printf (str, "\ticon-filename:\t%s\n",
-						as_icon_get_filename (app->icon));
+			gs_app_kv_lpad (str, "icon-filename",
+					as_icon_get_filename (app->icon));
 	}
-	if (app->match_value != 0) {
-		g_string_append_printf (str, "\tmatch-value:\t%05x\n",
-					app->match_value);
-	}
+	if (app->match_value != 0)
+		gs_app_kv_printf (str, "match-value", "%05x", app->match_value);
 	if (app->version != NULL)
-		g_string_append_printf (str, "\tversion:\t%s\n", app->version);
+		gs_app_kv_lpad (str, "version", app->version);
 	if (app->version_ui != NULL)
-		g_string_append_printf (str, "\tversion-ui:\t%s\n", app->version_ui);
+		gs_app_kv_lpad (str, "version-ui", app->version_ui);
 	if (app->update_version != NULL)
-		g_string_append_printf (str, "\tupdate-version:\t%s\n", app->update_version);
+		gs_app_kv_lpad (str, "update-version", app->update_version);
 	if (app->update_version_ui != NULL)
-		g_string_append_printf (str, "\tupdate-version-ui:\t%s\n", app->update_version_ui);
-	if (app->update_details != NULL) {
-		g_string_append_printf (str, "\tupdate-details:\t%s\n",
-					app->update_details);
-	}
+		gs_app_kv_lpad (str, "update-version-ui", app->update_version_ui);
+	if (app->update_details != NULL)
+		gs_app_kv_lpad (str, "update-details", app->update_details);
 	if (app->update_urgency != AS_URGENCY_KIND_UNKNOWN) {
-		g_string_append_printf (str, "\tupdate-urgency:\t%i\n",
-					app->update_urgency);
+		gs_app_kv_printf (str, "update-urgency", "%i",
+				  app->update_urgency);
 	}
 	if (app->summary != NULL)
-		g_string_append_printf (str, "\tsummary:\t%s\n", app->summary);
+		gs_app_kv_lpad (str, "summary", app->summary);
 	if (app->description != NULL)
-		g_string_append_printf (str, "\tdescription:\t%s\n", app->description);
-	g_string_append_printf (str, "\tprovenance:\t%s\n",
-			        gs_app_has_quirk (app,
-						  AS_APP_QUIRK_PROVENANCE) ? "yes" : "no");
+		gs_app_kv_lpad (str, "description", app->description);
 	for (i = 0; i < app->screenshots->len; i++) {
+		g_autofree gchar *key = NULL;
 		ss = g_ptr_array_index (app->screenshots, i);
 		tmp = as_screenshot_get_caption (ss, NULL);
 		im = as_screenshot_get_image (ss, 0, 0);
 		if (im == NULL)
 			continue;
-		g_string_append_printf (str, "\tscreenshot-%02i:\t%s [%s]\n",
-					i, as_image_get_url (im),
-					tmp != NULL ? tmp : "<none>");
+		key = g_strdup_printf ("screenshot-%02i", i);
+		gs_app_kv_printf (str, key, "%s [%s]",
+				  as_image_get_url (im),
+				  tmp != NULL ? tmp : "<none>");
 	}
 	for (i = 0; i < app->sources->len; i++) {
+		g_autofree gchar *key = NULL;
 		tmp = g_ptr_array_index (app->sources, i);
-		g_string_append_printf (str, "\tsource-%02i:\t%s\n", i, tmp);
+		key = g_strdup_printf ("source-%02i", i);
+		gs_app_kv_lpad (str, key, tmp);
 	}
 	for (i = 0; i < app->source_ids->len; i++) {
+		g_autofree gchar *key = NULL;
 		tmp = g_ptr_array_index (app->source_ids, i);
-		g_string_append_printf (str, "\tsource-id-%02i:\t%s\n", i, tmp);
+		key = g_strdup_printf ("source-id-%02i", i);
+		gs_app_kv_lpad (str, key, tmp);
 	}
 	if (app->local_file != NULL) {
 		g_autofree gchar *fn = g_file_get_path (app->local_file);
@@ -255,66 +284,65 @@ gs_app_to_string (GsApp *app)
 	}
 	tmp = g_hash_table_lookup (app->urls, as_url_kind_to_string (AS_URL_KIND_HOMEPAGE));
 	if (tmp != NULL)
-		g_string_append_printf (str, "\turl{homepage}:\t%s\n", tmp);
-	if (app->licence != NULL)
-		g_string_append_printf (str, "\tlicence:\t%s\n", app->licence);
-	g_string_append_printf (str, "\topen source:\t%s\n",
-			        gs_app_get_license_is_free (app) ? "yes" : "no");
+		gs_app_kv_lpad (str, "url{homepage}", tmp);
+	if (app->license != NULL)
+		gs_app_kv_lpad (str, "license", app->license);
 	if (app->management_plugin != NULL)
-		g_string_append_printf (str, "\tmanagement-plugin:\t%s\n", app->management_plugin);
+		gs_app_kv_lpad (str, "management-plugin", app->management_plugin);
 	if (app->summary_missing != NULL)
-		g_string_append_printf (str, "\tsummary-missing:\t%s\n", app->summary_missing);
+		gs_app_kv_lpad (str, "summary-missing", app->summary_missing);
 	if (app->menu_path != NULL &&
 	    app->menu_path[0] != NULL &&
 	    app->menu_path[0][0] != '\0') {
 		g_autofree gchar *path = g_strjoinv (" → ", app->menu_path);
-		g_string_append_printf (str, "\tmenu-path:\t%s\n", path);
+		gs_app_kv_lpad (str, "menu-path", path);
 	}
 	if (app->origin != NULL && app->origin[0] != '\0')
-		g_string_append_printf (str, "\torigin:\t%s\n", app->origin);
+		gs_app_kv_lpad (str, "origin", app->origin);
 	if (app->origin_ui != NULL && app->origin_ui[0] != '\0')
-		g_string_append_printf (str, "\torigin-ui:\t%s\n", app->origin_ui);
+		gs_app_kv_lpad (str, "origin-ui", app->origin_ui);
 	if (app->rating != -1)
-		g_string_append_printf (str, "\trating:\t%i\n", app->rating);
+		gs_app_kv_printf (str, "rating", "%i", app->rating);
 	if (app->review_ratings != NULL) {
 		for (i = 0; i < app->review_ratings->len; i++) {
 			gint rat = g_array_index (app->review_ratings, gint, i);
-			g_string_append_printf (str, "\treview-rating:\t[%i:%i]\n",
-						i, rat);
+			gs_app_kv_printf (str, "review-rating", "[%i:%i]",
+					  i, rat);
 		}
 	}
 	if (app->reviews != NULL)
-		g_string_append_printf (str, "\treviews:\t%i\n", app->reviews->len);
+		gs_app_kv_printf (str, "reviews", "%i", app->reviews->len);
 	if (app->pixbuf != NULL)
-		g_string_append_printf (str, "\tpixbuf:\t%p\n", app->pixbuf);
+		gs_app_kv_printf (str, "pixbuf", "%p", app->pixbuf);
 	if (app->install_date != 0) {
-		g_string_append_printf (str, "\tinstall-date:\t%"
-					G_GUINT64_FORMAT "\n",
-					app->install_date);
+		gs_app_kv_printf (str, "install-date", "%"
+				  G_GUINT64_FORMAT "",
+				  app->install_date);
 	}
 	if (app->size != 0) {
-		g_string_append_printf (str, "\tsize:\t%" G_GUINT64_FORMAT "k\n",
-					app->size / 1024);
+		gs_app_kv_printf (str, "size", "%" G_GUINT64_FORMAT "k",
+				  app->size / 1024);
 	}
 	if (app->related->len > 0)
-		g_string_append_printf (str, "\trelated:\t%i\n", app->related->len);
+		gs_app_kv_printf (str, "related", "%i", app->related->len);
 	if (app->history->len > 0)
-		g_string_append_printf (str, "\thistory:\t%i\n", app->history->len);
+		gs_app_kv_printf (str, "history", "%i", app->history->len);
 	for (i = 0; i < app->categories->len; i++) {
 		tmp = g_ptr_array_index (app->categories, i);
-		g_string_append_printf (str, "\tcategory:\t%s\n", tmp);
+		gs_app_kv_lpad (str, "category", tmp);
 	}
 	if (app->keywords != NULL) {
 		for (i = 0; i < app->keywords->len; i++) {
 			tmp = g_ptr_array_index (app->keywords, i);
-			g_string_append_printf (str, "\tkeyword:\t%s\n", tmp);
+			gs_app_kv_lpad (str, "keyword", tmp);
 		}
 	}
 	keys = g_hash_table_get_keys (app->metadata);
 	for (l = keys; l != NULL; l = l->next) {
+		g_autofree gchar *key = NULL;
+		key = g_strdup_printf ("{%s}", (const gchar *) l->data);
 		tmp = g_hash_table_lookup (app->metadata, l->data);
-		g_string_append_printf (str, "\t{%s}:\t%s\n",
-					(const gchar *) l->data, tmp);
+		gs_app_kv_lpad (str, key, tmp);
 	}
 	g_list_free (keys);
 
@@ -417,6 +445,24 @@ gs_app_get_progress (GsApp *app)
 }
 
 /**
+ * gs_app_set_state_recover:
+ *
+ * Sets the application state to the last status value that was not
+ * transient.
+ */
+void
+gs_app_set_state_recover (GsApp *app)
+{
+	if (app->state_recover == AS_APP_STATE_UNKNOWN)
+		return;
+	if (app->state_recover == app->state)
+		return;
+	app->state = app->state_recover;
+	app->state_recover = AS_APP_STATE_UNKNOWN;
+	gs_app_queue_notify (app, "state");
+}
+
+/**
  * gs_app_set_state_internal:
  */
 static gboolean
@@ -466,6 +512,8 @@ gs_app_set_state_internal (GsApp *app, AsAppState state)
 		/* installing has to go into an stable state */
 		if (state == AS_APP_STATE_UNKNOWN ||
 		    state == AS_APP_STATE_INSTALLED ||
+		    state == AS_APP_STATE_UPDATABLE ||
+		    state == AS_APP_STATE_UPDATABLE_LIVE ||
 		    state == AS_APP_STATE_AVAILABLE)
 			state_change_ok = TRUE;
 		break;
@@ -521,6 +569,22 @@ gs_app_set_state_internal (GsApp *app, AsAppState state)
 	    state == AS_APP_STATE_AVAILABLE_LOCAL ||
 	    state == AS_APP_STATE_AVAILABLE)
 		app->install_date = 0;
+
+	/* save this to simplify error handling in the plugins */
+	switch (state) {
+	case AS_APP_STATE_INSTALLING:
+	case AS_APP_STATE_REMOVING:
+		/* transient, so ignore */
+		break;
+	default:
+		g_debug ("non-transient state now %s",
+			 as_app_state_to_string (state));
+		app->state_recover = state;
+
+		/* clear the error as the application has changed state */
+		g_clear_error (&app->last_error);
+		break;
+	}
 
 	return TRUE;
 }
@@ -1281,7 +1345,7 @@ const gchar *
 gs_app_get_license (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), NULL);
-	return app->licence;
+	return app->license;
 }
 
 /**
@@ -1291,7 +1355,7 @@ gboolean
 gs_app_get_license_is_free (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), FALSE);
-	return app->licence_is_free;
+	return app->license_is_free;
 }
 
 /**
@@ -1318,30 +1382,30 @@ gs_app_get_license_token_is_nonfree (const gchar *token)
  * gs_app_set_license:
  */
 void
-gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
+gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *license)
 {
 	GString *urld;
 	guint i;
 	g_auto(GStrv) tokens = NULL;
 
 	/* only save this if the data is sufficiently high quality */
-	if (quality <= app->licence_quality)
+	if (quality <= app->license_quality)
 		return;
-	app->licence_quality = quality;
+	app->license_quality = quality;
 
 	g_return_if_fail (GS_IS_APP (app));
 
 	/* assume free software until we find an unmatched SPDX token */
-	app->licence_is_free = TRUE;
+	app->license_is_free = TRUE;
 
 	/* tokenize the license string and URLify any SPDX IDs */
-	urld = g_string_sized_new (strlen (licence) + 1);
-	tokens = as_utils_spdx_license_tokenize (licence);
+	urld = g_string_sized_new (strlen (license) + 1);
+	tokens = as_utils_spdx_license_tokenize (license);
 	for (i = 0; tokens[i] != NULL; i++) {
 
 		/* translated join */
 		if (g_strcmp0 (tokens[i], "&") == 0) {
-			/* TRANSLATORS: This is how we join the licences and can
+			/* TRANSLATORS: This is how we join the licenses and can
 			 * be considered a "Conjunctive AND Operator" according
 			 * to the SPDX specification. For example:
 			 * "LGPL-2.1 and MIT and BSD-2-Clause" */
@@ -1349,7 +1413,7 @@ gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
 			continue;
 		}
 		if (g_strcmp0 (tokens[i], "|") == 0) {
-			/* TRANSLATORS: This is how we join the licences and can
+			/* TRANSLATORS: This is how we join the licenses and can
 			 * be considered a "Disjunctive OR Operator" according
 			 * to the SPDX specification. For example:
 			 * "LGPL-2.1 or MIT" */
@@ -1359,9 +1423,9 @@ gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
 
 		/* do the best we can */
 		if (gs_app_get_license_token_is_nonfree (tokens[i])) {
-			g_debug ("nonfree licence from %s: '%s'",
+			g_debug ("nonfree license from %s: '%s'",
 				 gs_app_get_id (app), tokens[i]);
-			app->licence_is_free = FALSE;
+			app->license_is_free = FALSE;
 		}
 
 		/* legacy literal text */
@@ -1427,8 +1491,8 @@ gs_app_set_license (GsApp *app, GsAppQuality quality, const gchar *licence)
 		g_string_append (urld, tokens[i]);
 	}
 
-	g_free (app->licence);
-	app->licence = g_string_free (urld, FALSE);
+	g_free (app->license);
+	app->license = g_string_free (urld, FALSE);
 }
 
 /**
@@ -1777,6 +1841,7 @@ void
 gs_app_set_metadata (GsApp *app, const gchar *key, const gchar *value)
 {
 	const gchar *found;
+	GString *str;
 
 	g_return_if_fail (GS_IS_APP (app));
 
@@ -1795,9 +1860,11 @@ gs_app_set_metadata (GsApp *app, const gchar *key, const gchar *value)
 			   key, found, value);
 		return;
 	}
+	str = g_string_new (value);
+	as_utils_string_replace (str, "@datadir@", DATADIR);
 	g_hash_table_insert (app->metadata,
 			     g_strdup (key),
-			     g_strdup (value));
+			     g_string_free (str, FALSE));
 }
 
 /**
@@ -1824,10 +1891,8 @@ gs_app_add_addon (GsApp *app, GsApp *addon)
 
 	id = gs_app_get_id (addon);
 	found = g_hash_table_lookup (app->addons_hash, id);
-	if (found != NULL) {
-		g_debug ("Already added %s as an addon", id);
+	if (found != NULL)
 		return;
-	}
 	g_hash_table_insert (app->addons_hash, g_strdup (id), GINT_TO_POINTER (1));
 
 	g_ptr_array_add (app->addons, g_object_ref (addon));
@@ -2092,102 +2157,6 @@ gs_app_add_quirk (GsApp *app, AsAppQuirk quirk)
 }
 
 /**
- * gs_app_subsume:
- *
- * Imports all the useful data from @other into @app.
- *
- * IMPORTANT: This method can be called from a thread as the notify signals
- * are not sent.
- **/
-void
-gs_app_subsume (GsApp *app, GsApp *other)
-{
-	const gchar *tmp;
-	GList *keys;
-	GList *l;
-	GsApp *app_tmp;
-	guint i;
-
-	g_return_if_fail (GS_IS_APP (app));
-	g_return_if_fail (GS_IS_APP (other));
-	g_return_if_fail (app != other);
-
-	/* an [updatable] installable package is more information than
-	 * just the fact that something is installed */
-	if (other->state == AS_APP_STATE_UPDATABLE &&
-	    app->state == AS_APP_STATE_INSTALLED) {
-		/* we have to do the little dance to appease the
-		 * angry gnome controlling the state-machine */
-		gs_app_set_state_internal (app, AS_APP_STATE_UNKNOWN);
-		gs_app_set_state_internal (app, AS_APP_STATE_UPDATABLE);
-	}
-
-	/* save any properties we already know */
-	if (other->id != NULL)
-		gs_app_set_id (app, other->id);
-	if (other->sources->len > 0)
-		gs_app_set_sources (app, other->sources);
-	if (other->project_group != NULL)
-		gs_app_set_project_group (app, other->project_group);
-	if (other->name != NULL)
-		gs_app_set_name (app, other->name_quality, other->name);
-	if (other->summary != NULL)
-		gs_app_set_summary (app, other->summary_quality, other->summary);
-	if (other->match_value != 0)
-		gs_app_set_match_value (app, other->match_value);
-	if (other->description != NULL)
-		gs_app_set_description (app, other->description_quality, other->description);
-	if (other->update_details != NULL)
-		gs_app_set_update_details (app, other->update_details);
-	if (other->management_plugin != NULL &&
-	    app->management_plugin != NULL &&
-	    g_strcmp0 (other->management_plugin, app->management_plugin) != 0) {
-		g_warning ("%s changing management plugin %s->%s",
-			   app->id,
-			   app->management_plugin,
-			   other->management_plugin);
-	}
-	if (other->update_urgency != AS_URGENCY_KIND_UNKNOWN)
-		gs_app_set_update_urgency (app, other->update_urgency);
-	if (other->update_version != NULL)
-		gs_app_set_update_version_internal (app, other->update_version);
-	if (other->pixbuf != NULL)
-		gs_app_set_pixbuf (app, other->pixbuf);
-	if (app->categories != other->categories) {
-		for (i = 0; i < other->categories->len; i++) {
-			tmp = g_ptr_array_index (other->categories, i);
-			gs_app_add_category (app, tmp);
-		}
-	}
-	if (other->licence != NULL) {
-		/* can't use setter as the incoming text is lost */
-		g_free (app->licence);
-		app->licence = g_strdup (other->licence);
-		app->licence_is_free = other->licence_is_free;
-	}
-	if (other->origin != NULL)
-		gs_app_set_origin (app, other->origin);
-	for (i = 0; i < other->related->len; i++) {
-		app_tmp = g_ptr_array_index (other->related, i);
-		gs_app_add_related (app, app_tmp);
-	}
-	app->kudos |= other->kudos;
-	app->quirk |= other->quirk;
-
-	/* copy metadata from @other to @app unless the app already has a key
-	 * of that name */
-	keys = g_hash_table_get_keys (other->metadata);
-	for (l = keys; l != NULL; l = l->next) {
-		tmp = g_hash_table_lookup (app->metadata, l->data);
-		if (tmp != NULL)
-			continue;
-		tmp = g_hash_table_lookup (other->metadata, l->data);
-		gs_app_set_metadata (app, l->data, tmp);
-	}
-	g_list_free (keys);
-}
-
-/**
  * gs_app_set_match_value:
  */
 void
@@ -2205,6 +2174,25 @@ gs_app_get_match_value (GsApp *app)
 {
 	g_return_val_if_fail (GS_IS_APP (app), 0);
 	return app->match_value;
+}
+
+/**
+ * gs_app_get_last_error:
+ */
+GError *
+gs_app_get_last_error (GsApp *app)
+{
+	return app->last_error;
+}
+
+/**
+ * gs_app_set_last_error:
+ */
+void
+gs_app_set_last_error (GsApp *app, GError *error)
+{
+	g_clear_error (&app->last_error);
+	app->last_error = g_error_copy (error);
 }
 
 /**
@@ -2315,6 +2303,7 @@ gs_app_dispose (GObject *object)
 	g_clear_object (&app->icon);
 	g_clear_object (&app->runtime);
 	g_clear_object (&app->pixbuf);
+	g_clear_object (&app->local_file);
 
 	g_clear_pointer (&app->addons, g_ptr_array_unref);
 	g_clear_pointer (&app->history, g_ptr_array_unref);
@@ -2337,7 +2326,7 @@ gs_app_finalize (GObject *object)
 	g_free (app->id);
 	g_free (app->name);
 	g_hash_table_unref (app->urls);
-	g_free (app->licence);
+	g_free (app->license);
 	g_strfreev (app->menu_path);
 	g_free (app->origin);
 	g_free (app->origin_ui);
@@ -2359,8 +2348,8 @@ gs_app_finalize (GObject *object)
 	g_ptr_array_unref (app->categories);
 	if (app->keywords != NULL)
 		g_ptr_array_unref (app->keywords);
-	if (app->local_file != NULL)
-		g_object_unref (app->local_file);
+	if (app->last_error != NULL)
+		g_error_free (app->last_error);
 
 	G_OBJECT_CLASS (gs_app_parent_class)->finalize (object);
 }

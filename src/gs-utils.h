@@ -65,6 +65,9 @@ gchar		*gs_utils_get_cachedir		(const gchar	*kind,
 						 GError		**error);
 gchar		*gs_utils_get_user_hash		(GError		**error);
 GPermission	*gs_utils_get_permission	(const gchar	*id);
+gboolean	 gs_utils_is_current_desktop	(const gchar	*name);
+
+gboolean	 gs_utils_is_current_desktop	(const gchar	*name);
 
 gboolean	 gs_utils_is_current_desktop	(const gchar	*name);
 

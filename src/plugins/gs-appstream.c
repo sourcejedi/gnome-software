@@ -263,6 +263,8 @@ gs_appstream_copy_metadata (GsApp *app, AsApp *item)
 	for (l = keys; l != NULL; l = l->next) {
 		const gchar *key = l->data;
 		const gchar *value = g_hash_table_lookup (hash, key);
+		if (gs_app_get_metadata_item (app, key) != NULL)
+			continue;
 		gs_app_set_metadata (app, key, value);
 	}
 }
@@ -319,12 +321,19 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 	const gchar *runtime = NULL;
 	guint i;
 
+	/* allow override */
+	management_plugin = as_app_get_metadata_item (item, "GnomeSoftware::Plugin");
+	if (management_plugin != NULL) {
+		gs_app_set_management_plugin (app, management_plugin);
+		return;
+	}
+
 	/* find the default bundle kind */
 	bundles = as_app_get_bundles (item);
 	for (i = 0; i < bundles->len; i++) {
 		AsBundle *bundle = g_ptr_array_index (bundles, i);
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_XDG_APP) {
-			management_plugin = "XgdApp";
+			management_plugin = "xdg-app";
 			gs_app_add_source (app, as_bundle_get_id (bundle));
 
 			/* automatically add runtime */
@@ -341,7 +350,7 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 			break;
 		}
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_LIMBA) {
-			management_plugin = "Limba";
+			management_plugin = "limba";
 			gs_app_add_source (app, as_bundle_get_id (bundle));
 			break;
 		}
@@ -350,7 +359,7 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 	/* fall back to PackageKit */
 	if (management_plugin == NULL &&
 	    as_app_get_pkgname_default (item) != NULL)
-		management_plugin = "PackageKit";
+		management_plugin = "packagekit";
 	if (management_plugin != NULL)
 		gs_app_set_management_plugin (app, management_plugin);
 }
@@ -382,7 +391,6 @@ gs_appstream_refine_app (GsPlugin *plugin,
 		switch (as_app_get_source_kind (item)) {
 		case AS_APP_SOURCE_KIND_APPDATA:
 		case AS_APP_SOURCE_KIND_DESKTOP:
-			gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 			break;
 		case AS_APP_SOURCE_KIND_METAINFO:
@@ -453,7 +461,7 @@ gs_appstream_refine_app (GsPlugin *plugin,
 		}
 	}
 
-	/* set licence */
+	/* set license */
 	if (as_app_get_project_license (item) != NULL && gs_app_get_license (app) == NULL)
 		gs_app_set_license (app,
 				    GS_APP_QUALITY_HIGHEST,
@@ -560,7 +568,6 @@ gs_appstream_refine_app (GsPlugin *plugin,
 			gs_app_add_kudo (app, GS_APP_KUDO_HI_DPI_ICON);
 			break;
 		default:
-			g_debug ("no idea how to handle kudo '%s'", tmp);
 			break;
 		}
 	}
@@ -572,7 +579,7 @@ gs_appstream_refine_app (GsPlugin *plugin,
 		if (tmp != NULL) {
 			g_autofree gchar *desc = NULL;
 			desc = as_markup_convert (tmp,
-						  AS_MARKUP_CONVERT_FORMAT_MARKDOWN,
+						  AS_MARKUP_CONVERT_FORMAT_SIMPLE,
 						  error);
 			if (desc == NULL)
 				return FALSE;
