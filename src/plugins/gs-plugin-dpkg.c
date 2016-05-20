@@ -102,6 +102,7 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	gs_app_set_url (app, AS_URL_KIND_HOMEPAGE, tokens[3]);
 	gs_app_set_summary (app, GS_APP_QUALITY_LOWEST, tokens[4]);
 	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
+	gs_app_set_management_plugin (app, "apt");
 
 	/* multiline text */
 	str = g_string_new ("");
