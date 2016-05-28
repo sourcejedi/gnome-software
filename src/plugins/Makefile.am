@@ -15,6 +15,8 @@ AM_CPPFLAGS =						\
 	$(OSTREE_CFLAGS)				\
 	$(FLATPAK_CFLAGS)				\
 	$(RPM_CFLAGS)					\
+	$(OAUTH_CFLAGS)					\
+	$(LIBSECRET_CFLAGS)				\
 	-DI_KNOW_THE_GNOME_SOFTWARE_API_IS_SUBJECT_TO_CHANGE	\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
@@ -42,7 +44,13 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_provenance-license.la		\
 	libgs_plugin_fedora-tagger-usage.la		\
 	libgs_plugin_epiphany.la			\
-	libgs_plugin_icons.la
+	libgs_plugin_icons.la				\
+	libgs_plugin_snappy.la
+
+if HAVE_APT
+plugin_LTLIBRARIES +=					\
+	libgs_plugin_apt.la
+endif
 
 if HAVE_PACKAGEKIT
 plugin_LTLIBRARIES +=					\
@@ -199,6 +207,27 @@ libgs_plugin_steam_la_LDFLAGS = -module -avoid-version
 libgs_plugin_steam_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
+if HAVE_APT
+ubuntu-unity-launcher-proxy.c ubuntu-unity-launcher-proxy.h: com.canonical.Unity.Launcher.xml Makefile
+	$(AM_V_GEN) gdbus-codegen --interface-prefix com.canonical.Unity.Launcher \
+	                 --generate-c-code ubuntu-unity-launcher-proxy \
+	                 --c-namespace UbuntuUnity \
+	                 --annotate 'com.canonical.Unity.Launcher' \
+	                            org.gtk.GDBus.C.Name \
+	                            Launcher \
+	                 $<
+
+CLEANFILES = ubuntu-unity-launcher-proxy.h ubuntu-unity-launcher-proxy.c
+
+libgs_plugin_apt_la_SOURCES = \
+	ubuntu-unity-launcher-proxy.c \
+	ubuntu-unity-launcher-proxy.h \
+	gs-plugin-apt.cc
+libgs_plugin_apt_la_LIBADD = $(GS_PLUGIN_LIBS) -lapt-pkg
+libgs_plugin_apt_la_LDFLAGS = -module -avoid-version
+libgs_plugin_apt_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+endif
+
 libgs_plugin_menu_spec_categories_la_SOURCES =		\
 	gs-plugin-menu-spec-categories.c		\
 	menu-spec-common.c				\
@@ -232,8 +261,20 @@ libgs_plugin_hardcoded_featured_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 if HAVE_UBUNTU_REVIEWS
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
-	gs-plugin-ubuntu-reviews.c
-libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(SQLITE_LIBS)
+	gs-plugin-ubuntu-reviews.c			\
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
+libgs_plugin_ubuntu_reviews_la_LIBADD =			\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(OAUTH_LIBS)					\
+	$(SQLITE_LIBS)					\
+	$(LIBSECRET_LIBS)
 libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
@@ -315,6 +356,22 @@ libgs_plugin_packagekit_proxy_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_packagekit_proxy_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
+libgs_plugin_snappy_la_SOURCES =			\
+	gs-plugin-snappy.c				\
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
+libgs_plugin_snappy_la_LIBADD =				\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(LIBSECRET_LIBS)
+libgs_plugin_snappy_la_LDFLAGS = -module -avoid-version
+libgs_plugin_snappy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+
 if ENABLE_TESTS
 check_PROGRAMS =						\
 	gs-self-test
@@ -331,5 +388,7 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 endif
+
+EXTRA_DIST = gs-ubuntuone-dialog.h gs-ubuntuone-dialog.ui ubuntu-one.png com.canonical.Unity.Launcher.xml
 
 -include $(top_srcdir)/git.mk

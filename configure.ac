@@ -11,6 +11,7 @@ AC_CONFIG_MACRO_DIR([m4])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_INSTALL
 LT_INIT
 AM_PROG_CC_C_O
@@ -68,6 +69,8 @@ PKG_CHECK_MODULES(SQLITE, sqlite3)
 PKG_CHECK_MODULES(SOUP, libsoup-2.4 >= 2.51.92)
 PKG_CHECK_MODULES(GSETTINGS_DESKTOP_SCHEMAS, gsettings-desktop-schemas >= 3.11.5)
 PKG_CHECK_MODULES(GNOME_DESKTOP, gnome-desktop-3.0 >= 3.17.92)
+PKG_CHECK_MODULES(OAUTH, oauth)
+PKG_CHECK_MODULES(LIBSECRET, libsecret-1)
 AC_PATH_PROG(APPSTREAM_UTIL, [appstream-util], [unfound])
 AC_ARG_ENABLE(man,
               [AS_HELP_STRING([--enable-man],
@@ -117,6 +120,30 @@ AS_IF([test "x$have_packagekit" = "xyes"], [
     ])
 ])
 AM_CONDITIONAL(HAVE_PACKAGEKIT, test "$have_packagekit" != no)
+
+# libapt
+AC_ARG_ENABLE(apt,
+              [AS_HELP_STRING([--enable-apt],
+                              [enable apt support [default=auto]])],,
+              enable_apt=maybe)
+AS_IF([test "x$enable_apt" != "xno"], [
+       AC_LANG_PUSH([C++])
+       AC_CHECK_HEADERS([apt-pkg/init.h],
+                        [have_apt=yes],
+                        [have_apt=no])
+       AC_LANG_POP
+], [
+    have_apt=no
+])
+
+AS_IF([test "x$have_apt" = "xyes"], [
+    AC_DEFINE(HAVE_APT,1,[Build apt support])
+], [
+    AS_IF([test "x$enable_apt" = "xyes"], [
+          AC_MSG_ERROR([apt support requested but 'libapt-pkg' was not found])
+    ])
+])
+AM_CONDITIONAL(HAVE_APT, test "$have_apt" != no)
 
 # PolicyKit
 AC_ARG_ENABLE(polkit,
@@ -334,6 +361,7 @@ echo "
         Dogtail:                   ${enable_dogtail}
         Self tests:                ${enable_tests}
         PackageKit support:        ${have_packagekit}
+        APT support:               ${have_apt}
         PolicyKit support:         ${have_polkit}
         Firmware support:          ${have_firmware}
         Limba support:             ${have_limba}

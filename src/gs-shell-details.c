@@ -84,6 +84,7 @@ struct _GsShellDetails
 	GtkWidget		*label_details_category_value;
 	GtkWidget		*label_details_developer_title;
 	GtkWidget		*label_details_developer_value;
+	GtkWidget		*label_details_license_title;
 	GtkWidget		*label_details_license_value;
 	GtkWidget		*label_details_origin_title;
 	GtkWidget		*label_details_origin_value;
@@ -91,6 +92,7 @@ struct _GsShellDetails
 	GtkWidget		*label_details_size_installed_value;
 	GtkWidget		*label_details_size_download_title;
 	GtkWidget		*label_details_size_download_value;
+	GtkWidget		*label_details_updated_title;
 	GtkWidget		*label_details_updated_value;
 	GtkWidget		*label_details_version_value;
 	GtkWidget		*label_failed;
@@ -841,12 +843,16 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 		/* TRANSLATORS: this is where the license is not known */
 		gtk_label_set_label (GTK_LABEL (self->label_details_license_value), C_("license", "Unknown"));
 		gtk_widget_set_tooltip_text (self->label_details_license_value, NULL);
+		gtk_widget_set_visible (self->label_details_license_title, FALSE);
+		gtk_widget_set_visible (self->label_details_license_value, FALSE);
 	} else {
 		g_autofree gchar *license_markup = NULL;
 		license_markup = gs_shell_details_get_license_markup (tmp);
 		gtk_label_set_markup (GTK_LABEL (self->label_details_license_value),
 				      license_markup);
 		gtk_widget_set_tooltip_text (self->label_details_license_value, NULL);
+		gtk_widget_set_visible (self->label_details_license_title, TRUE);
+		gtk_widget_set_visible (self->label_details_license_value, TRUE);
 	}
 
 	/* set version */
@@ -888,6 +894,8 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 	    updated == GS_APP_INSTALL_DATE_UNSET) {
 		/* TRANSLATORS: this is where the updated date is not known */
 		gtk_label_set_label (GTK_LABEL (self->label_details_updated_value), C_("updated", "Never"));
+		gtk_widget_set_visible (self->label_details_updated_title, FALSE);
+		gtk_widget_set_visible (self->label_details_updated_value, FALSE);
 	} else {
 		g_autoptr(GDateTime) dt = NULL;
 		g_autofree gchar *updated_str = NULL;
@@ -906,6 +914,12 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 			gtk_label_set_markup (GTK_LABEL (self->label_details_updated_value), url->str);
 			g_string_free (url, TRUE);
 		}
+
+		// Disabled on Ubuntu as we don't have history support
+		// gtk_widget_set_visible (self->label_details_updated_title, TRUE);
+		// gtk_widget_set_visible (self->label_details_updated_value, TRUE);
+		gtk_widget_set_visible (self->label_details_updated_title, FALSE);
+		gtk_widget_set_visible (self->label_details_updated_value, FALSE);
 	}
 
 	/* set the category */
@@ -1019,9 +1033,10 @@ gs_shell_details_refresh_all (GsShellDetails *self)
 
 	/* hide the kudo details for non-desktop software */
 	switch (gs_app_get_kind (self->app)) {
-	case AS_APP_KIND_DESKTOP:
+	// Hidden on Ubuntu since don't have appropriate information
+	/*case AS_APP_KIND_DESKTOP:
 		gtk_widget_set_visible (self->grid_details_kudo, TRUE);
-		break;
+		break;*/
 	default:
 		gtk_widget_set_visible (self->grid_details_kudo, FALSE);
 		break;
@@ -1814,6 +1829,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_category_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_developer_title);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_developer_value);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_license_title);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_license_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_origin_title);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_origin_value);
@@ -1821,6 +1837,7 @@ gs_shell_details_class_init (GsShellDetailsClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_size_download_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_size_installed_title);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_size_installed_value);
+	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_updated_title);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_updated_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_details_version_value);
 	gtk_widget_class_bind_template_child (widget_class, GsShellDetails, label_failed);

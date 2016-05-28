@@ -247,15 +247,97 @@ gs_application_dbus_unregister (GApplication    *application,
 }
 
 static void
+refreshed_cb (GObject      *source_object,
+	      GAsyncResult *res,
+	      gpointer      user_data)
+{
+	GsPluginLoader *loader = GS_PLUGIN_LOADER (source_object);
+
+	if (gs_plugin_loader_refresh_finish (loader, res, NULL)) {
+		gs_plugin_loader_refresh_async (loader,
+						0,
+						GS_PLUGIN_REFRESH_FLAGS_UI,
+						NULL,
+						NULL,
+						NULL);
+	}
+}
+
+static void
+start_refresh (GsApplication *app)
+{
+	g_action_group_activate_action (G_ACTION_GROUP (app),
+					"set-mode",
+					g_variant_new_string ("updates"));
+
+	gs_plugin_loader_refresh_async (gs_application_get_plugin_loader (app),
+					0,
+					GS_PLUGIN_REFRESH_FLAGS_METADATA |
+					GS_PLUGIN_REFRESH_FLAGS_PAYLOAD |
+					GS_PLUGIN_REFRESH_FLAGS_UI,
+					NULL,
+					refreshed_cb,
+					app);
+}
+
+#define APP_INFO_PATH "/var/lib/app-info"
+
+static gboolean
+needs_refresh (void)
+{
+	g_autoptr(GDir) dir = g_dir_open (APP_INFO_PATH, 0, NULL);
+
+	return dir == NULL || g_dir_read_name (dir) == NULL;
+}
+
+static gboolean
+ask_refresh (gpointer user_data)
+{
+	GsApplication *app = user_data;
+	GtkWindow *parent;
+	GtkWidget *dialog;
+
+	parent = gtk_application_get_active_window (GTK_APPLICATION (app));
+
+	if (gtk_widget_is_visible (GTK_WIDGET (parent))) {
+		dialog = gtk_message_dialog_new (parent,
+						 GTK_DIALOG_MODAL |
+						 GTK_DIALOG_DESTROY_WITH_PARENT,
+						 GTK_MESSAGE_QUESTION,
+						 GTK_BUTTONS_YES_NO,
+						 _("An update is needed to show all installable apps. Download now?"));
+
+		if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_YES)
+			start_refresh (app);
+
+		gtk_widget_destroy (dialog);
+	}
+
+	return G_SOURCE_REMOVE;
+}
+
+static void
+first_run_dialog_destroyed_cb (GtkWidget *object,
+			       gpointer   user_data)
+{
+	g_signal_handlers_disconnect_by_data (object, user_data);
+
+	if (needs_refresh ())
+		gdk_threads_add_idle (ask_refresh, user_data);
+}
+
+static void
 gs_application_show_first_run_dialog (GsApplication *app)
 {
 	GtkWidget *dialog;
 
 	if (g_settings_get_boolean (app->settings, "first-run") == TRUE) {
 		dialog = gs_first_run_dialog_new ();
+		g_signal_connect (dialog, "destroy", G_CALLBACK (first_run_dialog_destroyed_cb), app);
 		gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
 		g_settings_set_boolean (app->settings, "first-run", FALSE);
-	}
+	} else if (needs_refresh ())
+		gdk_threads_add_idle (ask_refresh, app);
 }
 
 static void
