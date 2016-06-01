@@ -89,9 +89,10 @@ gs_cmd_show_results_categories (GPtrArray *list)
 		parent = gs_category_get_parent (cat);
 		if (parent != NULL){
 			g_autofree gchar *id = NULL;
-			id = g_strdup_printf ("%s/%s",
+			id = g_strdup_printf ("%s/%s [%i]",
 					      gs_category_get_id (parent),
-					      gs_category_get_id (cat));
+					      gs_category_get_id (cat),
+					      gs_category_get_size (cat));
 			tmp = gs_cmd_pad_spaces (id, 32);
 			g_print ("%s : %s\n",
 				 tmp, gs_category_get_name (cat));
@@ -147,6 +148,8 @@ gs_cmd_refine_flag_from_string (const gchar *flag, GError **error)
 		return GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS;
 	if (g_strcmp0 (flag, "key-colors") == 0)
 		return GS_PLUGIN_REFINE_FLAGS_REQUIRE_KEY_COLORS;
+	if (g_strcmp0 (flag, "icon") == 0)
+		return GS_PLUGIN_REFINE_FLAGS_REQUIRE_ICON;
 	g_set_error (error,
 		     GS_PLUGIN_ERROR,
 		     GS_PLUGIN_ERROR_NOT_SUPPORTED,
@@ -430,13 +433,15 @@ main (int argc, char **argv)
 		}
 	} else if (argc == 3 && g_strcmp0 (argv[1], "get-category-apps") == 0) {
 		g_autoptr(GsCategory) category = NULL;
+		g_autoptr(GsCategory) parent = NULL;
 		g_auto(GStrv) split = NULL;
 		split = g_strsplit (argv[2], "/", 2);
-		category = gs_category_new (split[0]);
-		if (g_strv_length (split) == 2) {
-			g_autoptr(GsCategory) child = NULL;
-			child = gs_category_new (split[1]);
-			gs_category_add_child (category, child);
+		if (g_strv_length (split) == 1) {
+			category = gs_category_new (split[0]);
+		} else {
+			parent = gs_category_new (split[0]);
+			category = gs_category_new (split[1]);
+			gs_category_add_child (parent, category);
 		}
 		for (i = 0; i < repeat; i++) {
 			if (list != NULL)

@@ -2141,9 +2141,9 @@ gs_plugin_loader_category_sort_cb (gconstpointer a, gconstpointer b)
 	GsCategory *catb = GS_CATEGORY (*(GsCategory **) b);
 
 	/* addons always go last */
-	if (g_strcmp0 (gs_category_get_id (cata), "Addons") == 0)
+	if (g_strcmp0 (gs_category_get_id (cata), "addons") == 0)
 		return 1;
-	if (g_strcmp0 (gs_category_get_id (catb), "Addons") == 0)
+	if (g_strcmp0 (gs_category_get_id (catb), "addons") == 0)
 		return -1;
 
 	return g_strcmp0 (gs_category_get_name (cata),
@@ -2206,27 +2206,6 @@ gs_plugin_loader_get_categories_thread_cb (GTask *task,
 			continue;
 		}
 		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_FINISHED);
-	}
-
-	/* ensure they all have an 'All' category */
-	for (i = 0; i < state->catlist->len; i++) {
-		GsCategory *parent = GS_CATEGORY (g_ptr_array_index (state->catlist, i));
-		if (g_strcmp0 (gs_category_get_id (parent), "Addons") == 0)
-			continue;
-		if (gs_category_find_child (parent, "all") == NULL) {
-			g_autoptr(GsCategory) child = NULL;
-			child = gs_category_new ("all");
-			gs_category_add_child (parent, child);
-			/* this is probably valid... */
-			gs_category_set_size (child, gs_category_get_size (parent));
-		}
-		if (gs_category_find_child (parent, "featured") == NULL) {
-			g_autoptr(GsCategory) child = NULL;
-			child = gs_category_new ("featured");
-			gs_category_add_child (parent, child);
-			/* this is probably valid... */
-			gs_category_set_size (child, 5);
-		}
 	}
 
 	/* sort by name */

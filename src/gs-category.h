@@ -49,6 +49,12 @@ GPtrArray	*gs_category_get_key_colors	(GsCategory	*category);
 void		 gs_category_add_key_color	(GsCategory	*category,
 						 const GdkRGBA	*key_color);
 
+GPtrArray	*gs_category_get_tags		(GsCategory	*category);
+gboolean	 gs_category_has_tag		(GsCategory	*category,
+						 const gchar	*tag);
+void		 gs_category_add_tag		(GsCategory	*category,
+						 const gchar	*tag);
+
 GsCategory	*gs_category_find_child		(GsCategory	*category,
 						 const gchar	*id);
 GPtrArray	*gs_category_get_children	(GsCategory	*category);

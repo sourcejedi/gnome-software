@@ -43,6 +43,7 @@ struct _GsCategory
 	gchar		*icon;
 	gboolean	 important;
 	GPtrArray	*key_colors;
+	GPtrArray	*tags;
 	GsCategory	*parent;
 	guint		 size;
 	GPtrArray	*children;
@@ -267,6 +268,65 @@ gs_category_add_key_color (GsCategory *category, const GdkRGBA *key_color)
 }
 
 /**
+ * gs_category_get_tags:
+ * @category: a #GsCategory
+ *
+ * Gets the list of AppStream tags for the category.
+ *
+ * Returns: (element-type utf8) (transfer none): An array
+ **/
+GPtrArray *
+gs_category_get_tags (GsCategory *category)
+{
+	g_return_val_if_fail (GS_IS_CATEGORY (category), NULL);
+	return category->tags;
+}
+
+/**
+ * gs_category_has_tag:
+ * @category: a #GsCategory
+ * @tag: a tag found in AppStream, e.g. "AudioVisual::Player"
+ *
+ * Finds out if the category has the specific AppStream tag pair.
+ *
+ * Returns: %TRUE if found, %FALSE otherwise
+ **/
+gboolean
+gs_category_has_tag (GsCategory *category, const gchar *tag)
+{
+	guint i;
+
+	g_return_val_if_fail (GS_IS_CATEGORY (category), FALSE);
+	g_return_val_if_fail (tag != NULL, FALSE);
+
+	for (i = 0; i < category->tags->len; i++) {
+		const gchar *tag_tmp = g_ptr_array_index (category->tags, i);
+		if (g_strcmp0 (tag_tmp, tag) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/**
+ * gs_category_add_tag:
+ * @category: a #GsCategory
+ * @tag: a tag found in AppStream, e.g. "AudioVisual::Player"
+ *
+ * Adds a tag pair to the category.
+ **/
+void
+gs_category_add_tag (GsCategory *category, const gchar *tag)
+{
+	g_return_if_fail (GS_IS_CATEGORY (category));
+	g_return_if_fail (tag != NULL);
+
+	/* add if not already found */
+	if (gs_category_has_tag (category, tag))
+		return;
+	g_ptr_array_add (category->tags, g_strdup (tag));
+}
+
+/**
  * gs_category_find_child:
  * @category: a #GsCategory
  * @id: a category ID, e.g. "other"
@@ -396,6 +456,7 @@ gs_category_finalize (GObject *object)
 		                              (gpointer *) &category->parent);
 	g_ptr_array_unref (category->children);
 	g_ptr_array_unref (category->key_colors);
+	g_ptr_array_unref (category->tags);
 	g_free (category->id);
 	g_free (category->name);
 	g_free (category->icon);
@@ -415,6 +476,7 @@ gs_category_init (GsCategory *category)
 {
 	category->children = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 	category->key_colors = g_ptr_array_new_with_free_func ((GDestroyNotify) gdk_rgba_free);
+	category->tags = g_ptr_array_new_with_free_func (g_free);
 }
 
 /**
