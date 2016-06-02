@@ -136,7 +136,7 @@ gs_app_notify_installed (GsApp *app)
 	 * has been successfully installed */
 	summary = g_strdup_printf (_("%s is now installed"), gs_app_get_name (app));
 	n = g_notification_new (summary);
-	if (gs_app_get_kind (app) == AS_APP_KIND_DESKTOP) {
+	if (gs_app_get_kind (app) == AS_APP_KIND_DESKTOP && !gs_utils_is_current_desktop ("Unity")) {
 		/* TRANSLATORS: this is button that opens the newly installed application */
 		g_notification_add_button_with_target (n, _("Launch"),
 						       "app.launch", "s",
