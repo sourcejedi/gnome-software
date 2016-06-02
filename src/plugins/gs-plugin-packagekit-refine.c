@@ -341,21 +341,6 @@ gs_plugin_packagekit_refine_from_desktop (GsPlugin *plugin,
 static gchar *
 gs_plugin_packagekit_fixup_update_description (const gchar *text)
 {
-	gchar *tmp;
-	g_autoptr(GsMarkdown) markdown = NULL;
-
-	/* nothing to do */
-	if (text == NULL)
-		return NULL;
-
-	/* try to parse */
-	markdown = gs_markdown_new (GS_MARKDOWN_OUTPUT_TEXT);
-	gs_markdown_set_smart_quoting (markdown, FALSE);
-	gs_markdown_set_autocode (markdown, FALSE);
-	gs_markdown_set_autolinkify (markdown, FALSE);
-	tmp = gs_markdown_parse (markdown, text);
-	if (tmp != NULL)
-		return tmp;
 	return g_strdup (text);
 }
 
