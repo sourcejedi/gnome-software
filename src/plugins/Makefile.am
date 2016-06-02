@@ -15,6 +15,7 @@ AM_CPPFLAGS =						\
 	$(OSTREE_CFLAGS)				\
 	$(FLATPAK_CFLAGS)				\
 	$(RPM_CFLAGS)					\
+	$(OAUTH_CFLAGS)					\
 	$(LIBSECRET_CFLAGS)				\
 	-DI_KNOW_THE_GNOME_SOFTWARE_API_IS_SUBJECT_TO_CHANGE	\
 	-DBINDIR=\"$(bindir)\"				\
@@ -260,8 +261,20 @@ libgs_plugin_hardcoded_featured_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 if HAVE_UBUNTU_REVIEWS
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
-	gs-plugin-ubuntu-reviews.c
-libgs_plugin_ubuntu_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(SOUP_LIBS) $(JSON_GLIB_LIBS) $(SQLITE_LIBS)
+	gs-plugin-ubuntu-reviews.c			\
+	gs-ubuntuone.h					\
+	gs-ubuntuone.c					\
+	gs-ubuntuone-dialog.h				\
+	gs-ubuntuone-dialog.c				\
+	gs-ubuntu-snapd.h				\
+	gs-ubuntu-snapd.c
+libgs_plugin_ubuntu_reviews_la_LIBADD =			\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)				\
+	$(OAUTH_LIBS)					\
+	$(SQLITE_LIBS)					\
+	$(LIBSECRET_LIBS)
 libgs_plugin_ubuntu_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_ubuntu_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
