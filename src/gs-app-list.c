@@ -258,9 +258,10 @@ gs_app_list_filter_duplicates (GsAppList *list)
 {
 	guint i;
 	GsApp *app;
-	GsApp *found;
-	const gchar *id;
+	GsApp *found, *found_source;
+	const gchar *id, *source;
 	g_autoptr(GHashTable) hash = NULL;
+	g_autoptr(GHashTable) source_hash = NULL;
 	g_autoptr(GsAppList) old = NULL;
 
 	g_return_if_fail (GS_IS_APP_LIST (list));
@@ -271,18 +272,24 @@ gs_app_list_filter_duplicates (GsAppList *list)
 
 	/* create a new list with just the unique items */
 	hash = g_hash_table_new (g_str_hash, g_str_equal);
+	source_hash = g_hash_table_new (g_str_hash, g_str_equal);
 	for (i = 0; i < old->array->len; i++) {
 		app = gs_app_list_index (old, i);
 		id = gs_app_get_id (app);
+		source = gs_app_get_source_default (app);
 		if (id == NULL) {
 			gs_app_list_add (list, app);
 			continue;
 		}
 		found = g_hash_table_lookup (hash, id);
-		if (found == NULL) {
+		found_source = source != NULL ? g_hash_table_lookup (source_hash, source) : NULL;
+		if (found == NULL && found_source == NULL) {
 			gs_app_list_add (list, app);
 			g_hash_table_insert (hash, (gpointer) id,
 					     GUINT_TO_POINTER (1));
+			if (source != NULL)
+				g_hash_table_insert (source_hash, (gpointer) source,
+						     GUINT_TO_POINTER (1));
 			continue;
 		}
 		g_debug ("ignoring duplicate %s", id);
