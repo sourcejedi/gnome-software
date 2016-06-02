@@ -216,6 +216,21 @@ gs_plugin_setup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 	return TRUE;
 }
 
+gboolean
+gs_plugin_refresh (GsPlugin              *plugin,
+		   guint                  cache_age,
+		   GsPluginRefreshFlags   flags,
+		   GCancellable          *cancellable,
+		   GError               **error)
+{
+	if (flags & GS_PLUGIN_REFRESH_FLAGS_UI) {
+		gs_plugin_setup (plugin, cancellable, error);
+		gs_plugin_updates_changed (plugin);
+	}
+
+	return TRUE;
+}
+
 static gboolean
 gs_plugin_refine_from_id (GsPlugin *plugin,
 			  GsApp *app,
