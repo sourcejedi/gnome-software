@@ -15,6 +15,7 @@ AM_CPPFLAGS =						\
 	$(OSTREE_CFLAGS)				\
 	$(FLATPAK_CFLAGS)				\
 	$(RPM_CFLAGS)					\
+	$(LIBSECRET_CFLAGS)				\
 	-DI_KNOW_THE_GNOME_SOFTWARE_API_IS_SUBJECT_TO_CHANGE	\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
@@ -331,5 +332,7 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 endif
+
+EXTRA_DIST = gs-ubuntuone-dialog.h gs-ubuntuone-dialog.ui ubuntu-one.png
 
 -include $(top_srcdir)/git.mk
