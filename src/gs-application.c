@@ -332,6 +332,8 @@ gs_application_show_first_run_dialog (GsApplication *app)
 		g_signal_connect (dialog, "destroy", G_CALLBACK (first_run_dialog_destroyed_cb), app);
 		gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
 		g_settings_set_boolean (app->settings, "first-run", FALSE);
+		g_signal_connect_swapped (dialog, "response",
+					  G_CALLBACK (gtk_widget_destroy), dialog);
 	} else if (needs_refresh ())
 		gdk_threads_add_idle (ask_refresh, app);
 }
@@ -460,6 +462,10 @@ about_activated (GSimpleAction *action,
 						 "software on your system."));
 
 	gs_shell_modal_dialog_present (app->shell, GTK_DIALOG (dialog));
+
+	/* just destroy */
+	g_signal_connect_swapped (dialog, "response",
+				  G_CALLBACK (gtk_widget_destroy), dialog);
 }
 
 static void
