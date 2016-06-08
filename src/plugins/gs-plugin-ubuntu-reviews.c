@@ -254,7 +254,7 @@ get_rating (gint64 one_star_count, gint64 two_star_count, gint64 three_star_coun
 	return (((wilson_score (one_star_count, n_ratings, 0.1) * -2) +
 		 (wilson_score (two_star_count, n_ratings, 0.1) * -1) +
 		 (wilson_score (four_star_count, n_ratings, 0.1) * 1) +
-		 (wilson_score (five_star_count, n_ratings, 0.1) * 2)) + 3) * 20;
+		 (wilson_score (five_star_count, n_ratings, 0.1) * 2)) + 3) * 20 - 10;
 }
 
 static gboolean
@@ -634,7 +634,7 @@ parse_review (GsPlugin *plugin, JsonNode *node)
 	gs_review_set_version (review, json_object_get_string_member (object, "version"));
 	star_rating = json_object_get_int_member (object, "rating");
 	if (star_rating > 0)
-		gs_review_set_rating (review, star_rating * 20);
+		gs_review_set_rating (review, star_rating * 20 - 10);
 	gs_review_set_date (review, parse_date_time (json_object_get_string_member (object, "date_created")));
 	id_string = g_strdup_printf ("%" G_GINT64_FORMAT, json_object_get_int_member (object, "id"));
 	gs_review_add_metadata (review, "ubuntu-id", id_string);
