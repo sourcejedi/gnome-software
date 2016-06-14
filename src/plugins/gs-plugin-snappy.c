@@ -40,6 +40,18 @@ gs_plugin_get_name (void)
 	return "snappy";
 }
 
+const gchar **
+gs_plugin_order_after (GsPlugin *plugin)
+{
+	static const gchar *deps[] = {
+		"moduleset",
+		"ubuntu-reviews",
+		NULL
+	};
+
+	return deps;
+}
+
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
@@ -249,11 +261,27 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 	guint status_code;
 	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
 	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root, *result;
+	JsonObject *root;
+	JsonNode *result;
+	JsonArray *result_array;
+	JsonObject *result_object;
+	JsonNode *result_element;
+	guint i;
 
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
 	if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
+
+	if (status_code == SOUP_STATUS_NOT_FOUND) {
+		g_clear_pointer (&path, g_free);
+		g_clear_pointer (&reason_phrase, g_free);
+		g_clear_pointer (&response_type, g_free);
+		g_clear_pointer (&response, g_free);
+
+		path = g_strdup_printf ("/v2/find?q=%s", gs_app_get_id (app));
+		if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+			return FALSE;
+	}
 
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
@@ -267,7 +295,7 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 	if (parser == NULL)
 		return FALSE;
 	root = json_node_get_object (json_parser_get_root (parser));
-	result = json_object_get_object_member (root, "result");
+	result = json_object_get_member (root, "result");
 	if (result == NULL) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
@@ -276,7 +304,22 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 		return FALSE;
 	}
 
-	refine_app (plugin, app, result);
+	if (JSON_NODE_HOLDS_ARRAY (result)) {
+		result_array = json_node_get_array (result);
+		for (i = 0; i < json_array_get_length (result_array); i++) {
+			result_element = json_array_get_element (result_array, i);
+			if (!JSON_NODE_HOLDS_OBJECT (result_element))
+				continue;
+			result_object = json_node_get_object (result_element);
+			if (g_strcmp0 (json_object_get_string_member (result_object, "name"), gs_app_get_id (app)) == 0) {
+				refine_app (plugin, app, result_object);
+				break;
+			}
+		}
+	} else if (JSON_NODE_HOLDS_OBJECT (result)) {
+		result_object = json_node_get_object (result);
+		refine_app (plugin, app, result_object);
+	}
 
 	return TRUE;
 }
@@ -484,4 +527,46 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 	return result;
+}
+
+gboolean
+gs_plugin_add_popular (GsPlugin *plugin,
+		       GList **list,
+		       GCancellable *cancellable,
+		       GError **error)
+{
+	static const gchar *snaps[] = {
+		"notes",
+		"jenkins",
+		"cassandra",
+		"shout"
+	};
+
+	GList *popular_list = NULL;
+	GList *link;
+	guint i;
+	guint j;
+
+	for (i = 0; i < sizeof(snaps) / sizeof(snaps[0]); i++) {
+		GsApp *app = gs_app_new (snaps[i]);
+		gs_app_set_management_plugin (app, "snappy");
+		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_LAUNCHABLE);
+		get_app (plugin, app, NULL);
+		popular_list = g_list_append (popular_list, app);
+	}
+
+	for (i = sizeof(snaps) / sizeof(snaps[0]); i < 7 && *list != NULL; i++) {
+		j = g_random_int_range (0, g_list_length (*list));
+		link = g_list_nth (*list, j);
+		popular_list = g_list_append (popular_list, link->data);
+		*list = g_list_delete_link (*list, link);
+	}
+
+	g_list_free_full (*list, g_object_unref);
+	*list = popular_list;
+
+	return TRUE;
 }
