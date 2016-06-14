@@ -46,6 +46,7 @@ gs_plugin_order_after (GsPlugin *plugin)
 	static const gchar *deps[] = {
 		"moduleset",
 		"ubuntu-reviews",
+		"hardcoded-featured",
 		NULL
 	};
 
@@ -527,6 +528,38 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 
 	return result;
+}
+
+gboolean
+gs_plugin_add_featured (GsPlugin *plugin,
+			GList **list,
+			GCancellable *cancellable,
+			GError **error)
+{
+	const gchar *snap = "shout";
+	GsApp *app = gs_app_new (snap);
+	g_autofree gchar *background;
+
+	background = g_strdup_printf ("url('%s/gnome-software/featured-shout.svg') "
+				      "10%% center / 40%% auto no-repeat, "
+				      "linear-gradient(to bottom, #455164, #6a7c99)", DATADIR);
+
+	gs_app_set_management_plugin (app, "snappy");
+	gs_app_set_origin (app, _("Ubuntu Snappy Store"));
+	gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+	gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+	gs_app_add_quirk (app, AS_APP_QUIRK_NOT_LAUNCHABLE);
+	gs_app_add_kudo (app, GS_APP_KUDO_FEATURED_RECOMMENDED);
+	gs_app_set_metadata (app, "Featured::background", background);
+	gs_app_set_metadata (app, "Featured::stroke-color", "#000000");
+	gs_app_set_metadata (app, "Featured::text-color", "#ffffff");
+	gs_app_set_metadata (app, "Featured::text-shadow", "0 1px 1px rgba(0,0,0,0.5)");
+
+	get_app (plugin, app, NULL);
+	g_list_free_full (*list, g_object_unref);
+	*list = g_list_append (NULL, app);
+
+	return TRUE;
 }
 
 gboolean
