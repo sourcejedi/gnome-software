@@ -76,8 +76,10 @@ if HAVE_LIMBA
 plugin_LTLIBRARIES += libgs_plugin_limba.la
 endif
 
+if HAVE_XDG_APP
 if HAVE_ODRS
 plugin_LTLIBRARIES += libgs_plugin_xdg_app_reviews.la
+endif
 endif
 
 libgs_plugin_dummy_la_SOURCES = gs-plugin-dummy.c
@@ -141,10 +143,12 @@ libgs_plugin_xdg_app_la_LIBADD = $(GS_PLUGIN_LIBS) $(XDG_APP_LIBS)
 libgs_plugin_xdg_app_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
+if HAVE_ODRS
 libgs_plugin_xdg_app_reviews_la_SOURCES = gs-plugin-xdg-app-reviews.c
 libgs_plugin_xdg_app_reviews_la_LIBADD = $(GS_PLUGIN_LIBS) $(JSON_GLIB_LIBS)
 libgs_plugin_xdg_app_reviews_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_reviews_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+endif
 endif
 
 if HAVE_APT
