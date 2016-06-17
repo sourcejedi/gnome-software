@@ -120,7 +120,7 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package)
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 		size = json_object_get_int_member (package, "download-size");
 	}
-	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "summary"));
+	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
 	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
 	gs_app_set_version (app, json_object_get_string_member (package, "version"));
 	if (size > 0)
