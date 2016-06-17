@@ -19,7 +19,6 @@ dist_resources_DATA =					\
 	featured-maps-bg.png        \
 	featured-mypaint.png				\
 	featured-polari.svg				\
-	featured-shout.svg				\
 	featured-transmission.png			\
 	featured-weather.png				\
 	featured-weather-bg.png
