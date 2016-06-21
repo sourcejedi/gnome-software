@@ -212,8 +212,8 @@ libgs_plugin_ubuntu_reviews_la_SOURCES =		\
 	gs-ubuntuone.c					\
 	gs-ubuntuone-dialog.h				\
 	gs-ubuntuone-dialog.c				\
-	gs-ubuntu-snapd.h				\
-	gs-ubuntu-snapd.c
+	gs-snapd.h					\
+	gs-snapd.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\
 	$(GS_PLUGIN_LIBS)				\
 	$(SOUP_LIBS)					\
@@ -286,8 +286,8 @@ libgs_plugin_snappy_la_SOURCES =			\
 	gs-ubuntuone.c					\
 	gs-ubuntuone-dialog.h				\
 	gs-ubuntuone-dialog.c				\
-	gs-ubuntu-snapd.h				\
-	gs-ubuntu-snapd.c
+	gs-snapd.h					\
+	gs-snapd.c
 libgs_plugin_snappy_la_LIBADD =				\
 	$(GS_PLUGIN_LIBS)				\
 	$(SOUP_LIBS)					\

@@ -22,10 +22,10 @@
 #include <gs-plugin.h>
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
-#include "gs-ubuntu-snapd.h"
+#include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
-// snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
+// snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
 
 #define SNAPD_SOCKET "/run/snapd.socket"
 
@@ -230,7 +230,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 
 		app = gs_app_new (id);
 		gs_app_set_management_plugin (app, "snappy");
-		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
+		gs_app_set_origin (app, _("Snappy Store"));
 		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
 		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_LAUNCHABLE);

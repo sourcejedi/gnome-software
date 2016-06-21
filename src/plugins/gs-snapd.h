@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef __GS_UBUNTU_SNAPD_H__
-#define __GS_UBUNTU_SNAPD_H__
+#ifndef __GS_SNAPD_H__
+#define __GS_SNAPD_H__
 
 #include <gio/gio.h>
 
@@ -38,4 +38,4 @@ gboolean send_snapd_request (const gchar  *method,
 			     gsize        *response_length,
 			     GError      **error);
 
-#endif /* __GS_UBUNTU_SNAPD_H__ */
+#endif /* __GS_SNAPD_H__ */

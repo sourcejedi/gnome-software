@@ -24,12 +24,12 @@
 #include <gs-plugin.h>
 #include <libsoup/soup.h>
 #include <gio/gunixsocketaddress.h>
-#include "gs-ubuntu-snapd.h"
+#include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
 #define SNAPD_SOCKET_PATH "/run/snapd.socket"
 
-// snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
+// snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
 
 static GSocket *
 open_snapd_socket (GError **error)
