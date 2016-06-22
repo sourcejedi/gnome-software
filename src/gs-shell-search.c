@@ -258,7 +258,7 @@ gs_shell_search_get_app_sort_key (GsApp *app)
 	key = g_string_sized_new (64);
 
 	/* sort snaps before other apps */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") == 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") == 0)
 		g_string_append (key, "9:");
 	else
 		g_string_append (key, "1:");

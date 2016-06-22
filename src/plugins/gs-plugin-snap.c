@@ -37,7 +37,7 @@ typedef gboolean (*AppFilterFunc)(const gchar *id, JsonObject *object, gpointer 
 const gchar *
 gs_plugin_get_name (void)
 {
-	return "snappy";
+	return "snap";
 }
 
 void
@@ -244,7 +244,7 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 			continue;
 
 		app = gs_app_new (id);
-		gs_app_set_management_plugin (app, "snappy");
+		gs_app_set_management_plugin (app, "snap");
 		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
 		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
@@ -341,7 +341,7 @@ gs_plugin_refine (GsPlugin *plugin,
 	for (link = *list; link; link = link->next) {
 		GsApp *app = link->data;
 
-		if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 			continue;
 
 		// Get info from snapd
@@ -468,7 +468,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 	gboolean result;
 
 	/* We can only install apps we know of */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
@@ -492,7 +492,7 @@ gs_plugin_launch (GsPlugin *plugin,
 	g_autoptr(GAppInfo) info = NULL;
 
 	/* We can only launch apps we know of */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	launch_name = gs_app_get_metadata_item (app, "snap::launch-name");
@@ -523,7 +523,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 	gboolean result;
 
 	/* We can only remove apps we know of */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "snappy") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
