@@ -24,18 +24,20 @@
 
 #include <gio/gio.h>
 
-gboolean send_snapd_request (const gchar  *method,
-			     const gchar  *path,
-			     const gchar  *content,
-			     gboolean      authenticate,
-			     GVariant     *macaroon,
-			     gboolean      retry_after_login,
-			     GVariant    **out_macaroon,
-			     guint        *status_code,
-			     gchar       **reason_phrase,
-			     gchar       **response_type,
-			     gchar       **response,
-			     gsize        *response_length,
-			     GError      **error);
+gboolean gs_snapd_exists	(void);
+
+gboolean gs_snapd_request	(const gchar	*method,
+				 const gchar	*path,
+				 const gchar	*content,
+				 gboolean	 authenticate,
+				 GVariant	*macaroon,
+				 gboolean	 retry_after_login,
+				 GVariant	**out_macaroon,
+				 guint		*status_code,
+				 gchar		**reason_phrase,
+				 gchar		**response_type,
+				 gchar		**response,
+				 gsize		*response_length,
+				 GError		**error);
 
 #endif /* __GS_SNAPD_H__ */

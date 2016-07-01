@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2015 Canonical Ltd
+ * Copyright (C) 2015-2016 Canonical Ltd
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -25,10 +25,6 @@
 #include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
-// snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
-
-#define SNAPD_SOCKET "/run/snapd.socket"
-
 struct GsPluginPrivate {
 };
 
@@ -46,9 +42,9 @@ gs_plugin_initialize (GsPlugin *plugin)
 	/* create private area */
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
 
-	if (!g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS)) {
-		g_debug ("disabling '%s' as no %s available",
-			 plugin->name, SNAPD_SOCKET);
+	if (!gs_snapd_exists ()) {
+		g_debug ("disabling '%s' as snapd not running",
+			 gs_plugin_get_name ());
 		gs_plugin_set_enabled (plugin, FALSE);
 	}
 }
@@ -57,7 +53,7 @@ static JsonParser *
 parse_result (const gchar *response, const gchar *response_type, GError **error)
 {
 	g_autoptr(JsonParser) parser = NULL;
-	g_autoptr(GError) sub_error = NULL;
+	g_autoptr(GError) error_local = NULL;
 
 	if (response_type == NULL) {
 		g_set_error_literal (error,
@@ -75,11 +71,12 @@ parse_result (const gchar *response, const gchar *response_type, GError **error)
 	}
 
 	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, response, -1, &sub_error)) {
+	if (!json_parser_load_from_data (parser, response, -1, &error_local)) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to parse snapd response: %s", sub_error->message);
+			     "Unable to parse snapd response: %s",
+			     error_local->message);
 		return NULL;
 	}
 	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
@@ -104,24 +101,28 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 	if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
 		const gchar *update_available;
 
-		update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
+		update_available = json_object_has_member (package, "update_available") ?
+			json_object_get_string_member (package, "update_available") : NULL;
 		if (update_available)
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 		else
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		size = json_object_get_int_member (package, "installed-size");
+	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+		size = json_object_get_int_member (package, "download-size");
 	}
 	else if (g_strcmp0 (status, "removed") == 0) {
 		// A removed app is only available if it can be downloaded (it might have been sideloaded)
 		size = json_object_get_int_member (package, "download-size");
 		if (size > 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		size = json_object_get_int_member (package, "download-size");
 	}
-	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
-	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
+
+	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST,
+			 json_object_get_string_member (package, "name"));
+	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST,
+			    json_object_get_string_member (package, "description"));
 	gs_app_set_version (app, json_object_get_string_member (package, "version"));
 	if (size > 0)
 		gs_app_set_size (app, size);
@@ -131,11 +132,17 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		g_autofree gchar *icon_response = NULL;
 		gsize icon_response_length;
 
-		if (send_snapd_request ("GET", icon_url, NULL, TRUE, NULL, TRUE, NULL, NULL, NULL, NULL, &icon_response, &icon_response_length, NULL)) {
+		if (gs_snapd_request ("GET", icon_url, NULL, TRUE, NULL, TRUE, NULL,
+				      NULL, NULL, NULL,
+				      &icon_response, &icon_response_length,
+				      NULL)) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
-			gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
+			gdk_pixbuf_loader_write (loader,
+						 (guchar *) icon_response,
+						 icon_response_length,
+						 NULL);
 			gdk_pixbuf_loader_close (loader, NULL);
 			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 		}
@@ -150,15 +157,18 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		if (message != NULL) {
 			soup_session_send_message (plugin->soup_session, message);
 			loader = gdk_pixbuf_loader_new ();
-			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
+			gdk_pixbuf_loader_write (loader,
+						 (guint8 *) message->response_body->data,
+						 message->response_body->length,
+						 NULL);
 			gdk_pixbuf_loader_close (loader, NULL);
 			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 		}
 	}
 
-	if (icon_pixbuf)
+	if (icon_pixbuf) {
 		gs_app_set_pixbuf (app, icon_pixbuf);
-	else {
+	} else {
 		g_autoptr(AsIcon) icon = NULL;
 
 		icon = as_icon_new ();
@@ -182,7 +192,13 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 }
 
 static gboolean
-get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
+get_apps (GsPlugin *plugin,
+	  const gchar *sources,
+	  gchar **search_terms,
+	  GList **list,
+	  AppFilterFunc filter_func,
+	  gpointer user_data,
+	  GError **error)
 {
 	guint status_code;
 	GPtrArray *query_fields;
@@ -214,14 +230,18 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 		g_string_append (path, fields);
 	}
 	g_ptr_array_free (query_fields, TRUE);
-	if (!send_snapd_request ("GET", path->str, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!gs_snapd_request ("GET", path->str, NULL, TRUE, NULL, TRUE, NULL,
+			       &status_code, &reason_phrase,
+			       &response_type, &response,
+			       NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
+			     "snapd returned status code %d: %s",
+			     status_code, reason_phrase);
 		return FALSE;
 	}
 
@@ -261,19 +281,26 @@ static gboolean
 get_app (GsPlugin *plugin, GsApp *app, GError **error)
 {
 	guint status_code;
-	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
+	g_autofree gchar *path = NULL;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response = NULL;
+	g_autofree gchar *response_type = NULL;
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result;
 
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
-	if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!gs_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL,
+			       &status_code, &reason_phrase,
+			       &response_type, &response,
+			       NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
+			     "snapd returned status code %d: %s",
+			     status_code, reason_phrase);
 		return FALSE;
 	}
 
@@ -350,11 +377,18 @@ gs_plugin_refine (GsPlugin *plugin,
 }
 
 static gboolean
-send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *action, GError **error)
+send_package_action (GsPlugin *plugin,
+		     GsApp *app,
+		     const gchar *id,
+		     const gchar *action,
+		     GError **error)
 {
 	g_autofree gchar *content = NULL, *path = NULL;
 	guint status_code;
-	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL, *status = NULL;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autofree gchar *status = NULL;
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result, *task, *progress;
 	JsonArray *tasks;
@@ -367,14 +401,18 @@ send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
-	if (!send_snapd_request ("POST", path, content, TRUE, NULL, TRUE, &macaroon, &status_code, &reason_phrase, &response_type, &response, NULL, error))
+	if (!gs_snapd_request ("POST", path, content, TRUE, NULL, TRUE,
+			       &macaroon, &status_code,
+			       &reason_phrase, &response_type,
+			       &response, NULL, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_ACCEPTED) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
+			     "snapd returned status code %d: %s",
+			     status_code, reason_phrase);
 		return FALSE;
 	}
 
@@ -390,15 +428,18 @@ send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *
 		resource_path = g_strdup_printf ("/v2/changes/%s", change_id);
 
 		while (TRUE) {
-			g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
+			g_autofree gchar *status_reason_phrase = NULL;
+			g_autofree gchar *status_response_type = NULL;
+			g_autofree gchar *status_response = NULL;
 			g_autoptr(JsonParser) status_parser = NULL;
 
 			/* Wait for a little bit before polling */
 			g_usleep (100 * 1000);
 
-			if (!send_snapd_request ("GET", resource_path, NULL, TRUE, macaroon, TRUE, NULL,
-						 &status_code, &status_reason_phrase, &status_response_type,
-						 &status_response, NULL, error)) {
+			if (!gs_snapd_request ("GET", resource_path, NULL, TRUE, macaroon, TRUE, NULL,
+					       &status_code, &status_reason_phrase,
+					       &status_response_type, &status_response,
+					       NULL, error)) {
 				return FALSE;
 			}
 
@@ -406,7 +447,8 @@ send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *
 				g_set_error (error,
 					     GS_PLUGIN_ERROR,
 					     GS_PLUGIN_ERROR_FAILED,
-					     "snapd returned status code %d: %s", status_code, status_reason_phrase);
+					     "snapd returned status code %d: %s",
+					     status_code, status_reason_phrase);
 				return FALSE;
 			}
 
@@ -462,20 +504,20 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
-	gboolean result;
+	gboolean ret;
 
 	/* We can only install apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	result = send_package_action (plugin, app, gs_app_get_id (app), "install", error);
-	if (result)
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-	else
+	ret = send_package_action (plugin, app, gs_app_get_id (app), "install", error);
+	if (!ret) {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-
-	return result;
+		return FALSE;
+	}
+	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	return TRUE;
 }
 
 gboolean
@@ -517,18 +559,18 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	gboolean result;
+	gboolean ret;
 
 	/* We can only remove apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	result = send_package_action (plugin, app, gs_app_get_id (app), "remove", error);
-	if (result)
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-	else
+	ret = send_package_action (plugin, app, gs_app_get_id (app), "remove", error);
+	if (!ret) {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-
-	return result;
+		return FALSE;
+	}
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	return TRUE;
 }

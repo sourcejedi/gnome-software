@@ -24,34 +24,46 @@
 #include <gs-plugin.h>
 #include <libsoup/soup.h>
 #include <gio/gunixsocketaddress.h>
+
 #include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
-#define SNAPD_SOCKET_PATH "/run/snapd.socket"
-
 // snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
+
+#define SNAPD_SOCKET "/run/snapd.socket"
+
+gboolean
+gs_snapd_exists (void)
+{
+	return g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS);
+}
 
 static GSocket *
 open_snapd_socket (GError **error)
 {
 	GSocket *socket;
 	g_autoptr(GSocketAddress) address = NULL;
-	g_autoptr(GError) sub_error = NULL;
+	g_autoptr(GError) error_local = NULL;
 
-	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, &sub_error);
+	socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
+			       G_SOCKET_TYPE_STREAM,
+			       G_SOCKET_PROTOCOL_DEFAULT,
+			       &error_local);
 	if (!socket) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to open snapd socket: %s", sub_error->message);
+			     "Unable to open snapd socket: %s",
+			     error_local->message);
 		return NULL;
 	}
-	address = g_unix_socket_address_new (SNAPD_SOCKET_PATH);
-	if (!g_socket_connect (socket, address, NULL, &sub_error)) {
+	address = g_unix_socket_address_new (SNAPD_SOCKET);
+	if (!g_socket_connect (socket, address, NULL, &error_local)) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to connect snapd socket: %s", sub_error->message);
+			     "Unable to connect snapd socket: %s",
+			     error_local->message);
 		g_object_unref (socket);
 		return NULL;
 	}
@@ -60,10 +72,17 @@ open_snapd_socket (GError **error)
 }
 
 static gboolean
-read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *read_offset, GError **error)
+read_from_snapd (GSocket *socket,
+		 gchar *buffer, gsize buffer_length,
+		 gsize *read_offset,
+		 GError **error)
 {
 	gssize n_read;
-	n_read = g_socket_receive (socket, buffer + *read_offset, buffer_length - *read_offset, NULL, error);
+	n_read = g_socket_receive (socket,
+				   buffer + *read_offset,
+				   buffer_length - *read_offset,
+				   NULL,
+				   error);
 	if (n_read < 0)
 		return FALSE;
 	*read_offset += n_read;
@@ -73,19 +92,19 @@ read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *rea
 }
 
 gboolean
-send_snapd_request (const gchar  *method,
-		    const gchar  *path,
-		    const gchar  *content,
-		    gboolean      authenticate,
-		    GVariant     *macaroon,
-		    gboolean      retry_after_login,
-		    GVariant    **out_macaroon,
-		    guint        *status_code,
-		    gchar       **reason_phrase,
-		    gchar       **response_type,
-		    gchar       **response,
-		    gsize        *response_length,
-		    GError      **error)
+gs_snapd_request (const gchar  *method,
+		  const gchar  *path,
+		  const gchar  *content,
+		  gboolean      authenticate,
+		  GVariant     *macaroon,
+		  gboolean      retry_after_login,
+		  GVariant    **out_macaroon,
+		  guint        *status_code,
+		  gchar       **reason_phrase,
+		  gchar       **response_type,
+		  gchar       **response,
+		  gsize        *response_length,
+		  GError      **error)
 {
 	g_autoptr (GSocket) socket = NULL;
 	g_autoptr (GString) request = NULL;
@@ -111,7 +130,6 @@ send_snapd_request (const gchar  *method,
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
 
 	socket = open_snapd_socket (error);
-
 	if (socket == NULL)
 		return FALSE;
 
@@ -137,14 +155,18 @@ send_snapd_request (const gchar  *method,
 	if (g_strcmp0 (g_getenv ("GNOME_SOFTWARE_SNAPPY"), "debug") == 0)
 		g_print ("===== begin snapd request =====\n%s\n===== end snapd request =====\n", request->str);
 
-	/* Send HTTP request */
+	/* send HTTP request */
 	n_written = g_socket_send (socket, request->str, request->len, NULL, error);
 	if (n_written < 0)
 		return FALSE;
 
-	/* Read HTTP headers */
+	/* read HTTP headers */
 	while (data_length < max_data_length && !body) {
-		if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
+		if (!read_from_snapd (socket,
+				      data,
+				      max_data_length,
+				      &data_length,
+				      error))
 			return FALSE;
 		body = strstr (data, "\r\n\r\n");
 	}
@@ -156,13 +178,14 @@ send_snapd_request (const gchar  *method,
 		return FALSE;
 	}
 
-	/* Body starts after header divider */
+	/* body starts after header divider */
 	body += 4;
 	header_length = body - data;
 
-	/* Parse headers */
+	/* parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
-	if (!soup_headers_parse_response (data, header_length, headers, NULL, &code, reason_phrase)) {
+	if (!soup_headers_parse_response (data, header_length, headers,
+					  NULL, &code, reason_phrase)) {
 		g_set_error_literal (error,
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_FAILED,
@@ -181,24 +204,26 @@ send_snapd_request (const gchar  *method,
 		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
 
 		if (macaroon == NULL) {
-			g_set_error_literal (error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_FAILED,
 					     "failed to authenticate");
 			return FALSE;
 		}
 
-		ret = send_snapd_request (method,
-					  path,
-					  content,
-					  TRUE,
-					  macaroon,
-					  FALSE,
-					  NULL,
-					  status_code,
-					  reason_phrase,
-					  response_type,
-					  response,
-					  response_length,
-					  error);
+		ret = gs_snapd_request (method,
+					path,
+					content,
+					TRUE,
+					macaroon,
+					FALSE,
+					NULL,
+					status_code,
+					reason_phrase,
+					response_type,
+					response,
+					response_length,
+					error);
 
 		if (ret && out_macaroon != NULL) {
 			*out_macaroon = macaroon;
@@ -209,25 +234,31 @@ send_snapd_request (const gchar  *method,
 		return ret;
 	}
 
-	/* Work out how much data to follow */
-	if (g_strcmp0 (soup_message_headers_get_one (headers, "Transfer-Encoding"), "chunked") == 0) {
+	/* work out how much data to follow */
+	if (g_strcmp0 (soup_message_headers_get_one (headers, "Transfer-Encoding"),
+		       "chunked") == 0) {
 		while (data_length < max_data_length) {
 			chunk_start = strstr (body, "\r\n");
 			if (chunk_start)
 				break;
-			if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
+			if (!read_from_snapd (socket,
+					      data,
+					      max_data_length,
+					      &data_length,
+					      error))
 				return FALSE;
 		}
 		if (!chunk_start) {
 			g_set_error_literal (error,
 					     GS_PLUGIN_ERROR,
 					     GS_PLUGIN_ERROR_FAILED,
-					     "Unable to find chunk header in snapd response");
+					     "Unable to find chunk header in "
+					     "snapd response");
 			return FALSE;
 		}
 		chunk_length = strtoul (body, NULL, 16);
 		chunk_start += 2;
-		// FIXME: Support multiple chunks
+		// FIXME: support multiple chunks
 	}
 	else {
 		const gchar *value;
@@ -236,26 +267,32 @@ send_snapd_request (const gchar  *method,
 			g_set_error_literal (error,
 					     GS_PLUGIN_ERROR,
 					     GS_PLUGIN_ERROR_FAILED,
-					     "Unable to determine content length of snapd response");
+					     "Unable to determine content "
+					     "length of snapd response");
 			return FALSE;
 		}
 		chunk_length = strtoul (value, NULL, 10);
 		chunk_start = body;
 	}
 
-	/* Check if enough space to read chunk */
+	/* check if enough space to read chunk */
 	n_required = (chunk_start - data) + chunk_length;
 	if (n_required > max_data_length) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Not enough space for snapd response, require %zi octets, have %zi", n_required, max_data_length);
+			     "Not enough space for snapd response, "
+			     "require %zi octets, have %zi",
+			     n_required, max_data_length);
 		return FALSE;
 	}
 
-	/* Read chunk content */
+	/* read chunk content */
 	while (data_length < n_required)
-		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, error))
+		if (!read_from_snapd (socket, data,
+				      n_required - data_length,
+				      &data_length,
+				      error))
 			return FALSE;
 
 	if (out_macaroon != NULL)
