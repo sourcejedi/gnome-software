@@ -399,13 +399,13 @@ send_review_request (GsPlugin *plugin,
 		     const gchar *method, const gchar *path,
 		     JsonBuilder *request,
 		     gboolean do_sign,
+		     guint *status_code,
 		     JsonParser **result,
 		     GCancellable *cancellable, GError **error)
 {
 	GsPluginPrivate *priv = plugin->priv;
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
-	guint status_code;
 
 	uri = g_strdup_printf ("%s%s",
 			       UBUNTU_REVIEWS_SERVER, path);
@@ -430,15 +430,7 @@ send_review_request (GsPlugin *plugin,
 			      priv->token_key,
 			      priv->token_secret);
 
-	status_code = soup_session_send_message (plugin->soup_session, msg);
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Got status code %s from reviews.ubuntu.com",
-			     soup_status_get_phrase (status_code));
-		return FALSE;
-	}
+	*status_code = soup_session_send_message (plugin->soup_session, msg);
 
 	if (result != NULL) {
 		g_autoptr(JsonParser) parser = NULL;
@@ -469,12 +461,22 @@ download_review_stats (GsPlugin *plugin, GCancellable *cancellable, GError **err
 {
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
+	guint status_code;
 	g_autoptr(JsonParser) result = NULL;
 
 	if (!send_review_request (plugin, SOUP_METHOD_GET, "/api/1.0/review-stats/any/any/",
 				  NULL, FALSE,
-				  &result, cancellable, error))
+				  &status_code, &result, cancellable, error))
 		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to download review stats, server returned status code %d",
+			     status_code);
+		return FALSE;
+	}
 
 	/* Extract the stats from the data */
 	if (!parse_review_entries (plugin, result, error))
@@ -691,16 +693,27 @@ download_reviews (GsPlugin *plugin, GsApp *app,
 		  GCancellable *cancellable, GError **error)
 {
 	g_autofree gchar *language = NULL, *path = NULL;
+	guint status_code;
 	g_autoptr(JsonParser) result = NULL;
 
 	/* Get the review stats using HTTP */
 	// FIXME: This will only get the first page of reviews
 	language = get_language (plugin);
-	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/page/%d/", language, package_name, page_number + 1);
+	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/page/%d/",
+				language, package_name, page_number + 1);
 	if (!send_review_request (plugin, SOUP_METHOD_GET, path,
 				  NULL, FALSE,
-				  &result, cancellable, error))
+				  &status_code, &result, cancellable, error))
 		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to download reviews, server returned status code %d",
+			     status_code);
+		return FALSE;
+	}
 
 	/* Extract the stats from the data */
 	return parse_reviews (plugin, result, app, error);
@@ -868,6 +881,7 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	gint n_stars;
 	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	g_autoptr(JsonBuilder) request = NULL;
+	guint status_code;
 
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
@@ -919,9 +933,21 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	add_string_member (request, "arch_tag", architecture);
 	json_builder_end_object (request);
 
-	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/",
-				    request, TRUE,
-				    NULL, cancellable, error);
+	if (!send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/",
+				  request, TRUE,
+				  &status_code, NULL, cancellable, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to submit review, server returned status code %d",
+			     status_code);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 gboolean
@@ -935,6 +961,7 @@ gs_plugin_review_report (GsPlugin *plugin,
 	g_autofree gchar *reason = NULL;
 	g_autofree gchar *text = NULL;
 	g_autofree gchar *path = NULL;
+	guint status_code;
 
 	/* Can only modify Ubuntu reviews */
 	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
@@ -951,8 +978,17 @@ gs_plugin_review_report (GsPlugin *plugin,
 				review_id, reason, text);
 	if (!send_review_request (plugin, SOUP_METHOD_POST, path,
 				  NULL, TRUE,
-				  NULL, cancellable, error))
+				  &status_code, NULL, cancellable, error))
 		return FALSE;
+
+	if (status_code != SOUP_STATUS_CREATED) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to report review, server returned status code %d",
+			     status_code);
+		return FALSE;
+	}
 
 	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
@@ -966,15 +1002,29 @@ set_review_usefulness (GsPlugin *plugin,
 		       GError **error)
 {
 	g_autofree gchar *path = NULL;
+	guint status_code;
 
 	if (!get_ubuntuone_credentials (plugin, TRUE, error))
 		return FALSE;
 
 	/* Create message for reviews.ubuntu.com */
-	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
-	return send_review_request (plugin, SOUP_METHOD_POST, path,
-				    NULL, TRUE,
-				    NULL, cancellable, error);
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s",
+				review_id, is_useful ? "True" : "False");
+	if (!send_review_request (plugin, SOUP_METHOD_POST, path,
+				  NULL, TRUE,
+				  &status_code, NULL, cancellable, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_CREATED) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Got status code %d from reviews.ubuntu.com",
+			     status_code);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 gboolean
@@ -1028,6 +1078,7 @@ gs_plugin_review_remove (GsPlugin *plugin,
 {
 	const gchar *review_id;
 	g_autofree gchar *path = NULL;
+	guint status_code;
 
 	/* Can only modify Ubuntu reviews */
 	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
@@ -1036,9 +1087,21 @@ gs_plugin_review_remove (GsPlugin *plugin,
 
 	/* Create message for reviews.ubuntu.com */
 	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
-	return send_review_request (plugin, SOUP_METHOD_POST, path,
-				    NULL, TRUE,
-				    NULL, cancellable, error);
+	if (!send_review_request (plugin, SOUP_METHOD_POST, path,
+				  NULL, TRUE,
+				  &status_code, NULL, cancellable, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Failed to remove review, server returned status code %d",
+			     status_code);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 typedef struct {
