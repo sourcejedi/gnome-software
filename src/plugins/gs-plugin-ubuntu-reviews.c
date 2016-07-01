@@ -621,22 +621,19 @@ parse_date_time (const gchar *text)
 	return g_date_time_new_utc (values[0], values[1], values[2], values[3], values[4], values[5]);
 }
 
-static GsReview *
-parse_review (GsPlugin *plugin, JsonNode *node)
+static gboolean
+parse_review (GsReview *review, const gchar *our_username, JsonNode *node)
 {
-	GsPluginPrivate *priv = plugin->priv;
-	GsReview *review;
 	JsonObject *object;
 	gint64 star_rating;
 	g_autofree gchar *id_string = NULL;
 
 	if (!JSON_NODE_HOLDS_OBJECT (node))
-		return NULL;
+		return FALSE;
 
 	object = json_node_get_object (node);
 
-	review = gs_review_new ();
-	if (g_strcmp0 (priv->consumer_key, json_object_get_string_member (object, "reviewer_username")) == 0)
+	if (g_strcmp0 (our_username, json_object_get_string_member (object, "reviewer_username")) == 0)
 		gs_review_add_flags (review, GS_REVIEW_FLAG_SELF);
 	gs_review_set_reviewer (review, json_object_get_string_member (object, "reviewer_displayname"));
 	gs_review_set_summary (review, json_object_get_string_member (object, "summary"));
@@ -649,12 +646,13 @@ parse_review (GsPlugin *plugin, JsonNode *node)
 	id_string = g_strdup_printf ("%" G_GINT64_FORMAT, json_object_get_int_member (object, "id"));
 	gs_review_add_metadata (review, "ubuntu-id", id_string);
 
-	return review;
+	return TRUE;
 }
 
 static gboolean
 parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 {
+	GsPluginPrivate *priv = plugin->priv;
 	JsonArray *array;
 	guint i;
 
@@ -665,8 +663,8 @@ parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 		g_autoptr(GsReview) review = NULL;
 
 		/* Read in from JSON... (skip bad entries) */
-		review = parse_review (plugin, json_array_get_element (array, i));
-		if (review != NULL)
+		review = gs_review_new ();
+		if (parse_review (review, priv->consumer_key, json_array_get_element (array, i)))
 			gs_app_add_review (app, review);
 	}
 
@@ -877,11 +875,13 @@ gs_plugin_review_submit (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
+	GsPluginPrivate *priv = plugin->priv;
 	gint rating;
 	gint n_stars;
 	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	g_autoptr(JsonBuilder) request = NULL;
 	guint status_code;
+	g_autoptr(JsonParser) result = NULL;
 
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
@@ -935,7 +935,7 @@ gs_plugin_review_submit (GsPlugin *plugin,
 
 	if (!send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/",
 				  request, TRUE,
-				  &status_code, NULL, cancellable, error))
+				  &status_code, &result, cancellable, error))
 		return FALSE;
 
 	if (status_code != SOUP_STATUS_OK) {
@@ -946,6 +946,9 @@ gs_plugin_review_submit (GsPlugin *plugin,
 			     status_code);
 		return FALSE;
 	}
+
+	// Extract new fields from posted review
+	parse_review (review, priv->consumer_key, json_parser_get_root (result));
 
 	return TRUE;
 }
