@@ -932,6 +932,8 @@ gs_plugin_review_report (GsPlugin *plugin,
 			 GError **error)
 {
 	const gchar *review_id;
+	g_autofree gchar *reason = NULL;
+	g_autofree gchar *text = NULL;
 	g_autofree gchar *path = NULL;
 
 	/* Can only modify Ubuntu reviews */
@@ -943,8 +945,10 @@ gs_plugin_review_report (GsPlugin *plugin,
 		return FALSE;
 
 	/* Create message for reviews.ubuntu.com */
-	// FIXME: escape reason / text properly
-	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, "FIXME: gnome-software", "FIXME: gnome-software");
+	reason = soup_uri_encode ("FIXME: gnome-software", NULL);
+	text = soup_uri_encode ("FIXME: gnome-software", NULL);
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s",
+				review_id, reason, text);
 	if (!send_review_request (plugin, SOUP_METHOD_POST, path,
 				  NULL, TRUE,
 				  NULL, cancellable, error))
