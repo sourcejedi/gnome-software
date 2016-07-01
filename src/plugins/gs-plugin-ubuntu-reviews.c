@@ -389,12 +389,18 @@ sign_message (SoupMessage *message, OAuthMethod method,
 				   token_key, token_secret);
 	oauth_authorization_parameters = oauth_serialize_url_sep (url_parameters_length, 1, url_parameters, ", ", 6);
 	oauth_free_array (&url_parameters_length, &url_parameters);
-	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s", oauth_authorization_parameters);
+	authorization_text = g_strdup_printf ("OAuth realm=\"Ratings and Reviews\", %s",
+					      oauth_authorization_parameters);
 	soup_message_headers_append (message->request_headers, "Authorization", authorization_text);
 }
 
 static gboolean
-send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, JsonBuilder *request, gboolean do_sign, JsonParser **result, GError **error)
+send_review_request (GsPlugin *plugin,
+		     const gchar *method, const gchar *path,
+		     JsonBuilder *request,
+		     gboolean do_sign,
+		     JsonParser **result,
+		     GCancellable *cancellable, GError **error)
 {
 	GsPluginPrivate *priv = plugin->priv;
 	g_autofree gchar *uri = NULL;
@@ -459,13 +465,15 @@ send_review_request (GsPlugin *plugin, const gchar *method, const gchar *path, J
 }
 
 static gboolean
-download_review_stats (GsPlugin *plugin, GError **error)
+download_review_stats (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 {
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
 	g_autoptr(JsonParser) result = NULL;
 
-	if (!send_review_request (plugin, SOUP_METHOD_GET, "/api/1.0/review-stats/any/any/", NULL, FALSE, &result, error))
+	if (!send_review_request (plugin, SOUP_METHOD_GET, "/api/1.0/review-stats/any/any/",
+				  NULL, FALSE,
+				  &result, cancellable, error))
 		return FALSE;
 
 	/* Extract the stats from the data */
@@ -477,7 +485,7 @@ download_review_stats (GsPlugin *plugin, GError **error)
 }
 
 static gboolean
-load_database (GsPlugin *plugin, GError **error)
+load_database (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 {
 	const gchar *statement;
 	gboolean rebuild_ratings = FALSE;
@@ -559,7 +567,7 @@ load_database (GsPlugin *plugin, GError **error)
 	now = g_get_real_time () / G_USEC_PER_SEC;
 	if (stats_mtime == 0 || rebuild_ratings) {
 		g_debug ("No Ubuntu review statistics");
-		if (!download_review_stats (plugin, &error_local)) {
+		if (!download_review_stats (plugin, cancellable, &error_local)) {
 			g_warning ("Failed to get Ubuntu review statistics: %s",
 				   error_local->message);
 			return TRUE;
@@ -568,7 +576,7 @@ load_database (GsPlugin *plugin, GError **error)
 		g_debug ("Ubuntu review statistics was %" G_GINT64_FORMAT
 			 " days old, so regetting",
 			 (now - stats_mtime) / ( 60 * 60 * 24));
-		if (!download_review_stats (plugin, error))
+		if (!download_review_stats (plugin, cancellable, error))
 			return FALSE;
 	} else {
 		g_debug ("Ubuntu review statistics %" G_GINT64_FORMAT
@@ -678,7 +686,9 @@ get_language (GsPlugin *plugin)
 }
 
 static gboolean
-download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, gint page_number, GError **error)
+download_reviews (GsPlugin *plugin, GsApp *app,
+		  const gchar *package_name, gint page_number,
+		  GCancellable *cancellable, GError **error)
 {
 	g_autofree gchar *language = NULL, *path = NULL;
 	g_autoptr(JsonParser) result = NULL;
@@ -687,7 +697,9 @@ download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, gint 
 	// FIXME: This will only get the first page of reviews
 	language = get_language (plugin);
 	path = g_strdup_printf ("/api/1.0/reviews/filter/%s/any/any/any/%s/page/%d/", language, package_name, page_number + 1);
-	if (!send_review_request (plugin, SOUP_METHOD_GET, path, NULL, FALSE, &result, error))
+	if (!send_review_request (plugin, SOUP_METHOD_GET, path,
+				  NULL, FALSE,
+				  &result, cancellable, error))
 		return FALSE;
 
 	/* Extract the stats from the data */
@@ -695,14 +707,14 @@ download_reviews (GsPlugin *plugin, GsApp *app, const gchar *package_name, gint 
 }
 
 static gboolean
-refine_rating (GsPlugin *plugin, GsApp *app, GError **error)
+refine_rating (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
 {
 	GPtrArray *sources;
 	guint i;
 
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
-		gboolean ret = load_database (plugin, error);
+		gboolean ret = load_database (plugin, cancellable, error);
 		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
 		if (!ret)
 			return FALSE;
@@ -776,7 +788,7 @@ get_ubuntuone_credentials (GsPlugin  *plugin,
 }
 
 static gboolean
-refine_reviews (GsPlugin *plugin, GsApp *app, GError **error)
+refine_reviews (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
 {
 	GPtrArray *sources;
 	guint i, j;
@@ -796,7 +808,7 @@ refine_reviews (GsPlugin *plugin, GsApp *app, GError **error)
 		for (j = 0; j < N_PAGES; j++) {
 			gboolean ret;
 
-			ret = download_reviews (plugin, app, package_name, j, error);
+			ret = download_reviews (plugin, app, package_name, j, cancellable, error);
 			if (!ret)
 				return FALSE;
 		}
@@ -819,11 +831,11 @@ gs_plugin_refine (GsPlugin *plugin,
 		GsApp *app = GS_APP (l->data);
 
 		if ((flags & (GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING | GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS)) != 0) {
-			if (!refine_rating (plugin, app, error))
+			if (!refine_rating (plugin, app, cancellable, error))
 				return FALSE;
 		}
 		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS) != 0) {
-			if (!refine_reviews (plugin, app, error))
+			if (!refine_reviews (plugin, app, cancellable, error))
 				return FALSE;
 		}
 	}
@@ -849,6 +861,7 @@ static gboolean
 set_package_review (GsPlugin *plugin,
 		    GsReview *review,
 		    const gchar *package_name,
+		    GCancellable *cancellable,
 		    GError **error)
 {
 	gint rating;
@@ -895,13 +908,16 @@ set_package_review (GsPlugin *plugin,
 	add_string_member (request, "arch_tag", architecture);
 	json_builder_end_object (request);
 
-	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/", request, TRUE, NULL, error);
+	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/",
+				    request, TRUE,
+				    NULL, cancellable, error);
 }
 
 static gboolean
 set_review_usefulness (GsPlugin *plugin,
 		       const gchar *review_id,
 		       gboolean is_useful,
+		       GCancellable *cancellable,
 		       GError **error)
 {
 	g_autofree gchar *path = NULL;
@@ -911,7 +927,9 @@ set_review_usefulness (GsPlugin *plugin,
 
 	/* Create message for reviews.ubuntu.com */
 	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s", review_id, is_useful ? "True" : "False");
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+	return send_review_request (plugin, SOUP_METHOD_POST, path,
+				    NULL, TRUE,
+				    NULL, cancellable, error);
 }
 
 static gboolean
@@ -919,6 +937,7 @@ report_review (GsPlugin *plugin,
 	       const gchar *review_id,
 	       const gchar *reason,
 	       const gchar *text,
+	       GCancellable *cancellable,
 	       GError **error)
 {
 	g_autofree gchar *path = NULL;
@@ -929,22 +948,9 @@ report_review (GsPlugin *plugin,
 	/* Create message for reviews.ubuntu.com */
 	// FIXME: escape reason / text properly
 	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
-}
-
-static gboolean
-remove_review (GsPlugin *plugin,
-	       const gchar *review_id,
-	       GError **error)
-{
-	g_autofree gchar *path = NULL;
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
-
-	/* Create message for reviews.ubuntu.com */
-	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
-	return send_review_request (plugin, SOUP_METHOD_POST, path, NULL, TRUE, NULL, error);
+	return send_review_request (plugin, SOUP_METHOD_POST, path,
+				    NULL, TRUE,
+				    NULL, cancellable, error);
 }
 
 gboolean
@@ -956,7 +962,7 @@ gs_plugin_review_submit (GsPlugin *plugin,
 {
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
-		gboolean ret = load_database (plugin, error);
+		gboolean ret = load_database (plugin, cancellable, error);
 		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
 		if (!ret)
 			return FALSE;
@@ -968,6 +974,7 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	return set_package_review (plugin,
 				   review,
 				   gs_app_get_source_default (app),
+				   cancellable,
 				   error);
 }
 
@@ -985,7 +992,7 @@ gs_plugin_review_report (GsPlugin *plugin,
 	if (review_id == NULL)
 		return TRUE;
 
-	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", error))
+	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", cancellable, error))
 		return FALSE;
 	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
@@ -1005,8 +1012,9 @@ gs_plugin_review_upvote (GsPlugin *plugin,
 	if (review_id == NULL)
 		return TRUE;
 
-	if (!set_review_usefulness (plugin, review_id, TRUE, error))
+	if (!set_review_usefulness (plugin, review_id, TRUE, cancellable, error))
 		return FALSE;
+
 	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
 }
@@ -1025,8 +1033,9 @@ gs_plugin_review_downvote (GsPlugin *plugin,
 	if (review_id == NULL)
 		return TRUE;
 
-	if (!set_review_usefulness (plugin, review_id, FALSE, error))
+	if (!set_review_usefulness (plugin, review_id, FALSE, cancellable, error))
 		return FALSE;
+
 	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
 	return TRUE;
 }
@@ -1039,13 +1048,18 @@ gs_plugin_review_remove (GsPlugin *plugin,
 			 GError **error)
 {
 	const gchar *review_id;
+	g_autofree gchar *path = NULL;
 
 	/* Can only modify Ubuntu reviews */
 	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
 	if (review_id == NULL)
 		return TRUE;
 
-	return remove_review (plugin, review_id, error);
+	/* Create message for reviews.ubuntu.com */
+	path = g_strdup_printf ("/api/1.0/reviews/delete/%s/", review_id);
+	return send_review_request (plugin, SOUP_METHOD_POST, path,
+				    NULL, TRUE,
+				    NULL, cancellable, error);
 }
 
 typedef struct {
@@ -1097,7 +1111,7 @@ gs_plugin_add_popular (GsPlugin *plugin,
 
 	/* Load database once */
 	if (g_once_init_enter (&plugin->priv->db_loaded)) {
-		gboolean ret = load_database (plugin, error);
+		gboolean ret = load_database (plugin, cancellable, error);
 		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
 		if (!ret)
 			return FALSE;
