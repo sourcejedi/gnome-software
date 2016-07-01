@@ -857,17 +857,28 @@ add_int_member (JsonBuilder *builder, const gchar *name, gint64 value)
 	json_builder_add_int_value (builder, value);
 }
 
-static gboolean
-set_package_review (GsPlugin *plugin,
-		    GsReview *review,
-		    const gchar *package_name,
-		    GCancellable *cancellable,
-		    GError **error)
+gboolean
+gs_plugin_review_submit (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
 {
 	gint rating;
 	gint n_stars;
 	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
 	g_autoptr(JsonBuilder) request = NULL;
+
+	/* Load database once */
+	if (g_once_init_enter (&plugin->priv->db_loaded)) {
+		gboolean ret = load_database (plugin, cancellable, error);
+		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
+		if (!ret)
+			return FALSE;
+	}
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
 
 	/* Ubuntu reviews require a summary and description - just make one up for now */
 	rating = gs_review_get_rating (review);
@@ -897,7 +908,7 @@ set_package_review (GsPlugin *plugin,
 	/* Create message for reviews.ubuntu.com */
 	request = json_builder_new ();
 	json_builder_begin_object (request);
-	add_string_member (request, "package_name", package_name);
+	add_string_member (request, "package_name", gs_app_get_source_default (app));
 	add_string_member (request, "summary", gs_review_get_summary (review));
 	add_string_member (request, "review_text", gs_review_get_text (review));
 	add_string_member (request, "language", language);
@@ -911,6 +922,36 @@ set_package_review (GsPlugin *plugin,
 	return send_review_request (plugin, SOUP_METHOD_POST, "/api/1.0/reviews/",
 				    request, TRUE,
 				    NULL, cancellable, error);
+}
+
+gboolean
+gs_plugin_review_report (GsPlugin *plugin,
+			 GsApp *app,
+			 GsReview *review,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	const gchar *review_id;
+	g_autofree gchar *path = NULL;
+
+	/* Can only modify Ubuntu reviews */
+	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
+	if (review_id == NULL)
+		return TRUE;
+
+	if (!get_ubuntuone_credentials (plugin, TRUE, error))
+		return FALSE;
+
+	/* Create message for reviews.ubuntu.com */
+	// FIXME: escape reason / text properly
+	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, "FIXME: gnome-software", "FIXME: gnome-software");
+	if (!send_review_request (plugin, SOUP_METHOD_POST, path,
+				  NULL, TRUE,
+				  NULL, cancellable, error))
+		return FALSE;
+
+	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
+	return TRUE;
 }
 
 static gboolean
@@ -930,72 +971,6 @@ set_review_usefulness (GsPlugin *plugin,
 	return send_review_request (plugin, SOUP_METHOD_POST, path,
 				    NULL, TRUE,
 				    NULL, cancellable, error);
-}
-
-static gboolean
-report_review (GsPlugin *plugin,
-	       const gchar *review_id,
-	       const gchar *reason,
-	       const gchar *text,
-	       GCancellable *cancellable,
-	       GError **error)
-{
-	g_autofree gchar *path = NULL;
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
-
-	/* Create message for reviews.ubuntu.com */
-	// FIXME: escape reason / text properly
-	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?reason=%s&text=%s", review_id, reason, text);
-	return send_review_request (plugin, SOUP_METHOD_POST, path,
-				    NULL, TRUE,
-				    NULL, cancellable, error);
-}
-
-gboolean
-gs_plugin_review_submit (GsPlugin *plugin,
-			 GsApp *app,
-			 GsReview *review,
-			 GCancellable *cancellable,
-			 GError **error)
-{
-	/* Load database once */
-	if (g_once_init_enter (&plugin->priv->db_loaded)) {
-		gboolean ret = load_database (plugin, cancellable, error);
-		g_once_init_leave (&plugin->priv->db_loaded, TRUE);
-		if (!ret)
-			return FALSE;
-	}
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
-
-	return set_package_review (plugin,
-				   review,
-				   gs_app_get_source_default (app),
-				   cancellable,
-				   error);
-}
-
-gboolean
-gs_plugin_review_report (GsPlugin *plugin,
-			 GsApp *app,
-			 GsReview *review,
-			 GCancellable *cancellable,
-			 GError **error)
-{
-	const gchar *review_id;
-
-	/* Can only modify Ubuntu reviews */
-	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
-	if (review_id == NULL)
-		return TRUE;
-
-	if (!report_review (plugin, review_id, "FIXME: gnome-software", "FIXME: gnome-software", cancellable, error))
-		return FALSE;
-	gs_review_add_flags (review, GS_REVIEW_FLAG_VOTED);
-	return TRUE;
 }
 
 gboolean
