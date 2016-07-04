@@ -561,7 +561,6 @@ gs_plugin_launch (GsPlugin *plugin,
 		binary_name = g_strdup_printf ("/snap/bin/%s", launch_name);
 	else
 		binary_name = g_strdup_printf ("/snap/bin/%s.%s", gs_app_get_id (app), launch_name);
-	g_printerr ("BINARY='%s'\n", binary_name);
 
 	// FIXME: Since we don't currently know if this app needs a terminal or not we launch everything with one
 	// https://bugs.launchpad.net/bugs/1595023
