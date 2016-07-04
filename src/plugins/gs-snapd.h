@@ -38,6 +38,7 @@ gboolean gs_snapd_request	(const gchar	*method,
 				 gchar		**response_type,
 				 gchar		**response,
 				 gsize		*response_length,
+				 GCancellable	*cancellable,
 				 GError		**error);
 
 #endif /* __GS_SNAPD_H__ */
