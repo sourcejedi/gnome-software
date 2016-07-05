@@ -143,11 +143,14 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 {
 	g_autofree gchar *macaroon = NULL;
 	g_auto(GStrv) discharges = NULL;
-	const gchar *status, *icon_url, *launch_name = NULL;
+	const gchar *id, *status, *icon_url, *launch_name = NULL;
 	g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
 	gint64 size = -1;
 
 	get_macaroon (plugin, &macaroon, &discharges);
+
+	id = json_object_get_string_member (package, "id");
+	gs_app_set_metadata (app, "snap::id", id);
 
 	status = json_object_get_string_member (package, "status");
 	if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
@@ -162,8 +165,10 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 				gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 		}
-	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
+	} else if (g_strcmp0 (status, "available") == 0) {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	} else if (g_strcmp0 (status, "priced") == 0) {
+		gs_app_set_state (app, AS_APP_STATE_PURCHASABLE);
 	}
 	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST,
 			 json_object_get_string_member (package, "summary"));
@@ -179,6 +184,18 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		size = json_object_get_int_member (package, "download-size");
 		if (size > 0)
 			gs_app_set_size_download (app, (guint64) size);
+	}
+	if (json_object_has_member (package, "prices")) {
+		JsonObject *prices;
+		JsonObjectIter iter;
+		const gchar *currency;
+		JsonNode *amount;
+
+		prices = json_object_get_object_member (package, "prices");
+		json_object_iter_init (&iter, prices);
+		while (json_object_iter_next (&iter, &currency, &amount)) {
+			gs_app_add_price (app, json_node_get_double (amount), currency);
+		}
 	}
 	gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 	icon_url = json_object_get_string_member (package, "icon");
@@ -583,6 +600,147 @@ send_package_action (GsPlugin *plugin,
 		return FALSE;
 	}
 
+	return TRUE;
+}
+
+gboolean
+gs_plugin_add_payment_methods (GsPlugin *plugin,
+			       GsPaymentMethodList *payment_methods,
+			       GCancellable *cancellable,
+			       GError **error)
+{
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root;
+	JsonArray *result;
+	GList *methods, *l;
+
+	if (!gs_snapd_request ("POST", "/v2/buy/methods", NULL,
+			       NULL, NULL,
+			       &status_code, &reason_phrase,
+			       &response_type, &response, NULL,
+			       cancellable, error))
+		return FALSE;
+
+	if (status_code == SOUP_STATUS_UNAUTHORIZED) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_AUTH_REQUIRED,
+				     "Requires authentication with @snapd");
+		return FALSE;
+	}
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %d: %s",
+			     status_code, reason_phrase);
+		return FALSE;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return FALSE;
+
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_array_member (root, "result");
+	methods = json_array_get_elements (result);
+
+	for (l = methods; l != NULL; l = l->next) {
+		JsonObject *method = json_node_get_object (l->data);
+		const gchar *description, *id, *backend_id;
+		GsPaymentMethod *payment_method;
+
+		payment_method = gs_payment_method_new ();
+		gs_payment_method_list_add (payment_methods, payment_method);
+
+		description = json_object_get_string_member (method, "description");
+		gs_payment_method_set_description (payment_method, description);
+		id = json_object_get_string_member (method, "id");
+		gs_payment_method_add_metadata (payment_method, "snap::id", id);
+		backend_id = json_object_get_string_member (method, "backend-id");
+		gs_payment_method_add_metadata (payment_method, "snap::backend-id", backend_id);
+	}
+
+	g_list_free (methods);
+
+	return TRUE;
+}
+
+gboolean
+gs_plugin_app_purchase (GsPlugin *plugin,
+		        GsApp *app,
+		        GsPrice *price,
+		        GsPaymentMethod *payment_method,
+		        GCancellable *cancellable,
+		        GError **error)
+{
+	g_autoptr(JsonBuilder) builder = NULL;
+	g_autofree gchar *value = NULL;
+	g_autoptr(JsonNode) json_root = NULL;
+	g_autoptr(JsonGenerator) json_generator = NULL;
+	g_autofree gchar *data = NULL;
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+
+	/* We can only buy apps we know of */
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
+		return TRUE;
+
+	builder = json_builder_new ();
+	json_builder_begin_object (builder);
+	json_builder_set_member_name (builder, "snap-id");
+	json_builder_add_string_value (builder, gs_app_get_metadata_item (app, "snap::id"));
+	json_builder_set_member_name (builder, "snap-name");
+	json_builder_add_string_value (builder, gs_app_get_id (app));
+	json_builder_set_member_name (builder, "snap-price");
+	value = g_strdup_printf ("%f", gs_price_get_amount (price));
+	json_builder_add_string_value (builder, value);
+	json_builder_set_member_name (builder, "currency");
+	json_builder_add_string_value (builder, gs_price_get_currency (price));
+	json_builder_end_object (builder);
+
+	json_root = json_builder_get_root (builder);
+	json_generator = json_generator_new ();
+	json_generator_set_pretty (json_generator, TRUE);
+	json_generator_set_root (json_generator, json_root);
+	data = json_generator_to_data (json_generator, NULL);
+	if (data == NULL) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "Failed to generate JSON request");
+		return FALSE;
+	}
+
+	if (!gs_snapd_request ("POST", "/v2/buy/methods", NULL,
+			       NULL, NULL,
+			       &status_code, &reason_phrase,
+			       &response_type, &response, NULL,
+			       cancellable, error))
+		return FALSE;
+
+	/*if (!gs_snapd_request ("POST", "/v2/buy", data,
+			       NULL, NULL,
+			       &status_code, &reason_phrase,
+			       &response_type, &response, NULL,
+			       cancellable, error))
+		return FALSE;*/
+
+	if (status_code != SOUP_STATUS_OK) {
+		// FIXME
+		return FALSE;
+	}
+  g_printerr ("'%s'\n", response);
+
+	gs_app_set_state (app, AS_APP_STATE_PURCHASING);
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	return TRUE;
 }
 
