@@ -29,6 +29,7 @@
 #include "gs-star-widget.h"
 #include "gs-progress-button.h"
 #include "gs-common.h"
+#include "gs-folders.h"
 
 typedef struct
 {
@@ -38,6 +39,7 @@ typedef struct
 	GtkWidget	*name_label;
 	GtkWidget	*version_label;
 	GtkWidget	*star;
+	GtkWidget	*folder_label;
 	GtkWidget	*description_label;
 	GtkWidget	*button_box;
 	GtkWidget	*button;
@@ -151,6 +153,7 @@ gs_app_row_refresh (GsAppRow *app_row)
 	GString *str = NULL;
 	const gchar *tmp;
 	gboolean missing_search_result;
+	gboolean use_folders = FALSE;
 
 	if (priv->app == NULL)
 		return;
@@ -245,6 +248,25 @@ gs_app_row_refresh (GsAppRow *app_row)
 		}
 		gtk_label_set_label (GTK_LABEL (priv->version_label),
 				     gs_app_get_version_ui (priv->app));
+	}
+
+	/* folders */
+	use_folders = gs_utils_is_current_desktop ("GNOME") &&
+		g_settings_get_boolean (priv->settings, "show-folder-management");
+
+	if (!use_folders || priv->show_update || priv->show_codec) {
+		gtk_widget_hide (priv->folder_label);
+	} else {
+		g_autoptr(GsFolders) folders = NULL;
+		const gchar *folder;
+		folders = gs_folders_get ();
+		folder = gs_folders_get_app_folder (folders,
+						    gs_app_get_id (priv->app),
+						    gs_app_get_categories (priv->app));
+		if (folder != NULL)
+			folder = gs_folders_get_folder_name (folders, folder);
+		gtk_label_set_label (GTK_LABEL (priv->folder_label), folder);
+		gtk_widget_set_visible (priv->folder_label, folder != NULL);
 	}
 
 	if (gs_app_get_pixbuf (priv->app) != NULL)
@@ -542,6 +564,7 @@ gs_app_row_class_init (GsAppRowClass *klass)
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, name_label);
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, version_label);
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, star);
+	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, folder_label);
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, description_label);
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, button_box);
 	gtk_widget_class_bind_template_child_private (widget_class, GsAppRow, button);
