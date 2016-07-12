@@ -2886,3 +2886,10 @@ msgstr "Lokalizacija"
 #~ msgstr[0] "Įdiegta %i programa(-os) ir %i priedas(-ai)"
 #~ msgstr[1] "Įdiegta %i programa(-os) ir %i priedas(-ai)"
 #~ msgstr[2] "Įdiegta %i programa(-os) ir %i priedas(-ai)"
+
+#. TRANSLATORS: this is when the upgrade download fails
+#: ../src/gs-utils.c:186
+#, c-format
+#| msgid "Removal of %s failed."
+msgid "Upgrade to %s failed."
+msgstr "Nepavyko atnaujinti %s."

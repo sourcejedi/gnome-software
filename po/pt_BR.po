@@ -3094,3 +3094,10 @@ msgstr "Localização"
 
 #~ msgid "Printing"
 #~ msgstr "Impressão"
+
+#. TRANSLATORS: this is when the upgrade download fails
+#: ../src/gs-utils.c:186
+#, c-format
+#| msgid "Removal of %s failed."
+msgid "Upgrade to %s failed."
+msgstr "A atualização para %s falhou."
