@@ -39,10 +39,12 @@
         <property name="visible">True</property>
         <property name="label" translatable="yes">_Continue</property>
         <property name="use_underline">True</property>
+        <property name="can_default">True</property>
+        <property name="receives_default">True</property>
       </object>
     </child>
     <action-widgets>
-      <action-widget response="accept">button_continue</action-widget>
+      <action-widget response="accept" default="true">button_continue</action-widget>
       <action-widget response="cancel">button_cancel</action-widget>
     </action-widgets>
   </template>

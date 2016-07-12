@@ -33,8 +33,8 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (GsRemovalDialog, gs_removal_dialog, GS, REMOVAL_DIALOG, GtkMessageDialog)
 
 GtkWidget	*gs_removal_dialog_new				(void);
-void		 gs_removal_dialog_show_system_upgrade_removals	(GsRemovalDialog	 *self,
-								 GsApp			 *system_upgrade);
+void		 gs_removal_dialog_show_upgrade_removals	(GsRemovalDialog	 *self,
+								 GsApp			 *upgrade);
 
 G_END_DECLS
 

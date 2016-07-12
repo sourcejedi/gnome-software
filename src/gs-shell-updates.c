@@ -1173,8 +1173,8 @@ gs_shell_updates_upgrade_install_cb (GsUpgradeBanner *upgrade_banner,
 	g_signal_connect (dialog, "response",
 	                  G_CALLBACK (gs_shell_updates_upgrade_confirm_cb),
 	                  self);
-	gs_removal_dialog_show_system_upgrade_removals (GS_REMOVAL_DIALOG (dialog),
-	                                                upgrade);
+	gs_removal_dialog_show_upgrade_removals (GS_REMOVAL_DIALOG (dialog),
+	                                         upgrade);
 	gs_shell_modal_dialog_present (self->shell, GTK_DIALOG (dialog));
 }
 

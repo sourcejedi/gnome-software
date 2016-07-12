@@ -112,21 +112,24 @@ insert_details_widget (GtkMessageDialog *dialog, GtkWidget *widget)
 }
 
 void
-gs_removal_dialog_show_system_upgrade_removals (GsRemovalDialog *self,
-                                                GsApp *system_upgrade)
+gs_removal_dialog_show_upgrade_removals (GsRemovalDialog *self,
+                                         GsApp *upgrade)
 {
 	GPtrArray *removals;
 	guint i;
 	g_autofree gchar *name_version = NULL;
 
 	name_version = g_strdup_printf ("%s %s",
-	                                gs_app_get_name (system_upgrade),
-	                                gs_app_get_version (system_upgrade));
+	                                gs_app_get_name (upgrade),
+	                                gs_app_get_version (upgrade));
 	/* TRANSLATORS: This is a text displayed during a distro upgrade. %s
 	   will be replaced by the name and version of distro, e.g. 'Fedora 23'. */
-	gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (self), _("Some of the currently installed software is not compatible with %s. If you continue, the following will be automatically removed during the upgrade:"), name_version);
+	gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (self),
+	                                          _("Some of the currently installed software is not compatible with %s. "
+	                                            "If you continue, the following will be automatically removed during the upgrade:"),
+	                                          name_version);
 
-	removals = gs_app_get_related (system_upgrade);
+	removals = gs_app_get_related (upgrade);
 	for (i = 0; i < removals->len; i++) {
 		GsApp *app = g_ptr_array_index (removals, i);
 		g_autofree gchar *tmp = NULL;
@@ -135,12 +138,6 @@ gs_removal_dialog_show_system_upgrade_removals (GsRemovalDialog *self,
 		g_debug ("removal %d: %s", i, tmp);
 		add_app (GTK_LIST_BOX (self->listbox), app);
 	}
-}
-
-static void
-unset_focus (GtkWidget *widget)
-{
-	gtk_window_set_focus (GTK_WINDOW (widget), NULL);
 }
 
 static void
@@ -157,8 +154,6 @@ gs_removal_dialog_init (GsRemovalDialog *self)
 	gtk_list_box_set_sort_func (GTK_LIST_BOX (self->listbox),
 	                            list_sort_func,
 	                            self, NULL);
-
-	g_signal_connect_after (self, "show", G_CALLBACK (unset_focus), NULL);
 }
 
 static void
