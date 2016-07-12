@@ -1154,8 +1154,11 @@ static void
 gs_shell_updates_upgrade_install_cb (GsUpgradeBanner *upgrade_banner,
                                      GsShellUpdates *self)
 {
+	GPtrArray *removals;
 	GsApp *upgrade;
 	GtkWidget *dialog;
+	guint cnt = 0;
+	guint i;
 
 	upgrade = gs_upgrade_banner_get_app (GS_UPGRADE_BANNER (self->upgrade_banner));
 	if (upgrade == NULL) {
@@ -1163,7 +1166,16 @@ gs_shell_updates_upgrade_install_cb (GsUpgradeBanner *upgrade_banner,
 		return;
 	}
 
-	if (gs_app_get_related (upgrade) == NULL) {
+	/* count the removals */
+	removals = gs_app_get_related (upgrade);
+	for (i = 0; i < removals->len; i++) {
+		GsApp *app = g_ptr_array_index (removals, i);
+		if (gs_app_get_state (app) != AS_APP_STATE_REMOVING)
+			continue;
+		cnt++;
+	}
+
+	if (cnt == 0) {
 		/* no need for a removal confirmation dialog */
 		trigger_upgrade (self);
 		return;

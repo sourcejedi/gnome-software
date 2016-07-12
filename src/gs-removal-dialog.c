@@ -134,6 +134,8 @@ gs_removal_dialog_show_upgrade_removals (GsRemovalDialog *self,
 		GsApp *app = g_ptr_array_index (removals, i);
 		g_autofree gchar *tmp = NULL;
 
+		if (gs_app_get_state (app) != AS_APP_STATE_REMOVING)
+			continue;
 		tmp = gs_app_to_string (app);
 		g_debug ("removal %d: %s", i, tmp);
 		add_app (GTK_LIST_BOX (self->listbox), app);

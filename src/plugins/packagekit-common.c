@@ -253,8 +253,12 @@ gs_plugin_packagekit_add_results (GsPlugin *plugin,
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 			break;
 		case PK_INFO_ENUM_AVAILABLE:
-		case PK_INFO_ENUM_REMOVING:
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+			break;
+		case PK_INFO_ENUM_REMOVING:
+			/* do a little dance to make GsApp happy */
+			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+			gs_app_set_state (app, AS_APP_STATE_REMOVING);
 			break;
 		case PK_INFO_ENUM_INSTALLING:
 		case PK_INFO_ENUM_UPDATING:
