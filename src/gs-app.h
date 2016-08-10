@@ -245,7 +245,7 @@ gboolean	 gs_app_has_quirk		(GsApp		*app,
 						 AsAppQuirk	 quirk);
 void		 gs_app_add_quirk		(GsApp		*app,
 						 AsAppQuirk	 quirk);
-
+gboolean	 gs_app_is_installed		(GsApp		*app);
 G_END_DECLS
 
 #endif /* __GS_APP_H */
