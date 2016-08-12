@@ -119,7 +119,6 @@ gnome_software_cmd_SOURCES =				\
 	gs-utils.c					\
 	gs-os-release.c					\
 	gs-payment-method.c				\
-	gs-payment-method-list.c			\
 	gs-plugin-loader.c				\
 	gs-plugin-loader-sync.c				\
 	gs-category.c					\
@@ -197,8 +196,6 @@ gnome_software_SOURCES =				\
 	gs-page.h					\
 	gs-payment-method.c				\
 	gs-payment-method.h				\
-	gs-payment-method-list.c			\
-	gs-payment-method-list.h			\
 	gs-plugin.c					\
 	gs-plugin.h					\
 	gs-plugin-private.h				\

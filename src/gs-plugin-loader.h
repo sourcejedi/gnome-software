@@ -28,7 +28,6 @@
 #include "gs-auth.h"
 #include "gs-category.h"
 #include "gs-plugin.h"
-#include "gs-payment-method-list.h"
 
 G_BEGIN_DECLS
 
@@ -48,6 +47,7 @@ struct _GsPluginLoaderClass
 };
 
 typedef enum {
+	GS_PLUGIN_LOADER_ACTION_PURCHASE,
 	GS_PLUGIN_LOADER_ACTION_INSTALL,
 	GS_PLUGIN_LOADER_ACTION_REMOVE,
 	GS_PLUGIN_LOADER_ACTION_UPDATE,
@@ -244,9 +244,9 @@ void		 gs_plugin_loader_get_payment_methods_async (GsPluginLoader *plugin_loader
 							     GCancellable *cancellable,
 							     GAsyncReadyCallback callback,
 							     gpointer user_data);
-GsPaymentMethodList	*gs_plugin_loader_get_payment_methods_finish	(GsPluginLoader	*plugin_loader,
-									 GAsyncResult	*res,
-									 GError		**error);
+GPtrArray	*gs_plugin_loader_get_payment_methods_finish	(GsPluginLoader	*plugin_loader,
+								 GAsyncResult	*res,
+								 GError		**error);
 void		 gs_plugin_loader_app_purchase_async	(GsPluginLoader	*plugin_loader,
 							 GsApp		*app,
 							 GsPrice	*price,

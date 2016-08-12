@@ -40,8 +40,8 @@
 #include "gs-app.h"
 #include "gs-app-list.h"
 #include "gs-category.h"
-#include "gs-payment-method-list.h"
 #include "gs-price.h"
+#include "gs-payment-method.h"
 
 G_BEGIN_DECLS
 
@@ -501,7 +501,7 @@ gboolean	 gs_plugin_update_cancel		(GsPlugin	*plugin,
 /**
  * gs_plugin_add_payment_methods:
  * @plugin: a #GsPlugin
- * @payment_methods: A #GsPaymentMethodList
+ * @payment_methods: (element-type GsPaymentMethod): a #GPtrArray
  * @cancellable: a #GCancellable, or %NULL
  * @error: a #GError, or %NULL
  *
@@ -510,7 +510,7 @@ gboolean	 gs_plugin_update_cancel		(GsPlugin	*plugin,
  * Returns: %TRUE for success or if not relevant
  **/
 gboolean	 gs_plugin_add_payment_methods		(GsPlugin		*plugin,
-							 GsPaymentMethodList	*payment_methods,
+							 GPtrArray		*payment_methods,
 							 GCancellable		*cancellable,
 							 GError			**error);
 

@@ -66,6 +66,40 @@
             <property name="position">0</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkGrid">
+            <property name="name">intro</property>
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="halign">start</property>
+            <property name="valign">start</property>
+            <property name="row_spacing">9</property>
+            <property name="column_spacing">9</property>
+            <child>
+              <object class="GtkLabel" id="label_title">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="halign">start</property>
+                <property name="label">Are you sure you want to purchase %NAME% for %PRICE%?</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBox" id="combo_payment_method">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="model">model_payment_method</property>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+          </object>
+        </child>
       </object>
     </child>
   </template>
@@ -76,5 +110,13 @@
       <widget name="cancel_button"/>
       <widget name="purchase_button"/>
     </widgets>
+  </object>
+  <object class="GtkListStore" id="model_payment_method">
+    <columns>
+      <!-- column-name label -->
+      <column type="gchar"/>
+      <!-- column-name object -->
+      <column type="GObject"/>
+    </columns>
   </object>
 </interface>

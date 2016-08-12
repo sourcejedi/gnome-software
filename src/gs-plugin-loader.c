@@ -108,7 +108,7 @@ typedef gboolean	 (*GsPluginAuthFunc)		(GsPlugin	*plugin,
 							 GCancellable	*cancellable,
 							 GError		**error);
 typedef gboolean	 (*GsPluginPaymentMethodFunc)	(GsPlugin	*plugin,
-							 GsPaymentMethodList	*payment_methods,
+							 GPtrArray	*payment_methods,
 							 GCancellable	*cancellable,
 							 GError		**error);
 typedef gboolean	 (*GsPluginPurchaseFunc)	(GsPlugin	*plugin,
@@ -156,7 +156,7 @@ typedef struct {
 	GsApp				*app;
 	AsReview			*review;
 	GsAuth				*auth;
-	GsPaymentMethodList		*payment_methods;
+	GPtrArray			*payment_methods;
 	GsPrice				*price;
 } GsPluginLoaderAsyncState;
 
@@ -172,7 +172,7 @@ gs_plugin_loader_free_async_state (GsPluginLoaderAsyncState *state)
 	if (state->review != NULL)
 		g_object_unref (state->review);
 	if (state->payment_methods != NULL)
-		g_object_unref (state->payment_methods);
+		g_ptr_array_unref (state->payment_methods);
 	if (state->price != NULL)
 		g_object_unref (state->price);
 	if (state->file != NULL)
@@ -2887,6 +2887,13 @@ gs_plugin_loader_add_payment_methods_thread_cb (GTask *task,
 				   cancellable, &error_local);
 		gs_plugin_loader_action_stop (plugin_loader, plugin);
 		if (!ret) {
+			/* abort early to allow main thread to process */
+			if (gs_plugin_loader_is_auth_error (error_local)) {
+				g_task_return_error (task, error_local);
+				error_local = NULL;
+				return;
+			}
+
 			g_warning ("failed to call %s on %s: %s",
 				   state->function_name,
 				   gs_plugin_get_name (plugin),
@@ -3230,7 +3237,7 @@ gs_plugin_loader_get_payment_methods_async (GsPluginLoader *plugin_loader,
 
 	/* save state */
 	state = g_slice_new0 (GsPluginLoaderAsyncState);
-	state->payment_methods = gs_payment_method_list_new ();
+	state->payment_methods = g_ptr_array_new_with_free_func (g_object_unref);
 	state->function_name = "gs_plugin_add_payment_methods";
 
 	/* run in a thread */
@@ -3244,7 +3251,7 @@ gs_plugin_loader_get_payment_methods_async (GsPluginLoader *plugin_loader,
  *
  * Return value: (element-type GsPaymentMethod) (transfer full): A list of payment methods.
  **/
-GsPaymentMethodList *
+GPtrArray *
 gs_plugin_loader_get_payment_methods_finish (GsPluginLoader *plugin_loader,
 					     GAsyncResult *res,
 					     GError **error)

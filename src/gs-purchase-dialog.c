@@ -29,9 +29,54 @@
 struct _GsPurchaseDialog
 {
 	GtkDialog	 parent_instance;
+
+	GtkWidget	*label_title;
+	GtkWidget	*combo_payment_method;
+	GtkListStore	*model_payment_method;
 };
 
 G_DEFINE_TYPE (GsPurchaseDialog, gs_purchase_dialog, GTK_TYPE_DIALOG)
+
+void
+gs_purchase_dialog_set_app (GsPurchaseDialog *dialog, GsApp *app)
+{
+	g_return_if_fail (GS_IS_PURCHASE_DIALOG (dialog));
+}
+
+void
+gs_purchase_dialog_set_payment_methods (GsPurchaseDialog *dialog, GPtrArray *payment_methods)
+{
+	guint i;
+
+	g_return_if_fail (GS_IS_PURCHASE_DIALOG (dialog));
+
+	gtk_list_store_clear (dialog->model_payment_method);
+	for (i = 0; i < payment_methods->len; i++) {
+		GtkTreeIter iter;
+		GsPaymentMethod *method = payment_methods->pdata[i];
+
+		gtk_list_store_append (dialog->model_payment_method, &iter);
+		gtk_list_store_set (dialog->model_payment_method, &iter,
+				    0, gs_payment_method_get_description (method),
+				    1, method,
+				    -1);
+	}
+}
+
+
+GsPrice *
+gs_purchase_dialog_get_price (GsPurchaseDialog *dialog)
+{
+	g_return_val_if_fail (GS_IS_PURCHASE_DIALOG (dialog), NULL);
+	return NULL;
+}
+
+GsPaymentMethod *
+gs_purchase_dialog_get_payment_method (GsPurchaseDialog *dialog)
+{
+	g_return_val_if_fail (GS_IS_PURCHASE_DIALOG (dialog), NULL);
+	return NULL;
+}
 
 static void
 gs_purchase_dialog_init (GsPurchaseDialog *dialog)
@@ -45,6 +90,10 @@ gs_purchase_dialog_class_init (GsPurchaseDialogClass *klass)
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/Software/gs-purchase-dialog.ui");
+
+	gtk_widget_class_bind_template_child (widget_class, GsPurchaseDialog, label_title);
+	gtk_widget_class_bind_template_child (widget_class, GsPurchaseDialog, combo_payment_method);
+	gtk_widget_class_bind_template_child (widget_class, GsPurchaseDialog, model_payment_method);
 }
 
 GtkWidget *

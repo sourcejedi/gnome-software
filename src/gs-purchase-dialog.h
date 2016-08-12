@@ -24,13 +24,27 @@
 
 #include <gtk/gtk.h>
 
+#include "gs-app.h"
+#include "gs-price.h"
+#include "gs-payment-method.h"
+
 G_BEGIN_DECLS
 
 #define GS_TYPE_PURCHASE_DIALOG (gs_purchase_dialog_get_type ())
 
 G_DECLARE_FINAL_TYPE (GsPurchaseDialog, gs_purchase_dialog, GS, PURCHASE_DIALOG, GtkDialog)
 
-GtkWidget	*gs_purchase_dialog_new		(void);
+GtkWidget	*gs_purchase_dialog_new			(void);
+
+void		 gs_purchase_dialog_set_app		(GsPurchaseDialog	*dialog,
+							 GsApp			*app);
+
+void		 gs_purchase_dialog_set_payment_methods	(GsPurchaseDialog	*dialog,
+							 GPtrArray		*payment_methods);
+
+GsPrice		*gs_purchase_dialog_get_price		(GsPurchaseDialog	*dialog);
+
+GsPaymentMethod	*gs_purchase_dialog_get_payment_method	(GsPurchaseDialog	*dialog);
 
 G_END_DECLS
 

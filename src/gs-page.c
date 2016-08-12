@@ -30,6 +30,7 @@
 #include "gs-common.h"
 #include "gs-auth-dialog.h"
 #include "gs-price.h"
+#include "gs-purchase-dialog.h"
 
 typedef struct
 {
@@ -80,10 +81,10 @@ gs_page_app_purchased_cb (GObject *source,
 		g_warning ("failed to purchase %s: %s",
 		           gs_app_get_id (helper->app),
 		           error->message);
-		//gs_app_notify_failed_modal (helper->app,
-		//                            gs_shell_get_window (priv->shell),
-		//                            GS_PLUGIN_LOADER_ACTION_PURCHASE,
-		//                            error);
+		gs_app_notify_failed_modal (helper->app,
+		                            gs_shell_get_window (priv->shell),
+		                            GS_PLUGIN_LOADER_ACTION_PURCHASE,
+		                            error);
 		return;
 	}
 }
@@ -320,6 +321,31 @@ gs_page_set_header_end_widget (GsPage *page, GtkWidget *widget)
 }
 
 static void
+gs_page_payment_methods_cb (GObject *source,
+			    GAsyncResult *res,
+			    gpointer user_data);
+
+static void
+gs_page_payment_methods_authenticate_cb (GtkDialog *dialog,
+					 GtkResponseType response_type,
+					 GsPageHelper *helper)
+{
+	GsPagePrivate *priv = gs_page_get_instance_private (helper->page);
+
+	/* unmap the dialog */
+	gtk_widget_destroy (GTK_WIDGET (dialog));
+
+	if (response_type != GTK_RESPONSE_OK) {
+		gs_page_helper_free (helper);
+		return;
+	}
+	gs_plugin_loader_get_payment_methods_async (priv->plugin_loader,
+						    helper->cancellable,
+						    gs_page_payment_methods_cb,
+						    helper);
+}
+
+static void
 gs_page_purchase_app_response_cb (GtkDialog *dialog,
 				  gint response,
 				  GsPageHelper *helper)
@@ -342,51 +368,86 @@ gs_page_purchase_app_response_cb (GtkDialog *dialog,
 					     helper);
 }
 
+static void
+gs_page_payment_methods_cb (GObject *source,
+			    GAsyncResult *res,
+			    gpointer user_data)
+{
+	g_autoptr(GsPageHelper) helper = (GsPageHelper *) user_data;
+	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source);
+	GsPage *page = helper->page;
+	GsPagePrivate *priv = gs_page_get_instance_private (page);
+	g_autoptr(GPtrArray) payment_methods = NULL;
+	g_autoptr(GError) error = NULL;
+	GtkWidget *dialog;
+
+	payment_methods = gs_plugin_loader_get_payment_methods_finish (plugin_loader,
+								       res,
+								       &error);
+	if (g_error_matches (error,
+			     G_IO_ERROR,
+			     G_IO_ERROR_CANCELLED)) {
+		g_debug ("%s", error->message);
+		return;
+	}
+	if (payment_methods == NULL) {
+		/* try to authenticate then retry */
+		if (g_error_matches (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_AUTH_REQUIRED)) {
+			g_autoptr(GError) error_local = NULL;
+			GtkWidget *auth_dialog;
+			auth_dialog = gs_auth_dialog_new (priv->plugin_loader,
+							  helper->app,
+							  gs_utils_get_error_value (error),
+							  &error_local);
+			if (auth_dialog == NULL) {
+				g_warning ("%s", error_local->message);
+				return;
+			}
+			gs_shell_modal_dialog_present (priv->shell, GTK_DIALOG (auth_dialog));
+			g_signal_connect (auth_dialog, "response",
+					  G_CALLBACK (gs_page_payment_methods_authenticate_cb),
+					  g_steal_pointer (&helper));
+			return;
+		}
+
+		g_warning ("failed to get payment methods: %s",
+		           error->message);
+		gs_app_notify_failed_modal (helper->app,
+		                            gs_shell_get_window (priv->shell),
+		                            GS_PLUGIN_LOADER_ACTION_PURCHASE,
+		                            error);
+		return;
+	}
+
+	/* ask for confirmation */
+	dialog = gs_purchase_dialog_new ();
+	gs_purchase_dialog_set_app (GS_PURCHASE_DIALOG (dialog), helper->app);
+	gs_purchase_dialog_set_payment_methods (GS_PURCHASE_DIALOG (dialog), payment_methods);
+
+	/* handle this async */
+	g_signal_connect (dialog, "response",
+			  G_CALLBACK (gs_page_purchase_app_response_cb), g_steal_pointer (&helper));
+	gs_shell_modal_dialog_present (priv->shell, GTK_DIALOG (dialog));
+}
+
 void
 gs_page_purchase_app (GsPage *page, GsApp *app, GCancellable *cancellable)
 {
 	GsPagePrivate *priv = gs_page_get_instance_private (page);
 	GsPageHelper *helper;
-	GtkWidget *dialog;
-	GPtrArray *prices;
-	g_autofree gchar *price_text = NULL, *escaped = NULL;
 
 	helper = g_slice_new0 (GsPageHelper);
 	helper->app = g_object_ref (app);
 	helper->page = g_object_ref (page);
 	helper->cancellable = g_object_ref (cancellable);
 
-	/* ask for confirmation */
-	dialog = gtk_message_dialog_new (gs_shell_get_window (priv->shell),
-	                                 GTK_DIALOG_MODAL,
-	                                 GTK_MESSAGE_QUESTION,
-	                                 GTK_BUTTONS_CANCEL,
-	                                 /* TRANSLATORS: this is a prompt message, and
-	                                  * '%s' is an application summary, e.g. 'GNOME Clocks' */
-	                                 _("Are you sure you want to purchase %s?"),
-	                                 gs_app_get_name (app));
-	prices = gs_app_get_prices (app);
-	if (prices->len > 0) {
-		GsPrice *price = g_ptr_array_index (prices, 0); // FIXME: Give option of price to choose
-		g_autofree gchar *text = NULL;
-		price_text = gs_price_to_string (price);
-	} else {
-		price_text = g_strdup ("nothing"); // FIXME
-	}
-	escaped = g_markup_escape_text (gs_app_get_name (app), -1);
-	gtk_message_dialog_format_secondary_markup (GTK_MESSAGE_DIALOG (dialog),
-	                                            /* TRANSLATORS: Describing what will be purchased */
-                                                    _("You will be charged %s and %s will be installed."),
-                                                    price_text,
-                                                    escaped);
-
-	/* TRANSLATORS: this is button text to purchase the application */
-	gtk_dialog_add_button (GTK_DIALOG (dialog), _("Purchase"), GTK_RESPONSE_OK);
-
-	/* handle this async */
-	g_signal_connect (dialog, "response",
-			  G_CALLBACK (gs_page_purchase_app_response_cb), helper);
-	gs_shell_modal_dialog_present (priv->shell, GTK_DIALOG (dialog));
+	/* load payment methods */
+	gs_plugin_loader_get_payment_methods_async (priv->plugin_loader,
+						    helper->cancellable,
+						    gs_page_payment_methods_cb,
+						    helper);
 }
 
 void

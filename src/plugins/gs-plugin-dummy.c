@@ -656,7 +656,7 @@ gs_plugin_update_cancel (GsPlugin *plugin, GsApp *app,
  */
 gboolean
 gs_plugin_add_payment_methods (GsPlugin *plugin,
-			       GsPaymentMethodList *payment_methods,
+			       GPtrArray *payment_methods,
 			       GCancellable *cancellable,
 			       GError **error)
 {
@@ -665,7 +665,7 @@ gs_plugin_add_payment_methods (GsPlugin *plugin,
 	method = gs_payment_method_new ();
 	gs_payment_method_set_description (method, "Test Payment Method");
 	gs_payment_method_add_metadata (method, "card-number", "0000 0000 0000 0000");
-	gs_payment_method_list_add (payment_methods, method);
+	g_ptr_array_add (payment_methods, method);
 	return TRUE;
 }
 
