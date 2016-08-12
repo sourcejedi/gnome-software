@@ -605,7 +605,7 @@ send_package_action (GsPlugin *plugin,
 
 gboolean
 gs_plugin_add_payment_methods (GsPlugin *plugin,
-			       GsPaymentMethodList *payment_methods,
+			       GPtrArray *payment_methods,
 			       GCancellable *cancellable,
 			       GError **error)
 {
@@ -656,7 +656,7 @@ gs_plugin_add_payment_methods (GsPlugin *plugin,
 		GsPaymentMethod *payment_method;
 
 		payment_method = gs_payment_method_new ();
-		gs_payment_method_list_add (payment_methods, payment_method);
+		g_ptr_array_add (payment_methods, payment_method);
 
 		description = json_object_get_string_member (method, "description");
 		gs_payment_method_set_description (payment_method, description);
@@ -719,25 +719,17 @@ gs_plugin_app_purchase (GsPlugin *plugin,
 		return FALSE;
 	}
 
-	if (!gs_snapd_request ("POST", "/v2/buy/methods", NULL,
+	if (!gs_snapd_request ("POST", "/v2/buy", data,
 			       NULL, NULL,
 			       &status_code, &reason_phrase,
 			       &response_type, &response, NULL,
 			       cancellable, error))
 		return FALSE;
-
-	/*if (!gs_snapd_request ("POST", "/v2/buy", data,
-			       NULL, NULL,
-			       &status_code, &reason_phrase,
-			       &response_type, &response, NULL,
-			       cancellable, error))
-		return FALSE;*/
 
 	if (status_code != SOUP_STATUS_OK) {
 		// FIXME
 		return FALSE;
 	}
-  g_printerr ("'%s'\n", response);
 
 	gs_app_set_state (app, AS_APP_STATE_PURCHASING);
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
