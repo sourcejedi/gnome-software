@@ -150,7 +150,7 @@ gs_plugin_add_categories (GsPlugin *plugin,
 				guint size;
 				g_autoptr(GsCategory) cat = NULL;
 
-				cat = gs_category_new (parent, "featured", _("Featured"));
+				cat = gs_category_new (parent, "featured", NULL);
 				gs_category_add_subcategory (parent, cat);
 				size = gs_moduleset_get_n_featured (plugin->priv->moduleset, id);
 				gs_category_set_size (cat, size);
@@ -201,6 +201,7 @@ gs_plugin_add_category_apps (GsPlugin *plugin,
 		for (i = 0; apps[i]; i++) {
 			g_autoptr(GsApp) app = NULL;
 			app = gs_app_new (apps[i]);
+			gs_app_add_quirk (app, AS_APP_QUIRK_MATCH_ANY_PREFIX);
 			gs_plugin_add_app (list, app);
 		}
 	}
@@ -263,6 +264,7 @@ gs_plugin_add_popular (GsPlugin *plugin,
 	for (i = 0; apps[i]; i++) {
 		g_autoptr(GsApp) app = NULL;
 		app = gs_app_new (apps[i]);
+		gs_app_add_quirk (app, AS_APP_QUIRK_MATCH_ANY_PREFIX);
 		gs_plugin_add_app (list, app);
 	}
 	return TRUE;

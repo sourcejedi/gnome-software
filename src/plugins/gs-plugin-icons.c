@@ -112,21 +112,44 @@ gs_plugin_icons_download (GsPlugin *plugin, const gchar *uri, const gchar *filen
 }
 
 /**
- * gs_plugin_refine:
+ * gs_plugin_refine_app:
  */
-static gboolean
-gs_plugin_refine_app (GsPlugin *plugin, GsApp *app, GError **error)
+gboolean
+gs_plugin_refine_app (GsPlugin *plugin,
+		      GsApp *app,
+		      GsPluginRefineFlags flags,
+		      GCancellable *cancellable,
+		      GError **error)
 {
 	AsIcon *ic;
 	const gchar *fn;
 	gchar *found;
 
-	/* not applicable */
+	/* invalid */
+	if (gs_app_get_pixbuf (app) != NULL)
+		return TRUE;
 	ic = gs_app_get_icon (app);
+	if (ic == NULL)
+		return TRUE;
+
+	/* handle LOCAL and STOCK */
+	if (as_icon_get_kind (ic) == AS_ICON_KIND_LOCAL ||
+	    as_icon_get_kind (ic) == AS_ICON_KIND_STOCK) {
+		return gs_app_load_icon (app, plugin->scale, error);
+	}
+
+	/* not applicable */
 	if (as_icon_get_url (ic) == NULL)
 		return TRUE;
 	if (as_icon_get_filename (ic) == NULL)
 		return TRUE;
+
+	/* a REMOTE that's really LOCAL */
+	if (g_str_has_prefix (as_icon_get_url (ic), "file://")) {
+		as_icon_set_filename (ic, as_icon_get_url (ic) + 7);
+		as_icon_set_kind (ic, AS_ICON_KIND_LOCAL);
+		return gs_app_load_icon (app, plugin->scale, error);
+	}
 
 	/* convert filename from jpg to png */
 	fn = as_icon_get_filename (ic);
@@ -141,32 +164,4 @@ gs_plugin_refine_app (GsPlugin *plugin, GsApp *app, GError **error)
 		return FALSE;
 	as_icon_set_kind (ic, AS_ICON_KIND_LOCAL);
 	return gs_app_load_icon (app, plugin->scale, error);
-}
-
-/**
- * gs_plugin_refine:
- */
-gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		  GList **list,
-		  GsPluginRefineFlags flags,
-		  GCancellable *cancellable,
-		  GError **error)
-{
-	GError *error_local = NULL;
-	GList *l;
-	GsApp *app;
-
-	for (l = *list; l != NULL; l = l->next) {
-		app = GS_APP (l->data);
-		if (gs_app_get_pixbuf (app) != NULL)
-			continue;
-		if (gs_app_get_icon (app) == NULL)
-			continue;
-		if (!gs_plugin_refine_app (plugin, app, &error_local)) {
-			g_warning ("ignoring: %s", error_local->message);
-			g_clear_error (&error_local);
-		}
-	}
-	return TRUE;
 }

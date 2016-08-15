@@ -73,23 +73,18 @@ typedef enum {
 
 #define	GS_APP_KUDOS_WEIGHT_TO_PERCENTAGE(w)	(w * 20)
 
-#if !AS_CHECK_VERSION(0,5,14)
-#define AS_APP_QUIRK_NEEDS_REBOOT		(1 << 4)
-#define AS_APP_QUIRK_NOT_REVIEWABLE		(1 << 5)
+#if !AS_CHECK_VERSION(0,5,12)
+#define AS_APP_QUIRK_MATCH_ANY_PREFIX		(1 << 3)
 #endif
 
-#if !AS_CHECK_VERSION(0,5,15)
-#define AS_APP_QUIRK_HAS_SHORTCUT		(1 << 6)
-#define AS_APP_QUIRK_NOT_LAUNCHABLE		(1 << 7)
+#if !AS_CHECK_VERSION(0,5,14)
+#define AS_APP_QUIRK_NOT_REVIEWABLE		(1 << 5)
 #endif
 
 GQuark		 gs_app_error_quark		(void);
 
 GsApp		*gs_app_new			(const gchar	*id);
 gchar		*gs_app_to_string		(GsApp		*app);
-
-void		 gs_app_subsume			(GsApp		*app,
-						 GsApp		*other);
 
 const gchar	*gs_app_get_id			(GsApp		*app);
 void		 gs_app_set_id			(GsApp		*app,
@@ -101,6 +96,7 @@ void		 gs_app_set_kind		(GsApp		*app,
 AsAppState	 gs_app_get_state		(GsApp		*app);
 void		 gs_app_set_state		(GsApp		*app,
 						 AsAppState	 state);
+void		 gs_app_set_state_recover	(GsApp		*app);
 guint		 gs_app_get_progress		(GsApp		*app);
 void		 gs_app_set_progress		(GsApp		*app,
 						 guint		 percentage);
@@ -148,7 +144,7 @@ const gchar	*gs_app_get_license		(GsApp		*app);
 gboolean	 gs_app_get_license_is_free	(GsApp		*app);
 void		 gs_app_set_license		(GsApp		*app,
 						 GsAppQuality	 quality,
-						 const gchar	*licence);
+						 const gchar	*license);
 gchar		**gs_app_get_menu_path		(GsApp		*app);
 void		 gs_app_set_menu_path		(GsApp		*app,
 						 gchar		**menu_path);
@@ -245,6 +241,9 @@ gboolean	 gs_app_has_quirk		(GsApp		*app,
 						 AsAppQuirk	 quirk);
 void		 gs_app_add_quirk		(GsApp		*app,
 						 AsAppQuirk	 quirk);
+GError		*gs_app_get_last_error		(GsApp		*app);
+void		 gs_app_set_last_error		(GsApp		*app,
+						 GError		*error);
 
 G_END_DECLS
 

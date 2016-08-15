@@ -91,6 +91,7 @@ gs_plugin_order_after (GsPlugin *plugin)
 {
 	static const gchar *deps[] = {
 		"appstream",
+		"odrs",
 		NULL };
 	return deps;
 }
@@ -829,29 +830,22 @@ refine_reviews (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError 
 }
 
 gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		  GList **list,
-		  GsPluginRefineFlags flags,
-		  GCancellable *cancellable,
-		  GError **error)
+gs_plugin_refine_app (GsPlugin *plugin,
+		      GsApp *app,
+		      GsPluginRefineFlags flags,
+		      GCancellable *cancellable,
+		      GError **error)
 {
-	GList *l;
-	gboolean ret = TRUE;
-
-	for (l = *list; l != NULL; l = l->next) {
-		GsApp *app = GS_APP (l->data);
-
-		if ((flags & (GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING | GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS)) != 0) {
-			if (!refine_rating (plugin, app, cancellable, error))
-				return FALSE;
-		}
-		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS) != 0) {
-			if (!refine_reviews (plugin, app, cancellable, error))
-				return FALSE;
-		}
+	if ((flags & (GS_PLUGIN_REFINE_FLAGS_REQUIRE_RATING | GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS)) != 0) {
+		if (!refine_rating (plugin, app, cancellable, error))
+			return FALSE;
+	}
+	if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS) != 0) {
+		if (!refine_reviews (plugin, app, cancellable, error))
+			return FALSE;
 	}
 
-	return ret;
+	return TRUE;
 }
 
 static void

@@ -35,7 +35,6 @@
 
 struct GsPluginPrivate {
 	GFileMonitor		*monitor;
-	gsize			 done_init;
 };
 
 /**
@@ -80,10 +79,10 @@ gs_plugin_systemd_updates_changed_cb (GFileMonitor *monitor,
 }
 
 /**
- * gs_plugin_startup:
+ * gs_plugin_setup:
  */
-static gboolean
-gs_plugin_startup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
+gboolean
+gs_plugin_setup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 {
 	plugin->priv->monitor = pk_offline_get_prepared_monitor (cancellable, error);
 	if (plugin->priv->monitor == NULL)
@@ -103,18 +102,9 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
-	gboolean ret;
 	guint i;
 	g_autoptr(GError) error_local = NULL;
 	g_auto(GStrv) package_ids = NULL;
-
-	/* watch the file in case it comes or goes */
-	if (g_once_init_enter (&plugin->priv->done_init)) {
-		ret = gs_plugin_startup (plugin, cancellable, error);
-		g_once_init_leave (&plugin->priv->done_init, TRUE);
-		if (!ret)
-			return FALSE;
-	}
 
 	/* get the id's if the file exists */
 	package_ids = pk_offline_get_prepared_ids (&error_local);
@@ -137,12 +127,12 @@ gs_plugin_add_updates (GsPlugin *plugin,
 		g_autoptr(GsApp) app = NULL;
 		g_auto(GStrv) split = NULL;
 		app = gs_app_new (NULL);
-		gs_app_set_management_plugin (app, "PackageKit");
+		gs_app_set_management_plugin (app, "packagekit");
 		gs_app_add_source_id (app, package_ids[i]);
 		split = pk_package_id_split (package_ids[i]);
 		gs_app_add_source (app, split[PK_PACKAGE_ID_NAME]);
 		gs_app_set_update_version (app, split[PK_PACKAGE_ID_VERSION]);
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+		gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
 		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 		gs_plugin_add_app (list, app);
 	}
@@ -163,10 +153,12 @@ gs_plugin_update (GsPlugin *plugin,
 	/* any apps to process offline */
 	for (l = apps; l != NULL; l = l->next) {
 		GsApp *app = GS_APP (l->data);
-		if (gs_app_get_state (app) == AS_APP_STATE_UPDATABLE) {
-			return pk_offline_trigger (PK_OFFLINE_ACTION_REBOOT,
-						   cancellable, error);
-		}
+
+		/* only process this app if was created by this plugin */
+		if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
+			continue;
+		return pk_offline_trigger (PK_OFFLINE_ACTION_REBOOT,
+					   cancellable, error);
 	}
 	return TRUE;
 }
@@ -180,6 +172,9 @@ gs_plugin_update_cancel (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
+	/* only process this app if was created by this plugin */
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
+		return TRUE;
 	return pk_offline_cancel (NULL, error);
 }
 
@@ -192,5 +187,8 @@ gs_plugin_app_upgrade_trigger (GsPlugin *plugin,
                                GCancellable *cancellable,
                                GError **error)
 {
+	/* only process this app if was created by this plugin */
+	if (g_strcmp0 (gs_app_get_management_plugin (app), "packagekit") != 0)
+		return TRUE;
 	return pk_offline_trigger_upgrade (PK_OFFLINE_ACTION_REBOOT, cancellable, error);
 }

@@ -646,7 +646,7 @@ gs_plugin_refine (GsPlugin *plugin,
 				gs_app_set_update_version (app, info->update_version);
 			}
 		}
-		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE) != 0 && is_open_source(info)) {
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENSE) != 0 && is_open_source(info)) {
 			gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-free=" LICENSE_URL);
 		}
 

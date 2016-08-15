@@ -36,6 +36,9 @@ gboolean	gs_plugin_packagekit_add_results	(GsPlugin	*plugin,
 							 GList		**list,
 							 PkResults	*results,
 							 GError		**error);
+gboolean	gs_plugin_packagekit_convert_gerror	(GError		**error);
+gboolean	gs_plugin_packagekit_results_valid	(PkResults	*results,
+							 GError		**error);
 
 G_END_DECLS
 

@@ -263,6 +263,8 @@ gs_appstream_copy_metadata (GsApp *app, AsApp *item)
 	for (l = keys; l != NULL; l = l->next) {
 		const gchar *key = l->data;
 		const gchar *value = g_hash_table_lookup (hash, key);
+		if (gs_app_get_metadata_item (app, key) != NULL)
+			continue;
 		gs_app_set_metadata (app, key, value);
 	}
 }
@@ -319,12 +321,19 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 	const gchar *runtime = NULL;
 	guint i;
 
+	/* allow override */
+	management_plugin = as_app_get_metadata_item (item, "GnomeSoftware::Plugin");
+	if (management_plugin != NULL) {
+		gs_app_set_management_plugin (app, management_plugin);
+		return;
+	}
+
 	/* find the default bundle kind */
 	bundles = as_app_get_bundles (item);
 	for (i = 0; i < bundles->len; i++) {
 		AsBundle *bundle = g_ptr_array_index (bundles, i);
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_XDG_APP) {
-			management_plugin = "XgdApp";
+			management_plugin = "xdg-app";
 			gs_app_add_source (app, as_bundle_get_id (bundle));
 
 			/* automatically add runtime */
@@ -341,7 +350,7 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 			break;
 		}
 		if (as_bundle_get_kind (bundle) == AS_BUNDLE_KIND_LIMBA) {
-			management_plugin = "Limba";
+			management_plugin = "limba";
 			gs_app_add_source (app, as_bundle_get_id (bundle));
 			break;
 		}
@@ -350,9 +359,92 @@ gs_refine_item_management_plugin (GsApp *app, AsApp *item)
 	/* fall back to PackageKit */
 	if (management_plugin == NULL &&
 	    as_app_get_pkgname_default (item) != NULL)
-		management_plugin = "PackageKit";
+		management_plugin = "packagekit";
 	if (management_plugin != NULL)
 		gs_app_set_management_plugin (app, management_plugin);
+}
+
+/**
+ * gs_appstream_refine_app_updates:
+ */
+static gboolean
+gs_appstream_refine_app_updates (GsPlugin *plugin,
+				 GsApp *app,
+				 AsApp *item,
+				 GError **error)
+{
+	AsRelease *rel;
+	AsUrgencyKind urgency_best = AS_URGENCY_KIND_UNKNOWN;
+	GPtrArray *releases;
+	guint i;
+	g_autoptr(GPtrArray) updates_list = NULL;
+
+	/* make a list of valid updates */
+	updates_list = g_ptr_array_new ();
+	releases = as_app_get_releases (item);
+	for (i = 0; i < releases->len; i++) {
+		rel = g_ptr_array_index (releases, i);
+
+		/* is newer than what's installed */
+		if (as_utils_vercmp (as_release_get_version (rel),
+				     gs_app_get_version (app)) < 0)
+			continue;
+
+		/* use the 'worst' urgency, e.g. critical over enhancement */
+		if (as_release_get_urgency (rel) > urgency_best)
+			urgency_best = as_release_get_urgency (rel);
+
+		/* add updates with a description */
+		if (as_release_get_description (rel, NULL) == NULL)
+			continue;
+		g_ptr_array_add (updates_list, rel);
+	}
+
+	/* only set if known */
+	if (urgency_best != AS_URGENCY_KIND_UNKNOWN)
+		gs_app_set_update_urgency (app, urgency_best);
+
+	/* no prefix on each release */
+	if (updates_list->len == 1) {
+		g_autofree gchar *desc = NULL;
+		rel = g_ptr_array_index (updates_list, 0);
+		desc = as_markup_convert (as_release_get_description (rel, NULL),
+					  AS_MARKUP_CONVERT_FORMAT_SIMPLE,
+					  error);
+		if (desc == NULL)
+			return FALSE;
+		gs_app_set_update_details (app, desc);
+
+	/* get the descriptions with a version prefix */
+	} else if (updates_list->len > 1) {
+		g_autoptr(GString) update_desc = g_string_new ("");
+		for (i = 0; i < updates_list->len; i++) {
+			g_autofree gchar *desc = NULL;
+			rel = g_ptr_array_index (updates_list, i);
+			desc = as_markup_convert (as_release_get_description (rel, NULL),
+						  AS_MARKUP_CONVERT_FORMAT_SIMPLE,
+						  error);
+			if (desc == NULL)
+				return FALSE;
+			g_string_append_printf (update_desc,
+						"<b>Version %s:</b>\n%s\n\n",
+						as_release_get_version (rel),
+						desc);
+		}
+
+		/* remove trailing newlines */
+		if (update_desc->len > 2)
+			g_string_truncate (update_desc, update_desc->len - 2);
+		gs_app_set_update_details (app, update_desc->str);
+	}
+
+	/* newest release only */
+	rel = as_app_get_release_default (item);
+	if (rel != NULL)
+		gs_app_set_update_version (app, as_release_get_version (rel));
+
+	/* success */
+	return TRUE;
 }
 
 /**
@@ -364,7 +456,6 @@ gs_appstream_refine_app (GsPlugin *plugin,
 			 AsApp *item,
 			 GError **error)
 {
-	AsRelease *rel;
 	GHashTable *urls;
 	GPtrArray *pkgnames;
 	GPtrArray *kudos;
@@ -382,7 +473,6 @@ gs_appstream_refine_app (GsPlugin *plugin,
 		switch (as_app_get_source_kind (item)) {
 		case AS_APP_SOURCE_KIND_APPDATA:
 		case AS_APP_SOURCE_KIND_DESKTOP:
-			gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 			break;
 		case AS_APP_SOURCE_KIND_METAINFO:
@@ -453,7 +543,7 @@ gs_appstream_refine_app (GsPlugin *plugin,
 		}
 	}
 
-	/* set licence */
+	/* set license */
 	if (as_app_get_project_license (item) != NULL && gs_app_get_license (app) == NULL)
 		gs_app_set_license (app,
 				    GS_APP_QUALITY_HIGHEST,
@@ -560,27 +650,13 @@ gs_appstream_refine_app (GsPlugin *plugin,
 			gs_app_add_kudo (app, GS_APP_KUDO_HI_DPI_ICON);
 			break;
 		default:
-			g_debug ("no idea how to handle kudo '%s'", tmp);
 			break;
 		}
 	}
 
 	/* is there any update information */
-	rel = as_app_get_release_default (item);
-	if (rel != NULL) {
-		tmp = as_release_get_description (rel, NULL);
-		if (tmp != NULL) {
-			g_autofree gchar *desc = NULL;
-			desc = as_markup_convert (tmp,
-						  AS_MARKUP_CONVERT_FORMAT_MARKDOWN,
-						  error);
-			if (desc == NULL)
-				return FALSE;
-			gs_app_set_update_details (app, desc);
-		}
-		gs_app_set_update_urgency (app, as_release_get_urgency (rel));
-		gs_app_set_update_version (app, as_release_get_version (rel));
-	}
+	if (!gs_appstream_refine_app_updates (plugin, app, item, error))
+		return FALSE;
 
 	return TRUE;
 }

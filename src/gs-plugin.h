@@ -79,6 +79,7 @@ struct GsPlugin {
 	gpointer		 updates_changed_user_data;
 	AsProfile		*profile;
 	SoupSession		*soup_session;
+	GRWLock			 rwlock;
 };
 
 typedef enum {
@@ -94,7 +95,7 @@ typedef enum {
 typedef enum {
 	GS_PLUGIN_REFINE_FLAGS_DEFAULT			= 0,
 	GS_PLUGIN_REFINE_FLAGS_USE_HISTORY		= 1 << 0,
-	GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENCE		= 1 << 1,
+	GS_PLUGIN_REFINE_FLAGS_REQUIRE_LICENSE		= 1 << 1,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_URL		= 1 << 2,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_DESCRIPTION	= 1 << 3,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_SIZE		= 1 << 4,
@@ -113,12 +114,32 @@ typedef enum {
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_PROVENANCE	= 1 << 17,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEWS		= 1 << 18,
 	GS_PLUGIN_REFINE_FLAGS_REQUIRE_REVIEW_RATINGS	= 1 << 19,
+	/*< private >*/
 	GS_PLUGIN_REFINE_FLAGS_LAST
 } GsPluginRefineFlags;
 
+/**
+ * GsPluginRefreshFlags:
+ * @GS_PLUGIN_REFRESH_FLAGS_NONE:	Generate new metadata if possible
+ * @GS_PLUGIN_REFRESH_FLAGS_METADATA:	Download new metadata
+ * @GS_PLUGIN_REFRESH_FLAGS_PAYLOAD:	Download any pending payload
+ *
+ * The flags used for refresh. Regeneration and downloading is only
+ * done if the cache is older than the %cache_age.
+ *
+ * The %GS_PLUGIN_REFRESH_FLAGS_METADATA can be used to make sure
+ * there's enough metadata to start the application.
+ * The %GS_PLUGIN_REFRESH_FLAGS_PAYLOAD flag should only be used when
+ * the session is idle and bandwidth is unmetered as the amount of data
+ * and IO may be large.
+ **/
 typedef enum {
-	GS_PLUGIN_REFRESH_FLAGS_UPDATES			= 1 << 0,
-	GS_PLUGIN_REFRESH_FLAGS_UI			= 1 << 1,
+	GS_PLUGIN_REFRESH_FLAGS_NONE			= 0,
+	GS_PLUGIN_REFRESH_FLAGS_METADATA		= 1 << 0,
+	GS_PLUGIN_REFRESH_FLAGS_PAYLOAD			= 1 << 1,
+	GS_PLUGIN_REFRESH_FLAGS_UPDATES			= 1 << 2,
+	GS_PLUGIN_REFRESH_FLAGS_UI			= 1 << 3,
+	/*< private >*/
 	GS_PLUGIN_REFRESH_FLAGS_LAST
 } GsPluginRefreshFlags;
 
@@ -130,6 +151,9 @@ typedef enum {
 typedef const gchar	*(*GsPluginGetNameFunc)		(void);
 typedef const gchar	**(*GsPluginGetDepsFunc)	(GsPlugin	*plugin);
 typedef void		 (*GsPluginFunc)		(GsPlugin	*plugin);
+typedef gboolean	 (*GsPluginSetupFunc)		(GsPlugin	*plugin,
+							 GCancellable	*cancellable,
+							 GError		**error);
 typedef gboolean	 (*GsPluginSearchFunc)		(GsPlugin	*plugin,
 							 gchar		**value,
 							 GList		**list,
@@ -158,6 +182,11 @@ typedef gboolean	 (*GsPluginRefineFunc)		(GsPlugin	*plugin,
 							 GsPluginRefineFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);
+typedef gboolean	 (*GsPluginRefineAppFunc)	(GsPlugin	*plugin,
+							 GsApp		*app,
+							 GsPluginRefineFlags flags,
+							 GCancellable	*cancellable,
+							 GError		**error);
 typedef gboolean	 (*GsPluginRefreshFunc	)	(GsPlugin	*plugin,
 							 guint		 cache_age,
 							 GsPluginRefreshFlags flags,
@@ -178,6 +207,17 @@ void		 gs_plugin_initialize			(GsPlugin	*plugin);
 void		 gs_plugin_destroy			(GsPlugin	*plugin);
 void		 gs_plugin_set_enabled			(GsPlugin	*plugin,
 							 gboolean	 enabled);
+GBytes		*gs_plugin_download_data		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 const gchar	*uri,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_download_file		(GsPlugin	*plugin,
+							 GsApp		*app,
+							 const gchar	*uri,
+							 const gchar	*filename,
+							 GCancellable	*cancellable,
+							 GError		**error);
 gboolean	 gs_plugin_check_distro_id		(GsPlugin	*plugin,
 							 const gchar	*distro_id);
 void		 gs_plugin_add_app			(GList		**list,
@@ -219,6 +259,9 @@ gboolean	 gs_plugin_add_search_what_provides	(GsPlugin	*plugin,
 const gchar	**gs_plugin_order_after			(GsPlugin	*plugin);
 const gchar	**gs_plugin_order_before		(GsPlugin	*plugin);
 const gchar	**gs_plugin_get_conflicts		(GsPlugin	*plugin);
+gboolean	 gs_plugin_setup			(GsPlugin	*plugin,
+							 GCancellable	*cancellable,
+							 GError		**error);
 gboolean	 gs_plugin_add_installed		(GsPlugin	*plugin,
 							 GList		**list,
 							 GCancellable	*cancellable,
@@ -262,6 +305,11 @@ gboolean	 gs_plugin_add_unvoted_reviews		(GsPlugin	*plugin,
 							 GError		**error);
 gboolean	 gs_plugin_refine			(GsPlugin	*plugin,
 							 GList		**list,
+							 GsPluginRefineFlags flags,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 gs_plugin_refine_app			(GsPlugin	*plugin,
+							 GsApp		*app,
 							 GsPluginRefineFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);

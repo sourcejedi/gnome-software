@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2014 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2014-2016 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -128,16 +128,11 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GCancellable *cancellable,
 		   GError **error)
 {
-	PkBitfield filter;
-	PkBitfield transaction_flags;
 	ProgressData data;
-	g_auto(GStrv) package_ids = NULL;
-	g_autoptr(PkPackageSack) sack = NULL;
-	g_autoptr(PkResults) results2 = NULL;
 	g_autoptr(PkResults) results = NULL;
 
-	/* not us */
-	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
+	/* nothing to re-generate */
+	if (flags == 0)
 		return TRUE;
 
 	/* cache age of 0 is user-initiated */
@@ -146,33 +141,51 @@ gs_plugin_refresh (GsPlugin *plugin,
 	data.plugin = plugin;
 	data.ptask = NULL;
 
-	/* update UI as this might take some time */
-	gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_WAITING);
+	/* refresh the metadata */
+	if (flags & GS_PLUGIN_REFRESH_FLAGS_METADATA ||
+	    flags & GS_PLUGIN_REFRESH_FLAGS_PAYLOAD) {
+		PkBitfield filter;
 
-	/* do sync call */
-	filter = pk_bitfield_value (PK_FILTER_ENUM_NONE);
-	pk_client_set_cache_age (PK_CLIENT (plugin->priv->task), cache_age);
-	results = pk_client_get_updates (PK_CLIENT (plugin->priv->task),
-					 filter,
-					 cancellable,
-					 gs_plugin_packagekit_progress_cb, &data,
-					 error);
-	if (results == NULL)
-		return FALSE;
+		filter = pk_bitfield_value (PK_FILTER_ENUM_NONE);
+		pk_client_set_cache_age (PK_CLIENT (plugin->priv->task), cache_age);
+		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_WAITING);
+		results = pk_client_get_updates (PK_CLIENT (plugin->priv->task),
+						 filter,
+						 cancellable,
+						 gs_plugin_packagekit_progress_cb, &data,
+						 error);
+		if (results == NULL) {
+			gs_plugin_packagekit_convert_gerror (error);
+			return FALSE;
+		}
+	}
 
-	/* download all the updates */
-	sack = pk_results_get_package_sack (results);
-	if (pk_package_sack_get_size (sack) == 0)
-		return TRUE;
-	package_ids = pk_package_sack_get_ids (sack);
-	transaction_flags = pk_bitfield_value (PK_TRANSACTION_FLAG_ENUM_ONLY_DOWNLOAD);
-	results2 = pk_client_update_packages (PK_CLIENT (plugin->priv->task),
-					      transaction_flags,
-					      package_ids,
-					      cancellable,
-					      gs_plugin_packagekit_progress_cb, &data,
-					      error);
-	return results2 != NULL;
+	/* download all the packages themselves */
+	if (flags & GS_PLUGIN_REFRESH_FLAGS_PAYLOAD) {
+		PkBitfield transaction_flags;
+		g_auto(GStrv) package_ids = NULL;
+		g_autoptr(PkPackageSack) sack = NULL;
+		g_autoptr(PkResults) results2 = NULL;
+
+		sack = pk_results_get_package_sack (results);
+		if (pk_package_sack_get_size (sack) == 0)
+			return TRUE;
+		package_ids = pk_package_sack_get_ids (sack);
+		transaction_flags = pk_bitfield_value (PK_TRANSACTION_FLAG_ENUM_ONLY_DOWNLOAD);
+		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_WAITING);
+		results2 = pk_client_update_packages (PK_CLIENT (plugin->priv->task),
+						      transaction_flags,
+						      package_ids,
+						      cancellable,
+						      gs_plugin_packagekit_progress_cb, &data,
+						      error);
+		if (results2 == NULL) {
+			gs_plugin_packagekit_convert_gerror (error);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
 }
 
 /**
@@ -237,7 +250,7 @@ gs_plugin_packagekit_refresh_guess_app_id (GsPlugin *plugin,
 					     cancellable,
 					     gs_plugin_packagekit_progress_cb, &data,
 					     error);
-	if (results == NULL)
+	if (!gs_plugin_packagekit_results_valid (results, error))
 		return FALSE;
 	array = pk_results_get_files_array (results);
 	if (array->len == 0) {
@@ -286,7 +299,6 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	g_autoptr (PkResults) results = NULL;
 	g_autofree gchar *basename = NULL;
 	g_autofree gchar *content_type = NULL;
-	g_autofree gchar *filename = NULL;
 	g_autofree gchar *license_spdx = NULL;
 	g_auto(GStrv) files = NULL;
 	g_auto(GStrv) split = NULL;
@@ -318,7 +330,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 					       cancellable,
 					       gs_plugin_packagekit_progress_cb, &data,
 					       error);
-	if (results == NULL)
+	if (!gs_plugin_packagekit_results_valid (results, error))
 		return FALSE;
 
 	/* get results */
@@ -345,7 +357,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	package_id = pk_details_get_package_id (item);
 	split = pk_package_id_split (package_id);
 	basename = g_path_get_basename (filename);
-	gs_app_set_management_plugin (app, "PackageKit");
+	gs_app_set_management_plugin (app, "packagekit");
 	gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE_LOCAL);
 	if (pk_details_get_summary (item))
@@ -354,6 +366,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	else
 		gs_app_set_name (app, GS_APP_QUALITY_LOWEST, split[PK_PACKAGE_ID_NAME]);
 	gs_app_set_version (app, split[PK_PACKAGE_ID_VERSION]);
+	gs_app_set_metadata (app, "packagekit::local-filename", filename);
 	gs_app_set_origin (app, basename);
 	gs_app_add_source (app, split[PK_PACKAGE_ID_NAME]);
 	gs_app_add_source_id (app, package_id);

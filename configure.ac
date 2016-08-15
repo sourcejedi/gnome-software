@@ -1,7 +1,7 @@
 # Copyright (C) 2010-2015 Richard Hughes <richard@hughsie.com>
 AC_PREREQ(2.63)
 
-AC_INIT([gnome-software],[3.20.1],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
+AC_INIT([gnome-software],[3.20.2],[http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-software])
 AC_CONFIG_SRCDIR(src)
 AM_INIT_AUTOMAKE([1.11 no-dist-gzip dist-xz tar-ustar serial-tests foreign])
 AC_CONFIG_HEADERS([config.h])
@@ -90,7 +90,7 @@ AM_CONDITIONAL(ENABLE_MAN, test "$enable_man" != no)
 AC_ARG_ENABLE(dogtail,
               [AS_HELP_STRING([--enable-dogtail],
                               [test using dogtail [default=yes]])],,
-              enable_dogtail=yes)
+              enable_dogtail=no)
 AM_CONDITIONAL(ENABLE_DOGTAIL, test "$enable_dogtail" != no)
 
 # PackageKit
@@ -232,8 +232,16 @@ AM_CONDITIONAL(HAVE_LIMBA, test x$enable_limba = xyes)
 AC_ARG_ENABLE(odrs,
               [AS_HELP_STRING([--enable-odrs],
                               [enable ODRS support [default=yes]])],,
-              have_odrs=yes)
-AM_CONDITIONAL(HAVE_ODRS, test "$have_odrs" != no)
+              enable_odrs=yes)
+AM_CONDITIONAL(HAVE_ODRS, test "x$enable_odrs" = "xyes")
+
+# Ubuntu-specific Reviews
+AC_ARG_ENABLE(ubuntu-reviews,
+              [AS_HELP_STRING([--enable-ubuntu-reviews],
+                              [enable Ubuntu reviews [default=no]])],,
+              enable_ubuntu_reviews=no)
+AM_CONDITIONAL(HAVE_UBUNTU_REVIEWS, [test "x$enable_ubuntu_reviews" = "xyes"])
+AC_DEFINE(HAVE_UBUNTU_REVIEWS,1,[Build Ubuntu reviews])
 
 # this refers to the gnome-software plugin API version
 # this is not in any way related to a package or soname version
@@ -285,5 +293,6 @@ echo "
         Firmware support:          ${have_firmware}
         Limba support:             ${have_limba}
         XDG-APP support:           ${have_xdg_app}
-        ODRS support:              ${have_odrs}
+        ODRS support:              ${enable_odrs}
+        Ubuntu Reviews support:    ${enable_ubuntu_reviews}
 "

@@ -163,42 +163,73 @@ gs_app_notify_failed_modal (GsApp *app,
 {
 	GtkWidget *dialog;
 	const gchar *title;
-	g_autofree gchar *msg = NULL;
+	gboolean show_detailed_error = TRUE;
+	g_autoptr(GString) msg = NULL;
 
+	/* TRANSLATORS: install or removed failed */
 	title = _("Sorry, this did not work");
+
+	/* say what we tried to do */
+	msg = g_string_new ("");
 	switch (action) {
 	case GS_PLUGIN_LOADER_ACTION_INSTALL:
+	case GS_PLUGIN_LOADER_ACTION_UPGRADE_DOWNLOAD:
 		/* TRANSLATORS: this is when the install fails */
-		msg = g_strdup_printf (_("Installation of %s failed."),
-				       gs_app_get_name (app));
+		g_string_append_printf (msg, _("Installation of %s failed."),
+					gs_app_get_name (app));
 		break;
 	case GS_PLUGIN_LOADER_ACTION_REMOVE:
 		/* TRANSLATORS: this is when the remove fails */
-		msg = g_strdup_printf (_("Removal of %s failed."),
-				       gs_app_get_name (app));
+		g_string_append_printf (msg, _("Removal of %s failed."),
+					gs_app_get_name (app));
 		break;
 	default:
 		g_assert_not_reached ();
 		break;
 	}
+	g_string_append (msg, " ");
+
 	dialog = gtk_message_dialog_new (parent_window,
 					 GTK_DIALOG_MODAL |
+					 GTK_DIALOG_USE_HEADER_BAR |
 					 GTK_DIALOG_DESTROY_WITH_PARENT,
 					 GTK_MESSAGE_ERROR,
 					 GTK_BUTTONS_CLOSE,
 					 "%s", title);
 	gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog),
-						  "%s", msg);
+						  "%s", msg->str);
+
+	/* detailed error in an expander */
+	if (show_detailed_error) {
+		GtkWidget *vbox;
+		GtkWidget *expander;
+		GtkWidget *scrolled_window;
+		GtkWidget *label;
+
+		vbox = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+		/* TRANSLATORS: this is an expander title */
+		expander = gtk_expander_new (_("Show Details"));
+		gtk_widget_set_margin_start (expander, 36);
+		gtk_widget_set_margin_end (expander, 36);
+		scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+		gtk_container_add (GTK_CONTAINER (expander), scrolled_window);
+		label = gtk_label_new (error->message);
+		gtk_container_add (GTK_CONTAINER (scrolled_window), label);
+		gtk_box_pack_end (GTK_BOX (vbox), expander, FALSE, TRUE, 4);
+		gtk_widget_show_all (expander);
+
+	}
+
 	g_signal_connect (dialog, "response",
 			  G_CALLBACK (gtk_widget_destroy), NULL);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
 typedef enum {
-	GS_APP_LICENCE_FREE		= 0,
-	GS_APP_LICENCE_NONFREE		= 1,
-	GS_APP_LICENCE_PATENT_CONCERN	= 2
-} GsAppLicenceHint;
+	GS_APP_LICENSE_FREE		= 0,
+	GS_APP_LICENSE_NONFREE		= 1,
+	GS_APP_LICENSE_PATENT_CONCERN	= 2
+} GsAppLicenseHint;
 
 /**
  * gs_app_notify_unavailable:
@@ -206,19 +237,19 @@ typedef enum {
 GtkResponseType
 gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 {
-	GsAppLicenceHint hint = GS_APP_LICENCE_FREE;
+	GsAppLicenseHint hint = GS_APP_LICENSE_FREE;
 	GtkResponseType response;
 	GtkWidget *dialog;
-	const gchar *licence;
+	const gchar *license;
 	gboolean already_enabled = FALSE;	/* FIXME */
 	guint i;
 	struct {
 		const gchar	*str;
-		GsAppLicenceHint hint;
+		GsAppLicenseHint hint;
 	} keywords[] = {
-		{ "NonFree",		GS_APP_LICENCE_NONFREE },
-		{ "PatentConcern",	GS_APP_LICENCE_PATENT_CONCERN },
-		{ "Proprietary",	GS_APP_LICENCE_NONFREE },
+		{ "NonFree",		GS_APP_LICENSE_NONFREE },
+		{ "PatentConcern",	GS_APP_LICENSE_PATENT_CONCERN },
+		{ "Proprietary",	GS_APP_LICENSE_NONFREE },
 		{ NULL, 0 }
 	};
 	g_autofree gchar *origin_url = NULL;
@@ -227,15 +258,15 @@ gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 	g_autoptr(GString) title = NULL;
 
 	/* this is very crude */
-	licence = gs_app_get_license (app);
-	if (licence != NULL) {
+	license = gs_app_get_license (app);
+	if (license != NULL) {
 		for (i = 0; keywords[i].str != NULL; i++) {
-			if (g_strstr_len (licence, -1, keywords[i].str) != NULL)
+			if (g_strstr_len (license, -1, keywords[i].str) != NULL)
 				hint |= keywords[i].hint;
 		}
 	} else {
 		/* use the worst-case assumption */
-		hint = GS_APP_LICENCE_NONFREE | GS_APP_LICENCE_PATENT_CONCERN;
+		hint = GS_APP_LICENSE_NONFREE | GS_APP_LICENSE_PATENT_CONCERN;
 	}
 
 	/* check if the user has already dismissed */
@@ -263,7 +294,7 @@ gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 	/* FIXME: get the URL somehow... */
 	origin_url = g_strdup_printf ("<a href=\"\">%s</a>", gs_app_get_origin (app));
 	body = g_string_new ("");
-	if (hint & GS_APP_LICENCE_NONFREE) {
+	if (hint & GS_APP_LICENSE_NONFREE) {
 		g_string_append_printf (body,
 					/* TRANSLATORS: the replacements are as follows:
 					 * 1. Application name, e.g. "Firefox"
@@ -294,7 +325,7 @@ gs_app_notify_unavailable (GsApp *app, GtkWindow *parent)
 	}
 
 	/* be aware of patent clauses */
-	if (hint & GS_APP_LICENCE_PATENT_CONCERN) {
+	if (hint & GS_APP_LICENSE_PATENT_CONCERN) {
 		g_string_append (body, "\n\n");
 		if (gs_app_get_kind (app) != AS_APP_KIND_CODEC) {
 			g_string_append_printf (body,
@@ -556,6 +587,66 @@ gs_utils_get_desktop_app_info (const gchar *id)
 	}
 
 	return app_info;
+}
+
+/**
+ * gs_utils_widget_css_parsing_error_cb:
+ */
+static void
+gs_utils_widget_css_parsing_error_cb (GtkCssProvider *provider,
+				      GtkCssSection *section,
+				      GError *error,
+				      gpointer user_data)
+{
+	g_warning ("CSS parse error %i:%i: %s",
+		   gtk_css_section_get_start_line (section),
+		   gtk_css_section_get_start_position (section),
+		   error->message);
+}
+
+/**
+ * gs_utils_widget_set_custom_css:
+ **/
+void
+gs_utils_widget_set_custom_css (GtkWidget *widget, const gchar *css)
+{
+	GString *str = g_string_sized_new (1024);
+	GtkStyleContext *context;
+	g_autofree gchar *class_name = NULL;
+	g_autoptr(GtkCssProvider) provider = NULL;
+
+	/* invalid */
+	if (css == NULL)
+		return;
+
+	/* make into a proper CSS class */
+	class_name = g_strdup_printf ("themed-widget_%p", widget);
+	g_string_append_printf (str, ".%s {\n", class_name);
+	g_string_append_printf (str, "%s\n", css);
+	g_string_append (str, "}");
+
+	g_string_append_printf (str, ".%s:hover {\n", class_name);
+	g_string_append (str, "  opacity: 0.9;\n");
+	g_string_append (str, "}\n");
+
+	g_debug ("using custom CSS %s", str->str);
+
+	/* set the custom CSS class */
+	context = gtk_widget_get_style_context (widget);
+	gtk_style_context_add_class (context, class_name);
+
+	/* set up custom provider and store on the widget */
+	provider = gtk_css_provider_new ();
+	g_signal_connect (provider, "parsing-error",
+			  G_CALLBACK (gs_utils_widget_css_parsing_error_cb), NULL);
+	gtk_style_context_add_provider_for_screen (gdk_screen_get_default (),
+						   GTK_STYLE_PROVIDER (provider),
+						   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	gtk_css_provider_load_from_data (provider, str->str, -1, NULL);
+	g_object_set_data_full (G_OBJECT (widget),
+				"GnomeSoftware::provider",
+				g_object_ref (provider),
+				g_object_unref);
 }
 
 /* vim: set noexpandtab: */

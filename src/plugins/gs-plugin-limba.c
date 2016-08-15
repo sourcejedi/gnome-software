@@ -45,6 +45,18 @@ gs_plugin_get_name (void)
 }
 
 /**
+ * gs_plugin_order_after:
+ */
+const gchar **
+gs_plugin_order_after (GsPlugin *plugin)
+{
+	static const gchar *deps[] = { "appstream",
+				       "packagekit",
+				       NULL };
+	return deps;
+}
+
+/**
  * gs_plugin_initialize:
  */
 void
@@ -67,11 +79,25 @@ gs_plugin_destroy (GsPlugin *plugin)
 /**
  * gs_plugin_refine_app:
  */
-static gboolean
-gs_plugin_refine_app (GsPlugin *plugin, GsApp *app, GError **error)
+gboolean
+gs_plugin_refine_app (GsPlugin *plugin,
+		      GsApp *app,
+		      GsPluginRefineFlags flags,
+		      GCancellable *cancellable,
+		      GError **error)
 {
 	LiPkgInfo *pki;
 	g_autoptr(GError) error_local = NULL;
+	g_autoptr(AsProfileTask) ptask = NULL;
+
+	/* not us */
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
+		return TRUE;
+
+	/* profile */
+	ptask = as_profile_start (plugin->profile,
+				  "limba::refine{%s}",
+				  gs_app_get_id (app));
 
 	/* sanity check */
 	if (gs_app_get_source_default (app) == NULL)
@@ -99,36 +125,6 @@ gs_plugin_refine_app (GsPlugin *plugin, GsApp *app, GError **error)
 
 	gs_app_set_version (app, li_pkg_info_get_version (pki));
 
-	return TRUE;
-}
-
-/**
- * gs_plugin_refine:
- */
-gboolean
-gs_plugin_refine (GsPlugin *plugin,
-		GList **list,
-		GsPluginRefineFlags flags,
-		GCancellable *cancellable,
-		GError **error)
-{
-	GList *l;
-	GsApp *app;
-	g_autoptr(AsProfileTask) ptask = NULL;
-
-	ptask = as_profile_start_literal (plugin->profile, "limba::refine");
-	for (l = *list; l != NULL; l = l->next) {
-		app = GS_APP (l->data);
-
-		/* not us */
-		if (g_strcmp0 (gs_app_get_management_plugin (app), "Limba") != 0)
-			continue;
-
-		if (!gs_plugin_refine_app (plugin, app, error))
-			return FALSE;
-	}
-
-	/* sucess */
 	return TRUE;
 }
 
@@ -189,7 +185,7 @@ gs_plugin_app_remove (GsPlugin *plugin,
 	g_autoptr(GError) error_local = NULL;
 
 	/* not us */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "Limba") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	mgr = li_manager_new ();
@@ -235,7 +231,7 @@ gs_plugin_app_install (GsPlugin *plugin,
 	g_autoptr(GError) error_local = NULL;
 
 	/* not us */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "Limba") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	/* create new installer and select remote package */
@@ -306,7 +302,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 	GError *error_local = NULL;
 
 	/* not us */
-	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
+	if ((flags & GS_PLUGIN_REFRESH_FLAGS_METADATA) == 0)
 		return TRUE;
 
 	mgr = li_manager_new ();
@@ -369,7 +365,7 @@ gs_plugin_add_updates (GsPlugin *plugin,
 			app = gs_app_new (li_pkg_info_get_name (old_pki));
 		}
 
-		gs_app_set_management_plugin (app, "Limba");
+		gs_app_set_management_plugin (app, plugin->name);
 		gs_app_set_state (app, AS_APP_STATE_UPDATABLE_LIVE);
 		gs_app_set_kind (app, AS_APP_KIND_GENERIC);
 		gs_plugin_add_app (list, app);
@@ -408,7 +404,7 @@ gs_plugin_update_app (GsPlugin *plugin,
 	g_autoptr(GError) error_local = NULL;
 
 	/* check if this update request is for us */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "Limba") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	/* sanity check */

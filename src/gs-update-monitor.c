@@ -215,6 +215,10 @@ get_upgrades_finished_cb (GObject *object,
 		return;
 	}
 
+	/* do not show if gnome-software is already open */
+	if (gs_application_has_active_window (GS_APPLICATION (monitor->application)))
+		return;
+
 	/* just get the first result : FIXME, do we sort these by date? */
 	app = GS_APP (apps->data);
 
@@ -327,7 +331,8 @@ check_updates (GsUpdateMonitor *monitor)
 	g_debug ("Refreshing cache");
 	gs_plugin_loader_refresh_async (monitor->plugin_loader,
 					60 * 60 * 24,
-					GS_PLUGIN_REFRESH_FLAGS_UPDATES,
+					GS_PLUGIN_REFRESH_FLAGS_METADATA |
+					GS_PLUGIN_REFRESH_FLAGS_PAYLOAD,
 					monitor->cancellable,
 					refresh_cache_finished_cb,
 					monitor);
@@ -750,8 +755,10 @@ GPermission *
 gs_update_monitor_permission_get (void)
 {
 	static GPermission *permission = NULL;
+#ifdef HAVE_PACKAGEKIT
 	if (permission == NULL)
 		permission = gs_utils_get_permission ("org.freedesktop.packagekit.trigger-offline-update");
+#endif
 	return permission;
 }
 

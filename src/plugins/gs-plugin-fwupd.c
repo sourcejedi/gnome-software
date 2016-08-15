@@ -111,10 +111,10 @@ gs_plugin_fwupd_changed_cb (GDBusProxy *proxy,
 }
 
 /**
- * gs_plugin_startup:
+ * gs_plugin_setup:
  */
-static gboolean
-gs_plugin_startup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
+gboolean
+gs_plugin_setup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
 {
 	gsize len;
 	g_autofree gchar *data = NULL;
@@ -383,7 +383,7 @@ gs_plugin_add_update_app (GsPlugin *plugin,
 	}
 
 	/* actually add the application */
-	gs_app_set_management_plugin (app, "fwupd");
+	gs_app_set_management_plugin (app, plugin->name);
 	gs_app_set_kind (app, AS_APP_KIND_FIRMWARE);
 	gs_app_add_source_id (app, filename_cache);
 	gs_app_add_category (app, "System");
@@ -417,14 +417,6 @@ gs_plugin_add_updates_historical (GsPlugin *plugin,
 	g_autoptr(GsApp) app = NULL;
 	g_autoptr(GVariantIter) iter = NULL;
 	g_autoptr(GVariant) val = NULL;
-
-	/* set up plugin */
-	if (plugin->priv->proxy == NULL) {
-		if (!gs_plugin_startup (plugin, cancellable, error))
-			return FALSE;
-	}
-	if (plugin->priv->proxy == NULL)
-		return TRUE;
 
 	/* get historical updates */
 	val = g_dbus_proxy_call_sync (plugin->priv->proxy,
@@ -479,14 +471,6 @@ gs_plugin_add_updates (GsPlugin *plugin,
 	g_autoptr(GError) error_local = NULL;
 	g_autoptr(GVariantIter) iter = NULL;
 	g_autoptr(GVariant) val = NULL;
-
-	/* set up plugin */
-	if (plugin->priv->proxy == NULL) {
-		if (!gs_plugin_startup (plugin, cancellable, error))
-			return FALSE;
-	}
-	if (plugin->priv->proxy == NULL)
-		return TRUE;
 
 	/* get current list of updates */
 	val = g_dbus_proxy_call_sync (plugin->priv->proxy,
@@ -737,14 +721,6 @@ gs_plugin_refresh (GsPlugin *plugin,
 	const gchar *tmp;
 	guint i;
 
-	/* set up plugin */
-	if (plugin->priv->proxy == NULL) {
-		if (!gs_plugin_startup (plugin, cancellable, error))
-			return FALSE;
-	}
-	if (plugin->priv->proxy == NULL)
-		return TRUE;
-
 	/* get the metadata and signature file */
 	if (!gs_plugin_fwupd_check_lvfs_metadata (plugin, cache_age, cancellable, error))
 		return FALSE;
@@ -940,7 +916,7 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 	gboolean offline = FALSE;
 
 	/* only process this app if was created by this plugin */
-	if (g_strcmp0 (gs_app_get_management_plugin (app), "fwupd") != 0)
+	if (g_strcmp0 (gs_app_get_management_plugin (app), plugin->name) != 0)
 		return TRUE;
 
 	/* not set */
@@ -966,8 +942,10 @@ gs_plugin_fwupd_install (GsPlugin *plugin,
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
 	if (!gs_plugin_fwupd_upgrade (plugin, filename, FWUPD_DEVICE_ID_ANY, offline,
-				      cancellable, error))
+				      cancellable, error)) {
+		gs_app_set_state_recover (app);
 		return FALSE;
+	}
 	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
 	return TRUE;
 }
@@ -996,14 +974,6 @@ gs_plugin_fwupd_unlock (GsPlugin *plugin,
 			GError **error)
 {
 	g_autoptr(GVariant) val = NULL;
-
-	/* set up plugin */
-	if (plugin->priv->proxy == NULL) {
-		if (!gs_plugin_startup (plugin, cancellable, error))
-			return FALSE;
-	}
-	if (plugin->priv->proxy == NULL)
-		return TRUE;
 
 	/* unlock device */
 	val = g_dbus_proxy_call_sync (plugin->priv->proxy,
@@ -1064,10 +1034,9 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	GVariant *val;
 	GVariant *variant;
 	const gchar *key;
-	gboolean supported;
-	g_autofree gchar *content_type = NULL;
 	gint fd;
 	gint retval;
+	g_autofree gchar *content_type = NULL;
 	g_autoptr(AsIcon) icon = NULL;
 	g_autoptr(GDBusConnection) conn = NULL;
 	g_autoptr(GDBusMessage) message = NULL;
