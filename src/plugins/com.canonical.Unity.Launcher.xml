@@ -6,7 +6,7 @@
       <arg type='s' name='appstream_app_id' direction='in'/>
       <arg type='s' name='aptdaemon_task' direction='in'/>
     </method>
-    
+
     <method name='UpdateLauncherIconFavoriteState'>
       <arg type='s' name='icon_uri' direction='in'/>
       <arg type='b' name='is_sticky' direction='in'/>
