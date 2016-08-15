@@ -35,7 +35,13 @@
 
 /* should be :disabled but we need to support older versions of GTK */
 .kudo-pill:insensitive {
-	background-color: shade(@theme_bg_color, 0.8);
+	color: @theme_bg_color;
+	background-color: mix(@insensitive_fg_color, @theme_bg_color, 0.6);
+}
+
+.kudo-pill:insensitive:backdrop {
+	color: @theme_unfocused_bg_color;
+	background-color: mix(@insensitive_fg_color, @theme_unfocused_bg_color, 0.8);
 }
 
 .kudo-label {
@@ -161,6 +167,24 @@
 	all: unset;
 }
 
+.review-row button, .review-row .button { font-size: smaller; }
+
+/* gtk+ 3.20+ only */
+.review-row .vote-buttons button {
+	margin-right: -1px;
+
+	/* restricting transition properties since the hack for the separator*/
+	transition-property: background, box-shadow, border-style, text-shadow;
+}
+
+/* this is the separator between yes and no vote buttons, gtk+ 3.20 only */
+.review-row .vote-buttons button:not(:first-child):not(:hover):not(:active):not(:backdrop) {
+	border-image: linear-gradient(to top, @borders, @borders) 0 0 0 1 / 5px 0 5px 1px;
+}
+  .review-row .vote-buttons button:not(:first-child):backdrop {
+	border-image: linear-gradient(to top, @unfocused_borders, @unfocused_borders) 0 0 0 1 / 5px 0 5px 1px;
+  }
+
 .reviewbar {
 	background-image: none;
 	background-color: #babdb6;
@@ -210,10 +234,6 @@ button.star, .button.star {
 	padding: 0;
 	box-shadow: none;
 	outline-offset: -1px;
-}
-
-.naked-button {
-	all: unset;
 }
 
 /* for the review dialog */

@@ -779,6 +779,7 @@ gs_plugin_packagekit_refine_distro_upgrade (GsPlugin *plugin,
 	ProgressData data;
 	g_autoptr(PkResults) results = NULL;
 	g_autoptr(GsAppList) list = NULL;
+	guint cache_age_save;
 
 	data.app = app;
 	data.plugin = plugin;
@@ -786,13 +787,17 @@ gs_plugin_packagekit_refine_distro_upgrade (GsPlugin *plugin,
 	data.profile_id = NULL;
 
 	/* ask PK to simulate upgrading the system */
+	cache_age_save = pk_client_get_cache_age (plugin->priv->client);
+	pk_client_set_cache_age (plugin->priv->client, 60 * 60 * 24 * 7); /* once per week */
 	results = pk_client_upgrade_system (plugin->priv->client,
 					    pk_bitfield_from_enums (PK_TRANSACTION_FLAG_ENUM_SIMULATE, -1),
-					    gs_app_get_id (app),
+					    gs_app_get_version (app),
 					    PK_UPGRADE_KIND_ENUM_COMPLETE,
 					    cancellable,
 					    gs_plugin_packagekit_progress_cb, &data,
 					    error);
+	pk_client_set_cache_age (plugin->priv->client, cache_age_save);
+
 	if (!gs_plugin_packagekit_results_valid (results, error))
 		return FALSE;
 	if (!gs_plugin_packagekit_add_results (plugin, &list, results, error))
@@ -801,7 +806,7 @@ gs_plugin_packagekit_refine_distro_upgrade (GsPlugin *plugin,
 	/* add each of these as related applications */
 	for (l = list; l != NULL; l = l->next) {
 		app2 = GS_APP (l->data);
-		if (gs_app_get_state (app2) != AS_APP_STATE_AVAILABLE)
+		if (gs_app_get_state (app2) != AS_APP_STATE_UNAVAILABLE)
 			continue;
 		gs_app_add_related (app, app2);
 	}
@@ -829,7 +834,7 @@ gs_plugin_refine (GsPlugin *plugin,
 
 	/* when we need the cannot-be-upgraded applications, we implement this
 	 * by doing a UpgradeSystem(SIMULATE) which adds the removed packages
-	 * to the related-apps list with a state of %AS_APP_STATE_AVAILABLE */
+	 * to the related-apps list with a state of %AS_APP_STATE_UNAVAILABLE */
 	if (flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPGRADE_REMOVED) {
 		for (l = *list; l != NULL; l = l->next) {
 			app = GS_APP (l->data);

@@ -159,8 +159,13 @@ get_updates_finished_cb (GObject *object,
 		g_debug ("no updates; withdrawing updates-available notification");
 		g_application_withdraw_notification (monitor->application,
 						     "updates-available");
-		if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+		if (g_error_matches (error,
+		                     GS_PLUGIN_LOADER_ERROR,
+		                     GS_PLUGIN_LOADER_ERROR_NO_RESULTS)) {
+			g_debug ("no updates to show");
+		} else if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
 			g_warning ("failed to get updates: %s", error->message);
+		}
 		return;
 	}
 
@@ -255,7 +260,7 @@ get_upgrades (GsUpdateMonitor *monitor)
 	/* NOTE: this doesn't actually do any network access, it relies on the
 	 * AppStream data being up to date, either by the appstream-data
 	 * package being up-to-date, or the metadata being auto-downloaded */
-	g_debug ("Getting updates");
+	g_debug ("Getting upgrades");
 	gs_plugin_loader_get_distro_upgrades_async (monitor->plugin_loader,
 						    GS_PLUGIN_REFINE_FLAGS_DEFAULT,
 						    monitor->cancellable,
@@ -607,6 +612,12 @@ gs_update_monitor_dispose (GObject *object)
 						      notify_network_state_cb,
 						      monitor);
 		monitor->network_monitor = NULL;
+	}
+	if (monitor->plugin_loader != NULL) {
+		g_signal_handlers_disconnect_by_func (monitor->plugin_loader,
+		                                      updates_changed_cb,
+		                                      monitor);
+		monitor->plugin_loader = NULL;
 	}
 	g_clear_object (&monitor->settings);
 
