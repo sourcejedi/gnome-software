@@ -50,17 +50,6 @@ gs_plugin_get_name (void)
 }
 
 /**
- * gs_plugin_get_conflicts:
- */
-const gchar **
-gs_plugin_get_conflicts (GsPlugin *plugin)
-{
-	static const gchar *deps[] = {
-		NULL };
-	return deps;
-}
-
-/**
  * gs_plugin_initialize:
  */
 void
@@ -320,7 +309,6 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	data.ptask = NULL;
 
 	/* get details */
-	filename = g_file_get_path (file);
 	files = g_strsplit (filename, "\t", -1);
 	pk_client_set_cache_age (PK_CLIENT (plugin->priv->task), G_MAXUINT);
 	results = pk_client_get_details_local (PK_CLIENT (plugin->priv->task),
@@ -378,7 +366,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	/* look for a desktop file so we can use a valid application id */
 	if (!gs_plugin_packagekit_refresh_guess_app_id (plugin,
 							app,
-							g_file_get_path (file),
+							filename,
 							cancellable,
 							error))
 		return FALSE;

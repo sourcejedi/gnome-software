@@ -1298,8 +1298,10 @@ gs_plugin_app_install (GsPlugin *plugin,
 
 	/* use the source for local apps */
 	if (gs_app_get_state (app) == AS_APP_STATE_AVAILABLE_LOCAL) {
+		g_autoptr(GFile) file = NULL;
+		file = g_file_new_for_path (gs_app_get_source_default (app));
 		xref = xdg_app_installation_install_bundle (plugin->priv->installation,
-							    gs_app_get_local_file (app),
+							    file,
 							    gs_plugin_xdg_app_progress_cb,
 							    &helper,
 							    cancellable, error);
@@ -1379,6 +1381,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 	g_autoptr(GBytes) appstream_gz = NULL;
 	g_autoptr(GBytes) icon_data = NULL;
 	g_autoptr(GBytes) metadata = NULL;
+	g_autoptr(GFile) file = NULL;
 	g_autoptr(GsApp) app = NULL;
 	g_autoptr(XdgAppBundleRef) xref_bundle = NULL;
 	const gchar *mimetypes[] = {
@@ -1393,6 +1396,7 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 		return TRUE;
 
 	/* load bundle */
+	file = g_file_new_for_path (filename);
 	xref_bundle = xdg_app_bundle_ref_new (file, error);
 	if (xref_bundle == NULL) {
 		g_prefix_error (error, "error loading bundle: ");
@@ -1480,6 +1484,9 @@ gs_plugin_filename_to_app (GsPlugin *plugin,
 		as_icon_set_name (icon, "application-x-executable");
 		gs_app_set_icon (app, icon);
 	}
+
+	/* set the source so we can install it higher up */
+	gs_app_add_source (app, filename);
 
 	/* not quite true: this just means we can update this specific app */
 	if (xdg_app_bundle_ref_get_origin (xref_bundle))
