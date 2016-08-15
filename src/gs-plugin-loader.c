@@ -3663,6 +3663,8 @@ gs_plugin_loader_filename_to_app_thread_cb (GTask *task,
 	GsPlugin *plugin;
 	GsPluginFilenameToAppFunc plugin_func = NULL;
 	guint i;
+	g_autoptr(GFile) file = NULL;
+	GList *l;
 
 	/* run each plugin */
 	for (i = 0; i < priv->plugins->len; i++) {
@@ -3694,6 +3696,14 @@ gs_plugin_loader_filename_to_app_thread_cb (GTask *task,
 			continue;
 		}
 		gs_plugin_status_update (plugin, NULL, GS_PLUGIN_STATUS_FINISHED);
+	}
+
+	/* set the local file on any of the returned results */
+	file = g_file_new_for_path (state->filename);
+	for (l = state->list; l != NULL; l = l->next) {
+		GsApp *app = GS_APP (l->data);
+		if (gs_app_get_local_file (app) == NULL)
+			gs_app_set_local_file (app, file);
 	}
 
 	/* run refine() on each one */
