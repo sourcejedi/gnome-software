@@ -965,7 +965,7 @@ gs_plugin_refresh (GsPlugin *plugin,
 		   GCancellable *cancellable,
 		   GError **error)
 {
-	if ((flags & GS_PLUGIN_REFRESH_FLAGS_UPDATES) == 0)
+	if ((flags & GS_PLUGIN_REFRESH_FLAGS_METADATA) == 0)
 		return TRUE;
 
 	if (!aptd_transaction (plugin, "UpdateCache", NULL, NULL, NULL, error))

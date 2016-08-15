@@ -254,7 +254,7 @@ refreshed_cb (GObject      *source_object,
 	if (gs_plugin_loader_refresh_finish (loader, res, NULL)) {
 		gs_plugin_loader_refresh_async (loader,
 						0,
-						GS_PLUGIN_REFRESH_FLAGS_UPDATES | GS_PLUGIN_REFRESH_FLAGS_UI,
+						GS_PLUGIN_REFRESH_FLAGS_METADATA | GS_PLUGIN_REFRESH_FLAGS_UI,
 						NULL,
 						NULL,
 						NULL);
@@ -270,7 +270,7 @@ start_refresh (GsApplication *app)
 
 	gs_plugin_loader_refresh_async (gs_application_get_plugin_loader (app),
 					0,
-					GS_PLUGIN_REFRESH_FLAGS_UPDATES | GS_PLUGIN_REFRESH_FLAGS_UI,
+					GS_PLUGIN_REFRESH_FLAGS_METADATA | GS_PLUGIN_REFRESH_FLAGS_UI,
 					NULL,
 					refreshed_cb,
 					app);
