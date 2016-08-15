@@ -163,9 +163,9 @@ typedef gboolean	 (*GsPluginRefreshFunc	)	(GsPlugin	*plugin,
 							 GsPluginRefreshFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);
-typedef gboolean	 (*GsPluginFileToAppFunc)	(GsPlugin	*plugin,
+typedef gboolean	 (*GsPluginFilenameToAppFunc)	(GsPlugin	*plugin,
 							 GList		**list,
-							 GFile		*file,
+							 const gchar	*filename,
 							 GCancellable	*cancellable,
 							 GError		**error);
 typedef gboolean	 (*GsPluginUpdateFunc)		(GsPlugin	*plugin,
@@ -332,9 +332,9 @@ gboolean	 gs_plugin_refresh			(GsPlugin	*plugin,
 							 GsPluginRefreshFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);
-gboolean	 gs_plugin_file_to_app			(GsPlugin	*plugin,
+gboolean	 gs_plugin_filename_to_app		(GsPlugin	*plugin,
 							 GList		**list,
-							 GFile		*file,
+							 const gchar	*filename,
 							 GCancellable	*cancellable,
 							 GError		**error);
 gboolean	 gs_plugin_update			(GsPlugin	*plugin,

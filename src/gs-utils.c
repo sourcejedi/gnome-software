@@ -496,14 +496,16 @@ gs_utils_get_permission (const gchar *id)
  * gs_utils_get_content_type:
  */
 gchar *
-gs_utils_get_content_type (GFile *file,
+gs_utils_get_content_type (const gchar *filename,
 			   GCancellable *cancellable,
 			   GError **error)
 {
 	const gchar *tmp;
+	g_autoptr(GFile) file = NULL;
 	g_autoptr(GFileInfo) info = NULL;
 
 	/* get content type */
+	file = g_file_new_for_path (filename);
 	info = g_file_query_info (file,
 				  G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
 				  G_FILE_QUERY_INFO_NONE,

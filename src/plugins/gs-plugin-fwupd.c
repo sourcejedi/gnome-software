@@ -1050,14 +1050,14 @@ gs_plugin_update_app (GsPlugin *plugin,
 }
 
 /**
- * gs_plugin_file_to_app:
+ * gs_plugin_filename_to_app:
  */
 gboolean
-gs_plugin_file_to_app (GsPlugin *plugin,
-		       GList **list,
-		       GFile *file,
-		       GCancellable *cancellable,
-		       GError **error)
+gs_plugin_filename_to_app (GsPlugin *plugin,
+			   GList **list,
+			   const gchar *filename,
+			   GCancellable *cancellable,
+			   GError **error)
 {
 	FwupdDeviceFlags flags = FU_DEVICE_FLAG_ALLOW_OFFLINE;
 	GVariant *body;
@@ -1078,10 +1078,9 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 	const gchar *mimetypes[] = {
 		"application/vnd.ms-cab-compressed",
 		NULL };
-	g_autofree gchar *filename = NULL;
 
 	/* does this match any of the mimetypes we support */
-	content_type = gs_utils_get_content_type (file, cancellable, error);
+	content_type = gs_utils_get_content_type (filename, cancellable, error);
 	if (content_type == NULL)
 		return FALSE;
 	if (!g_strv_contains (mimetypes, content_type))
@@ -1093,7 +1092,6 @@ gs_plugin_file_to_app (GsPlugin *plugin,
 		return FALSE;
 
 	/* open file */
-	filename = g_file_get_path (file);
 	fd = open (filename, O_RDONLY);
 	if (fd < 0) {
 		g_set_error (error,
