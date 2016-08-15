@@ -134,7 +134,10 @@ libgs_plugin_limba_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 endif
 
 if HAVE_XDG_APP
-libgs_plugin_xdg_app_la_SOURCES = gs-plugin-xdg-app.c
+libgs_plugin_xdg_app_la_SOURCES =			\
+	gs-appstream.c					\
+	gs-appstream.h					\
+	gs-plugin-xdg-app.c
 libgs_plugin_xdg_app_la_LIBADD = $(GS_PLUGIN_LIBS) $(XDG_APP_LIBS)
 libgs_plugin_xdg_app_la_LDFLAGS = -module -avoid-version
 libgs_plugin_xdg_app_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
@@ -278,8 +281,11 @@ libgs_plugin_packagekit_offline_la_LIBADD = $(GS_PLUGIN_LIBS)
 libgs_plugin_packagekit_offline_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_offline_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
-libgs_plugin_packagekit_origin_la_SOURCES = gs-plugin-packagekit-origin.c
-libgs_plugin_packagekit_origin_la_LIBADD = $(GS_PLUGIN_LIBS)
+libgs_plugin_packagekit_origin_la_SOURCES =		\
+	gs-plugin-packagekit-origin.c			\
+	packagekit-common.c				\
+	packagekit-common.h
+libgs_plugin_packagekit_origin_la_LIBADD = $(GS_PLUGIN_LIBS) $(PACKAGEKIT_LIBS)
 libgs_plugin_packagekit_origin_la_LDFLAGS = -module -avoid-version
 libgs_plugin_packagekit_origin_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
