@@ -680,11 +680,8 @@ details_activated (GSimpleAction *action,
 	g_variant_get (parameter, "(&s&s)", &id, &search);
 	if (search != NULL && search[0] != '\0')
 		gs_shell_show_search_result (app->shell, id, search);
-	else {
-		g_autoptr (GsApp) a = NULL;
-		a = gs_app_new (id);
-		gs_shell_show_app (app->shell, a);
-	}
+	else
+		gs_shell_show_details (app->shell, id);
 }
 
 static void
