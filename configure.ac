@@ -368,6 +368,28 @@ AC_ARG_ENABLE(webapps,
               enable_webapps=yes)
 AM_CONDITIONAL(HAVE_WEBAPPS, [test "x$enable_webapps" = "xyes"])
 
+# Snap
+AC_ARG_ENABLE(snap,
+              [AS_HELP_STRING([--enable-snap],
+                              [enable Snap support [default=auto]])],,
+              enable_snap=maybe)
+AS_IF([test "x$enable_snap" != "xno"], [
+    PKG_CHECK_MODULES(SNAP,
+                      [snapd-glib],
+                      [have_snap=yes],
+                      [have_snap=no])
+], [
+    have_snap=no
+])
+AS_IF([test "x$have_snap" = "xyes"], [
+    AC_DEFINE(HAVE_SNAP,1,[Build Snap support])
+], [
+    AS_IF([test "x$enable_snap" = "xyes"], [
+          AC_MSG_ERROR([Snap support requested but 'snapd-glib' was not found])
+    ])
+])
+AM_CONDITIONAL(HAVE_SNAP, test "$have_snap" != no)
+
 # this refers to the gnome-software plugin API version
 # this is not in any way related to a package or soname version
 GS_PLUGIN_API_VERSION=11
@@ -429,4 +451,5 @@ echo "
         ODRS support:              ${enable_odrs}
         Webapps support:           ${enable_webapps}
         Ubuntu Reviews support:    ${enable_ubuntu_reviews}
+        Snap support:              ${have_snap}
 "
