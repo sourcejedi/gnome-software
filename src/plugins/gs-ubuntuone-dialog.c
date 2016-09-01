@@ -25,8 +25,11 @@
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
 #include <libsoup/soup.h>
+#include <snapd-glib/snapd-glib.h>
 
+#ifdef USE_SNAPD
 #include "gs-snapd.h"
+#endif
 
 #define UBUNTU_LOGIN_HOST "https://login.ubuntu.com"
 
@@ -299,99 +302,8 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 }
 
 static void
-check_snapd_response (GsUbuntuoneDialog *self,
-		      guint              status_code,
-		      gchar             *reason_phrase,
-		      gchar             *response_type,
-		      gchar             *response,
-		      gsize              response_length)
-{
-	g_autoptr(GVariant) variant = NULL;
-	g_autoptr(GVariant) result = NULL;
-	g_autoptr(GVariant) discharges = NULL;
-	const gchar *type;
-	const gchar *kind;
-	const gchar *macaroon;
-	GVariantBuilder builder;
-	GVariantIter iter;
-	GVariant *discharge = NULL;
-
-	if (status_code == 401) {
-		/* snapd isn't giving us enough information to tell why the authentication failed... */
-		if (g_str_equal (gtk_stack_get_visible_child_name (GTK_STACK (self->page_stack)), "page-1")) {
-			show_status (self, _("Two-factor authentication failed"), TRUE);
-			gtk_widget_grab_focus (self->passcode_entry);
-			return;
-		}
-	}
-
-	variant = json_gvariant_deserialize_data (response, -1, NULL, NULL);
-
-	if (variant == NULL)
-		goto err;
-
-	g_variant_ref_sink (variant);
-
-	if (!g_variant_lookup (variant, "type", "&s", &type))
-		goto err;
-
-	result = g_variant_lookup_value (variant, "result", G_VARIANT_TYPE_DICTIONARY);
-
-	if (result == NULL)
-		goto err;
-
-	if (g_str_equal (type, "sync")) {
-		if (!g_variant_lookup (result, "macaroon", "&s", &macaroon))
-			goto err;
-
-		discharges = g_variant_lookup_value (result, "discharges", G_VARIANT_TYPE ("av"));
-
-		if (discharges == NULL)
-			goto err;
-
-		g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
-		g_variant_iter_init (&iter, discharges);
-
-		while (g_variant_iter_loop (&iter, "v", &discharge))
-			g_variant_builder_add (&builder, "s", g_variant_get_string (discharge, NULL));
-
-		self->macaroon = g_variant_ref_sink (g_variant_new ("(s@as)", macaroon, g_variant_builder_end (&builder)));
-
-		gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
-		update_widgets (self);
-	} else if (g_variant_lookup (result, "kind", "&s", &kind)) {
-		if (g_str_equal (kind, "two-factor-required")) {
-			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
-			gtk_widget_grab_focus (self->passcode_entry);
-			update_widgets (self);
-		} else
-			goto err;
-	} else
-		goto err;
-
-	return;
-
-err:
-	/* snapd isn't giving us enough information to tell why the authentication failed... */
-	show_status (self, status_code == 401 ? _("Incorrect email or password") : _("An error occurred"), TRUE);
-	gtk_widget_grab_focus (self->password_entry);
-}
-
-static void
 send_login_request (GsUbuntuoneDialog *self)
 {
-	g_autofree gchar *content = NULL;
-	g_autofree gchar *username = NULL;
-	g_autofree gchar *password = NULL;
-	g_autofree gchar *otp = NULL;
-	GVariant *request;
-	guint status_code;
-	g_autofree gchar *reason_phrase = NULL;
-	g_autofree gchar *response_type = NULL;
-	g_autofree gchar *response = NULL;
-	gsize response_length;
-	g_autoptr(GError) error = NULL;
-
 	gtk_widget_set_sensitive (self->cancel_button, FALSE);
 	gtk_widget_set_sensitive (self->next_button, FALSE);
 	gtk_widget_set_sensitive (self->login_radio, FALSE);
@@ -405,59 +317,44 @@ send_login_request (GsUbuntuoneDialog *self)
 	show_status (self, _("Signing in…"), FALSE);
 
 	if (self->get_macaroon) {
-		username = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->email_entry)), NULL);
-		password = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->password_entry)), NULL);
+#ifdef USE_SNAPD
+		const gchar *username, *password, *otp;
+		g_autoptr(SnapdAuthData) auth_data = NULL;
+		g_autoptr(GError) error = NULL;
 
-		if (gtk_entry_get_text_length (GTK_ENTRY (self->passcode_entry)) > 0) {
-			otp = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->passcode_entry)), NULL);
+		username = gtk_entry_get_text (GTK_ENTRY (self->email_entry));
+		password = gtk_entry_get_text (GTK_ENTRY (self->password_entry));
+		otp = gtk_entry_get_text (GTK_ENTRY (self->passcode_entry));
+		if (otp[0] == '\0')
+			otp = NULL;
 
-			content = g_strdup_printf ("{"
-						   "  \"username\" : \"%s\","
-						   "  \"password\" : \"%s\","
-						   "  \"otp\" : \"%s\""
-						   "}",
-						   username,
-						   password,
-						   otp);
+		auth_data = snapd_login_sync (username, password, otp, NULL, &error);
+		reenable_widgets (self);
+		if (auth_data != NULL) {
+			self->macaroon = g_variant_ref_sink (g_variant_new ("(s^as)", snapd_auth_data_get_macaroon (auth_data), snapd_auth_data_get_discharges (auth_data)));
+			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
+			update_widgets (self);
 		} else {
-			content = g_strdup_printf ("{"
-						   "  \"username\" : \"%s\","
-						   "  \"password\" : \"%s\""
-						   "}",
-						   username,
-						   password);
+			if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_INVALID_AUTH_DATA) ||
+			    g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_LOGIN_REQUIRED)) {
+				show_status (self, _("Incorrect email or password"), TRUE);
+				gtk_widget_grab_focus (self->password_entry);
+			} else if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_REQUIRED)) {
+				gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
+				gtk_widget_grab_focus (self->passcode_entry);
+				update_widgets (self);
+			} else if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_FAILED)) {
+				show_status (self, _("Two-factor authentication failed"), TRUE);
+				gtk_widget_grab_focus (self->passcode_entry);
+			} else {
+				show_status (self, _("An error occurred"), TRUE);
+				gtk_widget_grab_focus (self->password_entry);
+			}
 		}
-
-		if (gs_snapd_request (SOUP_METHOD_POST,
-				      "/v2/login",
-				      content,
-				      FALSE,
-				      NULL,
-				      FALSE,
-				      NULL,
-				      &status_code,
-				      &reason_phrase,
-				      &response_type,
-				      &response,
-				      &response_length,
-				      NULL,
-				      &error)) {
-			reenable_widgets (self);
-
-			check_snapd_response (self,
-					      status_code,
-					      reason_phrase,
-					      response_type,
-					      response,
-					      response_length);
-		} else {
-			g_warning ("could not send request: %s", error->message);
-
-			reenable_widgets (self);
-			show_status (self, _("An error occurred"), TRUE);
-			gtk_widget_grab_focus (self->password_entry);
-		}
+#endif
 	} else {
+		GVariant *request;
+
 		if (gtk_entry_get_text_length (GTK_ENTRY (self->passcode_entry)) > 0) {
 			request = g_variant_new_parsed ("{"
 							"  'token_name' : <'GNOME Software'>,"

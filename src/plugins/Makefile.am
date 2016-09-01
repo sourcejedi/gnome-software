@@ -15,6 +15,7 @@ AM_CPPFLAGS =						\
 	$(XDG_APP_CFLAGS)				\
 	$(OAUTH_CFLAGS)					\
 	$(LIBSECRET_CFLAGS)				\
+	$(SNAP_CFLAGS)					\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
 	-DGS_MODULESETDIR=\"$(datadir)/gnome-software/modulesets.d\" \
@@ -304,11 +305,12 @@ libgs_plugin_snap_la_SOURCES =				\
 	gs-snapd.c
 libgs_plugin_snap_la_LIBADD =				\
 	$(GS_PLUGIN_LIBS)				\
+	$(SNAP_LIBS)					\
 	$(SOUP_LIBS)					\
 	$(JSON_GLIB_LIBS)				\
 	$(LIBSECRET_LIBS)
 libgs_plugin_snap_la_LDFLAGS = -module -avoid-version
-libgs_plugin_snap_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+libgs_plugin_snap_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS) -DUSE_SNAPD
 
 check_PROGRAMS =						\
 	gs-self-test
