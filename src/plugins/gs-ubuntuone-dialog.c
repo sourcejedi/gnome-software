@@ -335,15 +335,15 @@ send_login_request (GsUbuntuoneDialog *self)
 			gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-2");
 			update_widgets (self);
 		} else {
-			if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_INVALID_AUTH_DATA) ||
-			    g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_LOGIN_REQUIRED)) {
+			if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_AUTH_DATA_INVALID) ||
+			    g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_AUTH_DATA_REQUIRED)) {
 				show_status (self, _("Incorrect email or password"), TRUE);
 				gtk_widget_grab_focus (self->password_entry);
 			} else if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_REQUIRED)) {
 				gtk_stack_set_visible_child_name (GTK_STACK (self->page_stack), "page-1");
 				gtk_widget_grab_focus (self->passcode_entry);
 				update_widgets (self);
-			} else if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_FAILED)) {
+			} else if (g_error_matches (error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_INVALID)) {
 				show_status (self, _("Two-factor authentication failed"), TRUE);
 				gtk_widget_grab_focus (self->passcode_entry);
 			} else {
