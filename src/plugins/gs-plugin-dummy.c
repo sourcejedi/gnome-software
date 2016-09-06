@@ -371,11 +371,14 @@ gs_plugin_update_app (GsPlugin *plugin,
 		       gs_plugin_get_name (plugin)) != 0)
 		return TRUE;
 
+	//gs_plugin_error_nonfatal (error)
+
 	/* always fail */
 	g_set_error_literal (error,
 			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_NO_NETWORK,
+			     GS_PLUGIN_ERROR_DOWNLOAD_FAILED,
 			     "no network connection is available");
+	gs_plugin_error_add_unique_id (error, app);
 	return FALSE;
 }
 

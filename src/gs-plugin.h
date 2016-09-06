@@ -47,7 +47,9 @@ struct _GsPluginClass
 							 GsApp		*app,
 							 guint		 status);
 	void			(*reload)		(GsPlugin	*plugin);
-	gpointer		 padding[28];
+	void			(*add_event)		(GsPlugin	*plugin,
+							 GObject	*event);
+	gpointer		 padding[27];
 };
 
 typedef struct	GsPluginData	GsPluginData;
@@ -305,6 +307,8 @@ void		 gs_plugin_reload			(GsPlugin	*plugin);
 const gchar	*gs_plugin_status_to_string		(GsPluginStatus	 status);
 void		 gs_plugin_error_add_unique_id		(GError		**error,
 							 GsApp		*app);
+void		 gs_plugin_add_event			(GsPlugin	*plugin,
+							 GObject	*event);
 
 G_END_DECLS
 

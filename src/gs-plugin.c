@@ -48,6 +48,7 @@
 #include <gdk/gdk.h>
 
 #include "gs-os-release.h"
+#include "gs-plugin-event.h"
 #include "gs-plugin-private.h"
 #include "gs-plugin.h"
 #include "gs-utils.h"
@@ -90,6 +91,7 @@ enum {
 	SIGNAL_UPDATES_CHANGED,
 	SIGNAL_STATUS_CHANGED,
 	SIGNAL_RELOAD,
+	SIGNAL_ADD_EVENT,
 	SIGNAL_LAST
 };
 
@@ -850,6 +852,7 @@ typedef struct {
 	GsPlugin	*plugin;
 	GsApp		*app;
 	GsPluginStatus	 status;
+	GsPluginEvent	*event;
 	guint		 percentage;
 } GsPluginStatusHelper;
 
@@ -888,6 +891,38 @@ gs_plugin_status_update (GsPlugin *plugin, GsApp *app, GsPluginStatus status)
 	else
 		helper->app = g_object_ref (app);
 	g_idle_add (gs_plugin_status_update_cb, helper);
+}
+
+static gboolean
+gs_plugin_add_event_cb (gpointer user_data)
+{
+	GsPluginStatusHelper *helper = (GsPluginStatusHelper *) user_data;
+	g_signal_emit (helper->plugin,
+		       signals[SIGNAL_ADD_EVENT], 0,
+		       helper->event);
+	g_object_unref (helper->event);
+	g_slice_free (GsPluginStatusHelper, helper);
+	return FALSE;
+}
+
+/**
+ * gs_plugin_add_event:
+ * @plugin: a #GsPlugin
+ * @event: a #GsPluginEvent
+ *
+ * Provide a way for plugins to tell the UI layer about events that may require
+ * displaying to the user. Plugins should not assume that a specific event is
+ * actually shown to the user as it may be ignored automatically.
+ *
+ * Since: 3.22
+ **/
+void
+gs_plugin_add_event (GsPlugin *plugin, GObject *event)
+{
+	GsPluginStatusHelper *helper = g_slice_new0 (GsPluginStatusHelper);
+	helper->plugin = plugin;
+	helper->event = g_object_ref (event);
+	g_idle_add (gs_plugin_add_event_cb, helper);
 }
 
 static gboolean
@@ -1499,6 +1534,13 @@ gs_plugin_class_init (GsPluginClass *klass)
 			      G_STRUCT_OFFSET (GsPluginClass, status_changed),
 			      NULL, NULL, g_cclosure_marshal_generic,
 			      G_TYPE_NONE, 2, GS_TYPE_APP, G_TYPE_UINT);
+
+	signals [SIGNAL_ADD_EVENT] =
+		g_signal_new ("add-event",
+			      G_TYPE_FROM_CLASS (object_class), G_SIGNAL_RUN_LAST,
+			      G_STRUCT_OFFSET (GsPluginClass, add_event),
+			      NULL, NULL, g_cclosure_marshal_generic,
+			      G_TYPE_NONE, 1, GS_TYPE_PLUGIN_EVENT);
 
 	signals [SIGNAL_RELOAD] =
 		g_signal_new ("reload",

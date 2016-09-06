@@ -25,6 +25,8 @@
 #include <string.h>
 #include <glib/gi18n.h>
 
+#include "gd-notification.h"
+
 #include "gs-common.h"
 #include "gs-shell.h"
 #include "gs-shell-details.h"
@@ -413,6 +415,12 @@ save_back_entry (GsShell *shell)
 }
 
 static void
+gs_shell_plugin_events_sources_cb (GtkWidget *widget, GsShell *shell)
+{
+	gs_shell_show_sources (shell);
+}
+
+static void
 gs_shell_back_button_cb (GtkWidget *widget, GsShell *shell)
 {
 	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
@@ -614,6 +622,195 @@ gs_shell_monitor_permission (GsShell *shell)
 				  G_CALLBACK (on_permission_changed), shell);
 }
 
+static gboolean
+gs_shell_events_show (GsShell *shell, GsPluginEvent *event)
+{
+	GsApp *app = gs_plugin_event_get_app (event);
+	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
+	GtkWidget *widget;
+	const GError *error;
+	const gchar *tmp;
+	AsAppKind app_kind = AS_APP_KIND_UNKNOWN;
+	g_autofree gchar *str = NULL;
+	g_autofree gchar *title = NULL;
+
+	/* get error */
+	error = gs_plugin_event_get_gerror (event);
+	if (error == NULL)
+		return FALSE;
+
+	if (app != NULL) {
+		app_kind = gs_app_get_kind (app);
+		if (app_kind == AS_APP_KIND_GENERIC) {
+			title = g_strdup_printf ("“%s” [%s]",
+						 gs_app_get_origin_ui (app),
+						 gs_app_get_origin_hostname (app));
+		} else {
+			title = g_strdup (gs_app_get_name (app));
+		}
+	}
+
+	switch (error->code) {
+	case GS_PLUGIN_ERROR_FAILED:
+		if (app_kind == AS_APP_KIND_SOURCE) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Failure with source %s"), title);
+		} else if (app_kind == AS_APP_KIND_GENERIC) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Failure with server %s"), title);
+		} else if (app_kind == AS_APP_KIND_DESKTOP) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Failure with application %s"), title);
+		} else {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Generic failure"));
+		}
+		break;
+	case GS_PLUGIN_ERROR_NOT_SUPPORTED:
+		break;
+	case GS_PLUGIN_ERROR_NO_NETWORK:
+		break;
+	case GS_PLUGIN_ERROR_NO_SECURITY:
+		break;
+	case GS_PLUGIN_ERROR_NO_SPACE:
+		break;
+	case GS_PLUGIN_ERROR_AUTH_REQUIRED:
+		break;
+	case GS_PLUGIN_ERROR_AUTH_INVALID:
+		break;
+	case GS_PLUGIN_ERROR_PIN_REQUIRED:
+		break;
+	case GS_PLUGIN_ERROR_ACCOUNT_SUSPENDED:
+		break;
+	case GS_PLUGIN_ERROR_ACCOUNT_DEACTIVATED:
+		break;
+	case GS_PLUGIN_ERROR_PLUGIN_DEPSOLVE_FAILED:
+		break;
+	case GS_PLUGIN_ERROR_DOWNLOAD_FAILED:
+		if (app_kind == AS_APP_KIND_SOURCE) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Unable to contact %s"), title);
+		} else if (app_kind == AS_APP_KIND_GENERIC) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Unable to contact %s"), title);
+		} else if (app_kind == AS_APP_KIND_DESKTOP) {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Unable to download %s"), title);
+		} else {
+			/* TRANSLATORS: failure text for the in-app notification */
+			str = g_strdup_printf (_("Unable to download"));
+		}
+		break;
+	case GS_PLUGIN_ERROR_WRITE_FAILED:
+		break;
+	case GS_PLUGIN_ERROR_INVALID_FORMAT:
+		break;
+	case GS_PLUGIN_ERROR_DELETE_FAILED:
+		break;
+	default:
+		break;
+	}
+	if (str == NULL)
+		return FALSE;
+
+// https://etherpad.gnome.org/p/409v9S7Q1W
+#if 0
+ * @GS_PLUGIN_ERROR_FAILED:			Generic failure
+ * @GS_PLUGIN_ERROR_NOT_SUPPORTED:		Action not supported
+ * @GS_PLUGIN_ERROR_CANCELLED:			Action was cancelled
+ * @GS_PLUGIN_ERROR_NO_NETWORK:			No network connection available
+ * @GS_PLUGIN_ERROR_NO_SECURITY:		Security policy forbid action
+ * @:			No disk space to allow action
+ * @:		Authentication was required
+ * @:		Provided authentication was invalid
+ * @:		PIN required for authentication
+ * @:		User account has been suspended
+ * @:	User account has been deactivated
+ * @:	The plugins installed are incompatible
+ * @:		The download action failed
+ * @:		The save-to-disk failed
+ * @:		The data format is invalid
+ * @:		The delete action failed
+#endif
+
+	/* set visible */
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "notification_event"));
+	gtk_widget_set_visible (widget, TRUE);
+
+	/* sources button */
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "button_events_sources"));
+	gtk_widget_set_visible (widget,
+				app != NULL &&
+				gs_app_get_kind (app) == AS_APP_KIND_SOURCE);
+
+	/* set header */
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "label_events_title"));
+	gtk_label_set_label (GTK_LABEL (widget), str);
+	gtk_widget_set_visible (widget, TRUE);
+
+	/* fill in detail */
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "label_events"));
+	error = gs_plugin_event_get_gerror (event);
+	if (error != NULL)
+		gtk_label_set_label (GTK_LABEL (widget), error->message);
+	gtk_widget_set_visible (widget, FALSE);
+	return TRUE;
+}
+
+static void
+gs_shell_events_rescan (GsShell *shell)
+{
+	GsPluginEvent *event;
+	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
+	GtkWidget *widget;
+	guint i;
+
+	/* find the first active event and show it */
+	event = gs_plugin_loader_get_event_default (priv->plugin_loader);
+	if (event != NULL) {
+		if (!gs_shell_events_show (shell, event)) {
+			gs_plugin_event_add_flag (event, GS_PLUGIN_EVENT_FLAG_INVALID);
+			return;
+		}
+		gs_plugin_event_add_flag (event, GS_PLUGIN_EVENT_FLAG_VISIBLE);
+		return;
+	}
+
+	/* nothing to show */
+	g_debug ("no events to show");
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "notification_event"));
+	gtk_widget_set_visible (widget, FALSE);
+}
+
+static void
+gs_shell_events_notify_cb (GsPluginLoader *plugin_loader,
+			   GParamSpec *pspec,
+			   GsShell *shell)
+{
+	gs_shell_events_rescan (shell);
+}
+
+static void
+gs_shell_plugin_event_dismissed_cb (GdNotification *notification, GsShell *shell)
+{
+	GPtrArray *events;
+	GsShellPrivate *priv = gs_shell_get_instance_private (shell);
+	guint i;
+
+	/* mark any events currently showing as invalid */
+	events = gs_plugin_loader_get_events (priv->plugin_loader);
+	for (i = 0; i < events->len; i++) {
+		GsPluginEvent *event = g_ptr_array_index (events, i);
+		if (gs_plugin_event_has_flag (event, GS_PLUGIN_EVENT_FLAG_VISIBLE)) {
+			gs_plugin_event_add_flag (event, GS_PLUGIN_EVENT_FLAG_INVALID);
+			gs_plugin_event_remove_flag (event, GS_PLUGIN_EVENT_FLAG_VISIBLE);
+		}
+	}
+
+	/* show the next event */
+	gs_shell_events_rescan (shell);
+}
+
 void
 gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *cancellable)
 {
@@ -625,6 +822,9 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 	priv->plugin_loader = g_object_ref (plugin_loader);
 	g_signal_connect (priv->plugin_loader, "reload",
 			  G_CALLBACK (gs_shell_reload_cb), shell);
+	g_signal_connect_object (priv->plugin_loader, "notify::events",
+				 G_CALLBACK (gs_shell_events_notify_cb),
+				 shell, 0);
 	priv->cancellable = g_object_ref (cancellable);
 
 	gs_shell_monitor_permission (shell);
@@ -682,6 +882,14 @@ gs_shell_setup (GsShell *shell, GsPluginLoader *plugin_loader, GCancellable *can
 			   GINT_TO_POINTER (GS_SHELL_MODE_UPDATES));
 	g_signal_connect (widget, "clicked",
 			  G_CALLBACK (gs_shell_overview_button_cb), shell);
+
+	/* set up infobar */
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "notification_event"));
+	g_signal_connect (widget, "dismissed",
+			  G_CALLBACK (gs_shell_plugin_event_dismissed_cb), shell);
+	widget = GTK_WIDGET (gtk_builder_get_object (priv->builder, "button_events_sources"));
+	g_signal_connect (widget, "clicked",
+			  G_CALLBACK (gs_shell_plugin_events_sources_cb), shell);
 
 	priv->shell_overview = GS_SHELL_OVERVIEW (gtk_builder_get_object (priv->builder, "shell_overview"));
 	gs_shell_overview_setup (priv->shell_overview,
