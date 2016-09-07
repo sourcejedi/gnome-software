@@ -40,6 +40,7 @@ struct GsPluginData {
 	gchar			*user_hash;
 	gchar			*review_server;
 	GHashTable		*ratings;
+	GsApp			*cached_origin;
 };
 
 void
@@ -74,6 +75,20 @@ gs_plugin_initialize (GsPlugin *plugin)
 		g_warning ("failed to get distro name: %s", error->message);
 		priv->distro = g_strdup ("Unknown");
 	}
+
+	/* add source */
+	priv->cached_origin = gs_app_new (gs_plugin_get_name (plugin));
+	gs_app_set_kind (priv->cached_origin, AS_APP_KIND_GENERIC);
+	gs_app_set_state (priv->cached_origin, AS_APP_STATE_INSTALLED);
+	gs_app_set_scope (priv->cached_origin, AS_APP_SCOPE_SYSTEM);
+	gs_app_set_origin_hostname (priv->cached_origin, priv->review_server);
+	gs_app_set_origin_ui (priv->cached_origin, "Open Desktop Review Server");
+
+	/* add the source to the plugin cache which allows us to match the
+	 * unique ID to a GsApp when creating an event */
+	gs_plugin_cache_add (plugin,
+			     gs_app_get_unique_id (priv->cached_origin),
+			     priv->cached_origin);
 
 	/* need application IDs and version */
 	gs_plugin_add_rule (plugin, GS_PLUGIN_RULE_RUN_AFTER, "appstream");
@@ -181,8 +196,10 @@ gs_plugin_odrs_refresh_ratings (GsPlugin *plugin,
 
 	/* download the complete file */
 	uri = g_strdup_printf ("%s/ratings", priv->review_server);
-	if (!gs_plugin_download_file (plugin, app_dl, uri, fn, cancellable, error))
+	if (!gs_plugin_download_file (plugin, app_dl, uri, fn, cancellable, error)) {
+		gs_plugin_error_add_unique_id (error, priv->cached_origin);
 		return FALSE;
+	}
 	return gs_plugin_odrs_load_ratings (plugin, fn, error);
 }
 
@@ -221,6 +238,7 @@ gs_plugin_destroy (GsPlugin *plugin)
 	g_free (priv->distro);
 	g_hash_table_unref (priv->ratings);
 	g_object_unref (priv->settings);
+	g_object_unref (priv->cached_origin);
 }
 
 static AsReview *
@@ -567,6 +585,7 @@ gs_plugin_odrs_fetch_for_app (GsPlugin *plugin, GsApp *app, GError **error)
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_DOWNLOAD_FAILED,
 				     "status code invalid");
+		gs_plugin_error_add_unique_id (error, priv->cached_origin);
 		return NULL;
 	}
 	reviews = gs_plugin_odrs_parse_reviews (plugin,
@@ -947,6 +966,7 @@ gs_plugin_add_unvoted_reviews (GsPlugin *plugin,
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_DOWNLOAD_FAILED,
 				     "status code invalid");
+		gs_plugin_error_add_unique_id (error, priv->cached_origin);
 		return FALSE;
 	}
 	g_debug ("odrs returned: %s", msg->response_body->data);
