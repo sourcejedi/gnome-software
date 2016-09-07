@@ -43,6 +43,7 @@
 struct GsPluginData {
 	GDBusProxy	*proxy;
 	gchar		*shell_version;
+	GsApp		*cached_origin;
 };
 
 typedef enum {
@@ -65,7 +66,21 @@ typedef enum {
 void
 gs_plugin_initialize (GsPlugin *plugin)
 {
-	gs_plugin_alloc_data (plugin, sizeof(GsPluginData));
+	GsPluginData *priv = gs_plugin_alloc_data (plugin, sizeof(GsPluginData));
+
+	/* add source */
+	priv->cached_origin = gs_app_new (gs_plugin_get_name (plugin));
+	gs_app_set_kind (priv->cached_origin, AS_APP_KIND_GENERIC);
+	gs_app_set_state (priv->cached_origin, AS_APP_STATE_INSTALLED);
+	gs_app_set_scope (priv->cached_origin, AS_APP_SCOPE_SYSTEM);
+	gs_app_set_origin_hostname (priv->cached_origin, SHELL_EXTENSIONS_API_URI);
+	gs_app_set_origin_ui (priv->cached_origin, "GNOME Shell Extensions");
+
+	/* add the source to the plugin cache which allows us to match the
+	 * unique ID to a GsApp when creating an event */
+	gs_plugin_cache_add (plugin,
+			     gs_app_get_unique_id (priv->cached_origin),
+			     priv->cached_origin);
 }
 
 void
@@ -75,6 +90,7 @@ gs_plugin_destroy (GsPlugin *plugin)
 	g_free (priv->shell_version);
 	if (priv->proxy != NULL)
 		g_object_unref (priv->proxy);
+	g_object_unref (priv->cached_origin);
 }
 
 void
@@ -649,8 +665,10 @@ gs_plugin_shell_extensions_get_apps (GsPlugin *plugin,
 			       SHELL_EXTENSIONS_API_URI,
 			       priv->shell_version);
 	data = gs_plugin_download_data (plugin, dummy, uri, cancellable, error);
-	if (data == NULL)
+	if (data == NULL) {
+		gs_plugin_error_add_unique_id (error, priv->cached_origin);
 		return NULL;
+	}
 	apps = gs_plugin_shell_extensions_parse_apps (plugin,
 						      g_bytes_get_data (data, NULL),
 						      (gssize) g_bytes_get_size (data),
