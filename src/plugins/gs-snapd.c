@@ -26,7 +26,6 @@
 #include <gio/gunixsocketaddress.h>
 
 #include "gs-snapd.h"
-#include "gs-ubuntuone.h"
 
 // snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
 
@@ -96,10 +95,8 @@ gboolean
 gs_snapd_request (const gchar  *method,
 		  const gchar  *path,
 		  const gchar  *content,
-		  gboolean      authenticate,
-		  GVariant     *macaroon,
-		  gboolean      retry_after_login,
-		  GVariant    **out_macaroon,
+		  const gchar  *macaroon,
+		  gchar       **discharges,
 		  guint        *status_code,
 		  gchar       **reason_phrase,
 		  gchar       **response_type,
@@ -114,19 +111,9 @@ gs_snapd_request (const gchar  *method,
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
 	g_autoptr (SoupMessageHeaders) headers = NULL;
-	g_autoptr(GVariant) auto_macaroon = NULL;
 	gsize chunk_length = 0, n_required;
 	gchar *chunk_start = NULL;
-	const gchar *root;
-	const gchar *discharge;
-	GVariantIter *iter;
 	guint code;
-	gboolean ret;
-
-	if (macaroon == NULL && authenticate) {
-		auto_macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
-		macaroon = auto_macaroon;
-	}
 
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
@@ -139,13 +126,11 @@ gs_snapd_request (const gchar  *method,
 	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
 	g_string_append (request, "Host:\r\n");
 	if (macaroon != NULL) {
-		g_variant_get (macaroon, "(&sas)", &root, &iter);
-		g_string_append_printf (request, "Authorization: Macaroon root=\"%s\"", root);
+		gint i;
 
-		while (g_variant_iter_next (iter, "&s", &discharge))
-			g_string_append_printf (request, ",discharge=\"%s\"", discharge);
-
-		g_variant_iter_free (iter);
+		g_string_append_printf (request, "Authorization: Macaroon root=\"%s\"", macaroon);
+		for (i = 0; discharges[i] != NULL; i++)
+			g_string_append_printf (request, ",discharge=\"%s\"", discharges[i]);
 		g_string_append (request, "\r\n");
 	}
 	if (content)
@@ -198,45 +183,6 @@ gs_snapd_request (const gchar  *method,
 
 	if (status_code != NULL)
 		*status_code = code;
-
-	if ((code == 401 || code == 403) && retry_after_login) {
-		g_socket_close (socket, NULL);
-
-		gs_ubuntuone_clear_macaroon ();
-
-		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
-
-		if (macaroon == NULL) {
-			g_set_error_literal (error,
-					     GS_PLUGIN_ERROR,
-					     GS_PLUGIN_ERROR_FAILED,
-					     "failed to authenticate");
-			return FALSE;
-		}
-
-		ret = gs_snapd_request (method,
-					path,
-					content,
-					TRUE,
-					macaroon,
-					FALSE,
-					NULL,
-					status_code,
-					reason_phrase,
-					response_type,
-					response,
-					response_length,
-					cancellable,
-					error);
-
-		if (ret && out_macaroon != NULL) {
-			*out_macaroon = macaroon;
-		} else {
-			g_variant_unref (macaroon);
-		}
-
-		return ret;
-	}
 
 	/* read content */
 	switch (soup_message_headers_get_encoding (headers)) {
@@ -340,8 +286,6 @@ gs_snapd_request (const gchar  *method,
 		return FALSE;
 	}
 
-	if (out_macaroon != NULL)
-		*out_macaroon = g_variant_ref (macaroon);
 	if (response_type)
 		*response_type = g_strdup (soup_message_headers_get_content_type (headers, NULL));
 	if (response) {
@@ -354,6 +298,82 @@ gs_snapd_request (const gchar  *method,
 	}
 	if (response_length)
 		*response_length = chunk_length;
+
+	return TRUE;
+}
+
+gboolean
+gs_snapd_parse_result (const gchar	*response_type,
+		       const gchar	*response,
+		       JsonObject	**result,
+		       GError		**error)
+{
+	g_autoptr(JsonParser) parser = NULL;
+	g_autoptr(GError) error_local = NULL;
+	JsonObject *root;
+
+	if (response_type == NULL) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd returned no content type");
+		return FALSE;
+	}
+	if (g_strcmp0 (response_type, "application/json") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned unexpected content type %s", response_type);
+		return FALSE;
+	}
+
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, response, -1, &error_local)) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to parse snapd response: %s",
+			     error_local->message);
+		return FALSE;
+	}
+
+	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response does is not a valid JSON object");
+		return FALSE;
+	}
+	root = json_node_get_object (json_parser_get_root (parser));
+	if (!json_object_has_member (root, "result")) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response does not contain a \"result\" field");
+		return FALSE;
+	}
+	if (result != NULL)
+		*result = json_object_ref (json_object_get_object_member (root, "result"));
+
+	return TRUE;
+}
+
+gboolean
+gs_snapd_parse_error (const gchar	*response_type,
+		      const gchar	*response,
+		      gchar		**message,
+		      gchar		**kind,
+		      GError		**error)
+{
+	g_autoptr(JsonObject) result = NULL;
+
+	if (!gs_snapd_parse_result (response_type, response, &result, error))
+		return FALSE;
+
+	if (message != NULL)
+		*message = g_strdup (json_object_get_string_member (result, "message"));
+	if (kind != NULL)
+		*kind = json_object_has_member (result, "kind") ? g_strdup (json_object_get_string_member (result, "kind")) : NULL;
 
 	return TRUE;
 }

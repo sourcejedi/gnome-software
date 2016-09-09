@@ -31,17 +31,12 @@
 #include <gs-plugin.h>
 #include <gs-utils.h>
 
-#include "gs-ubuntuone.h"
 #include "gs-os-release.h"
 
 struct GsPluginPrivate {
 	gchar		*db_path;
 	sqlite3		*db;
 	gsize		 db_loaded;
-	gchar		*consumer_key;
-	gchar		*consumer_secret;
-	gchar		*token_key;
-	gchar		*token_secret;
 };
 
 typedef struct {
@@ -113,10 +108,6 @@ gs_plugin_destroy (GsPlugin *plugin)
 {
 	GsPluginPrivate *priv = plugin->priv;
 
-	g_clear_pointer (&priv->token_secret, g_free);
-	g_clear_pointer (&priv->token_key, g_free);
-	g_clear_pointer (&priv->consumer_secret, g_free);
-	g_clear_pointer (&priv->consumer_key, g_free);
 	g_clear_pointer (&priv->db, sqlite3_close);
 	g_free (priv->db_path);
 }
@@ -370,6 +361,27 @@ parse_review_entries (GsPlugin *plugin, JsonParser *parser, GError **error)
 	return TRUE;
 }
 
+static gboolean
+get_ubuntuone_token (GsPlugin *plugin,
+		     gchar **consumer_key, gchar **consumer_secret,
+		     gchar **token_key, gchar **token_secret,
+		     GCancellable *cancellable, GError **error)
+{
+	GsAuth *auth = gs_plugin_get_auth_by_id (plugin, "ubuntuone");
+	if (auth == NULL) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "No UbuntuOne authentication provider");
+		return FALSE;
+	}
+	*consumer_key = g_strdup (gs_auth_get_metadata_item (auth, "consumer-key"));
+	*consumer_secret = g_strdup (gs_auth_get_metadata_item (auth, "consumer-secret"));
+	*token_key = g_strdup (gs_auth_get_metadata_item (auth, "token-key"));
+	*token_secret = g_strdup (gs_auth_get_metadata_item (auth, "token-secret"));
+	return *consumer_key != NULL && *consumer_secret != NULL && *token_key != NULL && *token_secret != NULL;
+}
+
 static void
 sign_message (SoupMessage *message, OAuthMethod method,
 	      const gchar *consumer_key, const gchar *consumer_secret,
@@ -404,9 +416,23 @@ send_review_request (GsPlugin *plugin,
 		     JsonParser **result,
 		     GCancellable *cancellable, GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
+	g_autofree gchar *consumer_key = NULL;
+	g_autofree gchar *consumer_secret = NULL;
+	g_autofree gchar *token_key = NULL;
+	g_autofree gchar *token_secret = NULL;
 	g_autofree gchar *uri = NULL;
 	g_autoptr(SoupMessage) msg = NULL;
+
+	if (do_sign && !get_ubuntuone_token (plugin,
+					     &consumer_key, &consumer_secret,
+					     &token_key, &token_secret,
+					     cancellable, NULL)) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_AUTH_REQUIRED,
+				     "Requires authentication with @ubuntuone");
+		return FALSE;
+	}
 
 	uri = g_strdup_printf ("%s%s",
 			       UBUNTU_REVIEWS_SERVER, path);
@@ -426,10 +452,8 @@ send_review_request (GsPlugin *plugin,
 	if (do_sign)
 		sign_message (msg,
 			      OA_PLAINTEXT,
-			      priv->consumer_key,
-			      priv->consumer_secret,
-			      priv->token_key,
-			      priv->token_secret);
+			      consumer_key, consumer_secret,
+			      token_key, token_secret);
 
 	*status_code = soup_session_send_message (plugin->soup_session, msg);
 
@@ -653,9 +677,14 @@ parse_review (GsReview *review, const gchar *our_username, JsonNode *node)
 static gboolean
 parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
+	GsAuth *auth;
 	JsonArray *array;
+	const gchar *consumer_key = NULL;
 	guint i;
+
+	auth = gs_plugin_get_auth_by_id (plugin, "ubuntuone");
+	if (auth != NULL)
+		consumer_key = gs_auth_get_metadata_item (auth, "consumer-key");
 
 	if (!JSON_NODE_HOLDS_ARRAY (json_parser_get_root (parser)))
 		return FALSE;
@@ -665,7 +694,7 @@ parse_reviews (GsPlugin *plugin, JsonParser *parser, GsApp *app, GError **error)
 
 		/* Read in from JSON... (skip bad entries) */
 		review = gs_review_new ();
-		if (parse_review (review, priv->consumer_key, json_array_get_element (array, i)))
+		if (parse_review (review, consumer_key, json_array_get_element (array, i)))
 			gs_app_add_review (app, review);
 	}
 
@@ -769,44 +798,10 @@ refine_rating (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError *
 }
 
 static gboolean
-get_ubuntuone_credentials (GsPlugin  *plugin,
-			   gboolean   required,
-			   GError   **error)
-{
-	GsPluginPrivate *priv = plugin->priv;
-
-	/* Use current credentials if already available */
-	if (priv->consumer_key != NULL &&
-	    priv->consumer_secret != NULL &&
-	    priv->token_key != NULL &&
-	    priv->token_secret != NULL)
-		return TRUE;
-
-	/* Otherwise start with a clean slate */
-	g_clear_pointer (&priv->token_secret, g_free);
-	g_clear_pointer (&priv->token_key, g_free);
-	g_clear_pointer (&priv->consumer_secret, g_free);
-	g_clear_pointer (&priv->consumer_key, g_free);
-
-	/* Use credentials if we have them */
-	if (gs_ubuntuone_get_credentials (&priv->consumer_key, &priv->consumer_secret, &priv->token_key, &priv->token_secret))
-		return TRUE;
-
-	/* Otherwise log in to get them */
-	if (required)
-		return gs_ubuntuone_sign_in (&priv->consumer_key, &priv->consumer_secret, &priv->token_key, &priv->token_secret, error);
-	else
-		return TRUE;
-}
-
-static gboolean
 refine_reviews (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
 {
 	GPtrArray *sources;
 	guint i, j;
-
-	if (!get_ubuntuone_credentials (plugin, FALSE, error))
-		return FALSE;
 
 	/* Skip if already has reviews */
 	if (gs_app_get_reviews (app)->len > 0)
@@ -869,7 +864,8 @@ gs_plugin_review_submit (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	GsPluginPrivate *priv = plugin->priv;
+	GsAuth *auth;
+	const gchar *consumer_key = NULL;
 	gint rating;
 	gint n_stars;
 	g_autofree gchar *os_id = NULL, *os_ubuntu_codename = NULL, *language = NULL, *architecture = NULL;
@@ -884,9 +880,6 @@ gs_plugin_review_submit (GsPlugin *plugin,
 		if (!ret)
 			return FALSE;
 	}
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
 
 	/* Ubuntu reviews require a summary and description - just make one up for now */
 	rating = gs_review_get_rating (review);
@@ -942,7 +935,10 @@ gs_plugin_review_submit (GsPlugin *plugin,
 	}
 
 	// Extract new fields from posted review
-	parse_review (review, priv->consumer_key, json_parser_get_root (result));
+	auth = gs_plugin_get_auth_by_id (plugin, "ubuntuone");
+	if (auth != NULL)
+		consumer_key = gs_auth_get_metadata_item (auth, "consumer-key");
+	parse_review (review, consumer_key, json_parser_get_root (result));
 
 	return TRUE;
 }
@@ -964,9 +960,6 @@ gs_plugin_review_report (GsPlugin *plugin,
 	review_id = gs_review_get_metadata_item (review, "ubuntu-id");
 	if (review_id == NULL)
 		return TRUE;
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
 
 	/* Create message for reviews.ubuntu.com */
 	reason = soup_uri_encode ("FIXME: gnome-software", NULL);
@@ -1000,9 +993,6 @@ set_review_usefulness (GsPlugin *plugin,
 {
 	g_autofree gchar *path = NULL;
 	guint status_code;
-
-	if (!get_ubuntuone_credentials (plugin, TRUE, error))
-		return FALSE;
 
 	/* Create message for reviews.ubuntu.com */
 	path = g_strdup_printf ("/api/1.0/reviews/%s/recommendations/?useful=%s",

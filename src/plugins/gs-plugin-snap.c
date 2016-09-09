@@ -22,10 +22,11 @@
 #include <gs-plugin.h>
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
+#include <snapd-glib/snapd-glib.h>
 #include "gs-snapd.h"
-#include "gs-ubuntuone.h"
 
 struct GsPluginPrivate {
+	GsAuth		*auth;
 };
 
 typedef gboolean (*AppFilterFunc)(const gchar *id, JsonObject *object, gpointer data);
@@ -47,6 +48,26 @@ gs_plugin_initialize (GsPlugin *plugin)
 			 gs_plugin_get_name ());
 		gs_plugin_set_enabled (plugin, FALSE);
 	}
+
+	plugin->priv->auth = gs_auth_new ("snapd");
+	gs_auth_set_provider_name (plugin->priv->auth, "Snap Store");
+	gs_auth_set_provider_schema (plugin->priv->auth, "com.ubuntu.UbuntuOne.GnomeSoftware");
+	gs_plugin_add_auth (plugin, plugin->priv->auth);
+}
+
+gboolean
+gs_plugin_setup (GsPlugin *plugin, GCancellable *cancellable, GError **error)
+{
+	/* load from disk */
+	gs_auth_add_metadata (plugin->priv->auth, "macaroon", NULL);
+	if (!gs_auth_store_load (plugin->priv->auth,
+				 GS_AUTH_STORE_FLAG_USERNAME |
+				 GS_AUTH_STORE_FLAG_METADATA,
+				 cancellable, error))
+		return FALSE;
+
+	/* success */
+	return TRUE;
 }
 
 static JsonParser *
@@ -91,11 +112,42 @@ parse_result (const gchar *response, const gchar *response_type, GError **error)
 }
 
 static void
+get_macaroon (GsPlugin *plugin, gchar **macaroon, gchar ***discharges)
+{
+	GsAuth *auth;
+	const gchar *serialized_macaroon;
+	g_autoptr(GVariant) macaroon_variant = NULL;
+	g_autoptr (GError) error_local = NULL;
+
+	*macaroon = NULL;
+	*discharges = NULL;
+
+	auth = gs_plugin_get_auth_by_id (plugin, "snapd");
+	if (auth == NULL)
+		return;
+	serialized_macaroon = gs_auth_get_metadata_item (auth, "macaroon");
+	if (serialized_macaroon == NULL)
+		return;
+	macaroon_variant = g_variant_parse (G_VARIANT_TYPE ("(sas)"),
+					    serialized_macaroon,
+					    NULL,
+					    NULL,
+					    NULL);
+	if (macaroon_variant == NULL)
+		return;
+	g_variant_get (macaroon_variant, "(s^as)", macaroon, discharges);
+}
+
+static void
 refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_search, GCancellable *cancellable)
 {
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
 	const gchar *status, *icon_url, *launch_name = NULL;
 	g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
 	gint64 size = -1;
+
+	get_macaroon (plugin, &macaroon, &discharges);
 
 	status = json_object_get_string_member (package, "status");
 	if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
@@ -136,9 +188,9 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		gsize icon_response_length;
 
 		if (gs_snapd_request ("GET", icon_url, NULL,
-				      TRUE, NULL, TRUE, NULL,
-				      NULL, NULL, NULL,
-				      &icon_response, &icon_response_length,
+				      macaroon, discharges,
+				      NULL, NULL,
+				      NULL, &icon_response, &icon_response_length,
 				      cancellable, NULL)) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
@@ -205,6 +257,8 @@ get_apps (GsPlugin *plugin,
 	  GCancellable *cancellable,
 	  GError **error)
 {
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
 	guint status_code;
 	GPtrArray *query_fields;
 	g_autoptr (GString) path = NULL;
@@ -214,6 +268,8 @@ get_apps (GsPlugin *plugin,
 	JsonArray *result;
 	GList *snaps;
 	GList *l;
+
+	get_macaroon (plugin, &macaroon, &discharges);
 
 	/* Get all the apps */
 	query_fields = g_ptr_array_new_with_free_func (g_free);
@@ -248,7 +304,7 @@ get_apps (GsPlugin *plugin,
 	}
 	g_ptr_array_free (query_fields, TRUE);
 	if (!gs_snapd_request ("GET", path->str, NULL,
-			       TRUE, NULL, TRUE, NULL,
+			       macaroon, discharges,
 			       &status_code, &reason_phrase,
 			       &response_type, &response, NULL,
 			       cancellable, error))
@@ -298,6 +354,8 @@ get_apps (GsPlugin *plugin,
 static gboolean
 get_app (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
 {
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
 	guint status_code;
 	g_autofree gchar *path = NULL;
 	g_autofree gchar *reason_phrase = NULL;
@@ -306,9 +364,11 @@ get_app (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error
 	g_autoptr(JsonParser) parser = NULL;
 	JsonObject *root, *result;
 
+	get_macaroon (plugin, &macaroon, &discharges);
+
 	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
 	if (!gs_snapd_request ("GET", path, NULL,
-			       TRUE, NULL, TRUE, NULL,
+			       macaroon, discharges,
 			       &status_code, &reason_phrase,
 			       &response_type, &response, NULL,
 			       cancellable, error))
@@ -344,6 +404,7 @@ get_app (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
+	g_clear_object (&plugin->priv->auth);
 }
 
 static gboolean
@@ -403,6 +464,8 @@ send_package_action (GsPlugin *plugin,
 		     GCancellable *cancellable,
 		     GError **error)
 {
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
 	g_autofree gchar *content = NULL, *path = NULL;
 	guint status_code;
 	g_autofree gchar *reason_phrase = NULL;
@@ -414,19 +477,28 @@ send_package_action (GsPlugin *plugin,
 	JsonArray *tasks;
 	GList *task_list, *l;
 	gint64 done, total, task_done, task_total;
-        const gchar *resource_path;
+	const gchar *resource_path;
 	const gchar *type;
 	const gchar *change_id;
-	g_autoptr(GVariant) macaroon = NULL;
+
+	get_macaroon (plugin, &macaroon, &discharges);
 
 	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
 	path = g_strdup_printf ("/v2/snaps/%s", id);
 	if (!gs_snapd_request ("POST", path, content,
-			       TRUE, NULL, TRUE, &macaroon,
+			       macaroon, discharges,
 			       &status_code, &reason_phrase,
 			       &response_type, &response, NULL,
 			       cancellable, error))
 		return FALSE;
+
+	if (status_code == SOUP_STATUS_UNAUTHORIZED) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_AUTH_REQUIRED,
+				     "Requires authentication with @snapd");
+		return FALSE;
+	}
 
 	if (status_code != SOUP_STATUS_ACCEPTED) {
 		g_set_error (error,
@@ -458,7 +530,7 @@ send_package_action (GsPlugin *plugin,
 			g_usleep (100 * 1000);
 
 			if (!gs_snapd_request ("GET", resource_path, NULL,
-					       TRUE, macaroon, TRUE, NULL,
+					       macaroon, discharges,
 					       &status_code, &status_reason_phrase,
 					       &status_response_type, &status_response, NULL,
 					       cancellable, error)) {
@@ -594,4 +666,88 @@ gs_plugin_app_remove (GsPlugin *plugin,
 	}
 	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
 	return TRUE;
+}
+
+gboolean
+gs_plugin_auth_login (GsPlugin *plugin, GsAuth *auth,
+		      GCancellable *cancellable, GError **error)
+{
+	g_autoptr(SnapdAuthData) auth_data = NULL;
+	g_autoptr(GVariant) macaroon_variant = NULL;
+	g_autofree gchar *serialized_macaroon = NULL;
+	g_autoptr(GError) local_error = NULL;
+
+	if (auth != plugin->priv->auth)
+		return TRUE;
+
+	auth_data = snapd_login_sync (gs_auth_get_username (auth), gs_auth_get_password (auth), gs_auth_get_pin (auth), NULL, &local_error);
+	if (auth_data == NULL) {
+		if (g_error_matches (local_error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_REQUIRED)) {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_PIN_REQUIRED,
+					     local_error->message);
+		} else if (g_error_matches (local_error, SNAPD_ERROR, SNAPD_ERROR_AUTH_DATA_INVALID) ||
+			   g_error_matches (local_error, SNAPD_ERROR, SNAPD_ERROR_TWO_FACTOR_INVALID)) {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_AUTH_INVALID,
+					     local_error->message);
+		} else {
+			g_set_error_literal (error,
+					     GS_PLUGIN_ERROR,
+					     GS_PLUGIN_ERROR_NOT_SUPPORTED,
+					     local_error->message);
+		}
+		return FALSE;
+	}
+
+	macaroon_variant = g_variant_new ("(s^as)",
+					  snapd_auth_data_get_macaroon (auth_data),
+					  snapd_auth_data_get_discharges (auth_data));
+	serialized_macaroon = g_variant_print (macaroon_variant, FALSE);
+	gs_auth_add_metadata (auth, "macaroon", serialized_macaroon);
+
+	/* store */
+	if (!gs_auth_store_save (auth,
+				 GS_AUTH_STORE_FLAG_USERNAME |
+				 GS_AUTH_STORE_FLAG_METADATA,
+				 cancellable, error))
+		return FALSE;
+
+	gs_auth_add_flags (plugin->priv->auth, GS_AUTH_FLAG_VALID);
+
+	return TRUE;
+}
+
+gboolean
+gs_plugin_auth_lost_password (GsPlugin *plugin, GsAuth *auth,
+			      GCancellable *cancellable, GError **error)
+{
+	if (auth != plugin->priv->auth)
+		return TRUE;
+
+	// FIXME: snapd might not be using Ubuntu One accounts
+	// https://bugs.launchpad.net/bugs/1598667
+	g_set_error_literal (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_AUTH_INVALID,
+			     "do online using @https://login.ubuntu.com/+forgot_password");
+	return FALSE;
+}
+
+gboolean
+gs_plugin_auth_register (GsPlugin *plugin, GsAuth *auth,
+			 GCancellable *cancellable, GError **error)
+{
+	if (auth != plugin->priv->auth)
+		return TRUE;
+
+	// FIXME: snapd might not be using Ubuntu One accounts
+	// https://bugs.launchpad.net/bugs/1598667
+	g_set_error_literal (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_AUTH_INVALID,
+			     "do online using @https://login.ubuntu.com/+login");
+	return FALSE;
 }

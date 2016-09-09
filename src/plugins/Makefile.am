@@ -14,7 +14,6 @@ AM_CPPFLAGS =						\
 	$(LIMBA_CFLAGS)					\
 	$(XDG_APP_CFLAGS)				\
 	$(OAUTH_CFLAGS)					\
-	$(LIBSECRET_CFLAGS)				\
 	$(SNAP_CFLAGS)					\
 	-DBINDIR=\"$(bindir)\"				\
 	-DDATADIR=\"$(datadir)\"			\
@@ -42,7 +41,8 @@ plugin_LTLIBRARIES =					\
 	libgs_plugin_fedora_tagger_usage.la		\
 	libgs_plugin_epiphany.la			\
 	libgs_plugin_icons.la				\
-	libgs_plugin_snap.la
+	libgs_plugin_snap.la				\
+	libgs_plugin_ubuntuone.la
 
 if HAVE_APT
 plugin_LTLIBRARIES +=					\
@@ -209,10 +209,6 @@ libgs_plugin_hardcoded_blacklist_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 if HAVE_UBUNTU_REVIEWS
 libgs_plugin_ubuntu_reviews_la_SOURCES =		\
 	gs-plugin-ubuntu-reviews.c			\
-	gs-ubuntuone.h					\
-	gs-ubuntuone.c					\
-	gs-ubuntuone-dialog.h				\
-	gs-ubuntuone-dialog.c				\
 	gs-snapd.h					\
 	gs-snapd.c
 libgs_plugin_ubuntu_reviews_la_LIBADD =			\
@@ -297,10 +293,6 @@ libgs_plugin_packagekit_proxy_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 libgs_plugin_snap_la_SOURCES =				\
 	gs-plugin-snap.c				\
-	gs-ubuntuone.h					\
-	gs-ubuntuone.c					\
-	gs-ubuntuone-dialog.h				\
-	gs-ubuntuone-dialog.c				\
 	gs-snapd.h					\
 	gs-snapd.c
 libgs_plugin_snap_la_LIBADD =				\
@@ -310,7 +302,16 @@ libgs_plugin_snap_la_LIBADD =				\
 	$(JSON_GLIB_LIBS)				\
 	$(LIBSECRET_LIBS)
 libgs_plugin_snap_la_LDFLAGS = -module -avoid-version
-libgs_plugin_snap_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS) -DUSE_SNAPD
+libgs_plugin_snap_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
+
+libgs_plugin_ubuntuone_la_SOURCES =			\
+	gs-plugin-ubuntuone.c
+libgs_plugin_ubuntuone_la_LIBADD =			\
+	$(GS_PLUGIN_LIBS)				\
+	$(SOUP_LIBS)					\
+	$(JSON_GLIB_LIBS)
+libgs_plugin_ubuntuone_la_LDFLAGS = -module -avoid-version
+libgs_plugin_ubuntuone_la_CFLAGS = $(GS_PLUGIN_CFLAGS) $(WARN_CFLAGS)
 
 check_PROGRAMS =						\
 	gs-self-test
@@ -328,6 +329,6 @@ gs_self_test_CFLAGS = $(WARN_CFLAGS)
 
 TESTS = gs-self-test
 
-EXTRA_DIST = moduleset-test.xml gs-ubuntuone-dialog.h gs-ubuntuone-dialog.ui ubuntu-one.png com.canonical.Unity.Launcher.xml
+EXTRA_DIST = moduleset-test.xml ubuntu-one.png com.canonical.Unity.Launcher.xml
 
 -include $(top_srcdir)/git.mk

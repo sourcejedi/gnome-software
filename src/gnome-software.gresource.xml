@@ -34,6 +34,5 @@
   <file>gtk-style.css</file>
   <file>gtk-style-hc.css</file>
   <file>plugins/ubuntu-one.png</file>
-  <file preprocess="xml-stripblanks">plugins/gs-ubuntuone-dialog.ui</file>
  </gresource>
 </gresources>
