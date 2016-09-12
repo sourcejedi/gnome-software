@@ -85,7 +85,7 @@ read_from_snapd (GSocket *socket,
 				   error);
 	if (n_read < 0)
 		return FALSE;
-	*read_offset += n_read;
+	*read_offset += (gsize) n_read;
 	buffer[*read_offset] = '\0';
 
 	return TRUE;
@@ -134,7 +134,7 @@ send_request (const gchar  *method,
 		g_string_append (request, "\r\n");
 	}
 	if (content)
-		g_string_append_printf (request, "Content-Length: %zi\r\n", strlen (content));
+		g_string_append_printf (request, "Content-Length: %zu\r\n", strlen (content));
 	g_string_append (request, "\r\n");
 	if (content)
 		g_string_append (request, content);
@@ -168,7 +168,7 @@ send_request (const gchar  *method,
 
 	/* body starts after header divider */
 	body += 4;
-	header_length = body - data;
+	header_length = (gsize) (body - data);
 
 	/* parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
@@ -368,7 +368,7 @@ gs_snapd_list_one (const gchar *macaroon, gchar **discharges,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return NULL;
 	}
@@ -412,7 +412,7 @@ gs_snapd_list (const gchar *macaroon, gchar **discharges,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return NULL;
 	}
@@ -464,7 +464,7 @@ gs_snapd_find (const gchar *macaroon, gchar **discharges,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return NULL;
 	}
@@ -510,7 +510,7 @@ get_changes (const gchar *macaroon, gchar **discharges,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return NULL;
 	}
@@ -572,7 +572,7 @@ send_package_action (const gchar *macaroon,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return FALSE;
 	}
@@ -658,7 +658,7 @@ gs_snapd_get_resource (const gchar *macaroon, gchar **discharges,
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s",
+			     "snapd returned status code %u: %s",
 			     status_code, reason_phrase);
 		return NULL;
 	}
