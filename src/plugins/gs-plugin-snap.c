@@ -305,7 +305,7 @@ gs_plugin_refine (GsPlugin *plugin,
 
 		result = gs_snapd_list_one (macaroon, discharges, gs_app_get_id (app), cancellable, error);
 		if (result == NULL)
-			return FALSE;
+			continue;
 		refine_app (plugin, app, result, FALSE, cancellable);
 	}
 
