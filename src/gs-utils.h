@@ -76,8 +76,6 @@ void		 gs_utils_show_error_dialog	(GtkWindow	*parent,
 						 const gchar	*msg,
 						 const gchar	*details);
 
-gboolean	 gs_utils_is_current_desktop	(const gchar	*name);
-
 GDesktopAppInfo *gs_utils_get_desktop_app_info	(const gchar	*id);
 
 G_END_DECLS
