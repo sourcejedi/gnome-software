@@ -650,7 +650,7 @@ gs_plugin_refine (GsPlugin *plugin,
 			gs_app_set_license (app, GS_APP_QUALITY_LOWEST, "@LicenseRef-free=" LICENSE_URL);
 		}
 
-		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_UPDATE_DETAILS) != 0) {
+		if ((flags & GS_PLUGIN_REFINE_FLAGS_REQUIRE_CHANGELOG) != 0) {
 			get_changelog (plugin, app);
 		}
 	}
