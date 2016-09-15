@@ -884,7 +884,7 @@ app_is_ours (GsApp *app)
 
 	// FIXME: Since appstream marks all packages as owned by PackageKit and
 	// we are replacing PackageKit we need to accept those packages
-	const gchar *our_management_plugins[] = { "PackageKit", "apt", NULL };
+	const gchar *our_management_plugins[] = { "packagekit", "apt", NULL };
 
 	return g_strv_contains (our_management_plugins, management_plugin);
 }
