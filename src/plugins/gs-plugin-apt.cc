@@ -402,7 +402,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 	if (g_strcmp0 (info->installed_version, info->update_version) == 0)
 		g_clear_pointer (&info->update_version, g_free);
 
-	if (info->installed_version && info->update_version)
+	if (info->installed_version && info->update_version && P->SelectedState != pkgCache::State::Hold)
 		plugin->priv->updatable_packages =
 			g_list_append (plugin->priv->updatable_packages, info);
 
