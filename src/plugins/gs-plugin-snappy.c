@@ -269,6 +269,9 @@ get_app (GsPlugin *plugin, GsApp *app, GError **error)
 	if (!send_snapd_request ("GET", path, NULL, TRUE, NULL, TRUE, NULL, &status_code, &reason_phrase, &response_type, &response, NULL, error))
 		return FALSE;
 
+	if (status_code == SOUP_STATUS_NOT_FOUND)
+		return TRUE;
+
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
