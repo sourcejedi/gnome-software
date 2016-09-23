@@ -338,7 +338,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	PackageInfo *info;
 
-	if (!candidate || !candidate.FileList ())
+	if (!candidate || !candidate.IsGood () || !candidate.FileList ())
 		return TRUE;
 
 	name = g_strdup (P.Name ());
@@ -377,7 +377,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 
 	pkgTagFile TagF (&PkgF);
 
-	if (TagF.Jump (Tags, current.FileList ()->Offset) == false) {
+	if (!current.IsGood() || TagF.Jump (Tags, current.FileList ()->Offset) == false) {
 		if (TagF.Jump (Tags, candidate.FileList ()->Offset) == false)
 			return TRUE;
 	}
@@ -387,7 +387,7 @@ look_at_pkg (const pkgCache::PkgIterator &P,
 	else
 		info->installed_size = 0;
 
-	if (current)
+	if (current && current.IsGood ())
 		info->installed_version = g_strdup (current.VerStr ());
 	if (candidate)
 		info->update_version = g_strdup (candidate.VerStr ());
