@@ -24,7 +24,7 @@
 #include <gs-plugin.h>
 #include <libsoup/soup.h>
 #include <gio/gunixsocketaddress.h>
-#include "gs-ubuntu-snapd.h"
+#include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
 #define SNAPD_SOCKET_PATH "/run/snapd.socket"

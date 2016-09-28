@@ -22,7 +22,7 @@
 #include <gs-plugin.h>
 #include <glib/gi18n.h>
 #include <json-glib/json-glib.h>
-#include "gs-ubuntu-snapd.h"
+#include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md

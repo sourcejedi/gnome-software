@@ -26,7 +26,7 @@
 #include <json-glib/json-glib.h>
 #include <libsoup/soup.h>
 
-#include "gs-ubuntu-snapd.h"
+#include "gs-snapd.h"
 
 #define UBUNTU_LOGIN_HOST "https://login.ubuntu.com"
 
