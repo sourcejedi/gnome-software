@@ -182,7 +182,7 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 }
 
 static gboolean
-get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
+get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GError **error)
 {
 	guint status_code;
 	GPtrArray *query_fields;
@@ -196,8 +196,6 @@ get_apps (GsPlugin *plugin, const gchar *sources, gchar **search_terms, GList **
 
 	/* Get all the apps */
 	query_fields = g_ptr_array_new_with_free_func (g_free);
-	if (sources != NULL)
-		g_ptr_array_add (query_fields, g_strdup_printf ("sources=%s", sources));
 	if (search_terms != NULL) {
 		g_autofree gchar *query = NULL;
 		query = g_strjoinv ("+", search_terms);
@@ -316,7 +314,7 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	return get_apps (plugin, "local", NULL, list, is_active, NULL, error);
+	return get_apps (plugin, NULL, list, is_active, NULL, error);
 }
 
 gboolean
@@ -326,7 +324,7 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	return get_apps (plugin, NULL, values, list, NULL, values, error);
+	return get_apps (plugin, values, list, NULL, values, error);
 }
 
 gboolean
