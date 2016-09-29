@@ -24,6 +24,8 @@
 
 #include <gio/gio.h>
 
+gboolean gs_snapd_exists	(void);
+
 gboolean send_snapd_request (const gchar  *method,
 			     const gchar  *path,
 			     const gchar  *content,

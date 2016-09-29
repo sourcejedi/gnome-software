@@ -27,9 +27,15 @@
 #include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
-#define SNAPD_SOCKET_PATH "/run/snapd.socket"
+// snapd API documentation is at https://github.com/snapcore/snapd/blob/master/docs/rest.md
 
-// snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
+#define SNAPD_SOCKET "/run/snapd.socket"
+
+gboolean
+gs_snapd_exists (void)
+{
+	return g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS);
+}
 
 static GSocket *
 open_snapd_socket (GCancellable *cancellable, GError **error)
@@ -50,7 +56,7 @@ open_snapd_socket (GCancellable *cancellable, GError **error)
 			     error_local->message);
 		return NULL;
 	}
-	address = g_unix_socket_address_new (SNAPD_SOCKET_PATH);
+	address = g_unix_socket_address_new (SNAPD_SOCKET);
 	if (!g_socket_connect (socket, address, cancellable, &error_local)) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,

@@ -25,10 +25,6 @@
 #include "gs-snapd.h"
 #include "gs-ubuntuone.h"
 
-// snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
-
-#define SNAPD_SOCKET "/run/snapd.socket"
-
 struct GsPluginPrivate {
 };
 
@@ -46,9 +42,9 @@ gs_plugin_initialize (GsPlugin *plugin)
 	/* create private area */
 	plugin->priv = GS_PLUGIN_GET_PRIVATE (GsPluginPrivate);
 
-	if (!g_file_test (SNAPD_SOCKET, G_FILE_TEST_EXISTS)) {
-		g_debug ("disabling '%s' as no %s available",
-			 plugin->name, SNAPD_SOCKET);
+	if (!gs_snapd_exists ()) {
+		g_debug ("disabling '%s' as snapd not running",
+			 gs_plugin_get_name ());
 		gs_plugin_set_enabled (plugin, FALSE);
 	}
 }
