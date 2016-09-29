@@ -26,8 +26,10 @@
 
 G_BEGIN_DECLS
 
-GVariant	*gs_ubuntuone_get_macaroon	(gboolean	  use_cache,
+gboolean	 gs_ubuntuone_get_macaroon	(gboolean	  use_cache,
 						 gboolean	  show_dialog,
+						 gchar		**macaroon,
+						 gchar	       ***discharges,
 						 GError		**error);
 
 void		 gs_ubuntuone_clear_macaroon	(void);

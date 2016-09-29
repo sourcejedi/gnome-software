@@ -96,9 +96,11 @@ send_snapd_request (const gchar  *method,
 		    const gchar  *path,
 		    const gchar  *content,
 		    gboolean      authenticate,
-		    GVariant     *macaroon,
+		    const gchar  *macaroon_,
+		    gchar       **discharges_,
 		    gboolean      retry_after_login,
-		    GVariant    **out_macaroon,
+		    gchar       **out_macaroon,
+		    gchar      ***out_discharges,
 		    guint        *status_code,
 		    gchar       **reason_phrase,
 		    gchar       **response_type,
@@ -113,18 +115,17 @@ send_snapd_request (const gchar  *method,
 	gsize max_data_length = 65535, data_length = 0, header_length;
 	gchar data[max_data_length + 1], *body = NULL;
 	g_autoptr (SoupMessageHeaders) headers = NULL;
-	g_autoptr(GVariant) auto_macaroon = NULL;
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
 	gsize chunk_length, n_required;
 	gchar *chunk_start = NULL;
-	const gchar *root;
-	const gchar *discharge;
-	GVariantIter *iter;
 	guint code;
 	gboolean ret;
 
+	macaroon = g_strdup (macaroon_);
+	discharges = g_strdupv (discharges_);
 	if (macaroon == NULL && authenticate) {
-		auto_macaroon = gs_ubuntuone_get_macaroon (TRUE, FALSE, NULL);
-		macaroon = auto_macaroon;
+		gs_ubuntuone_get_macaroon (TRUE, FALSE, &macaroon, &discharges, NULL);
 	}
 
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
@@ -138,17 +139,15 @@ send_snapd_request (const gchar  *method,
 	g_string_append_printf (request, "%s %s HTTP/1.1\r\n", method, path);
 	g_string_append (request, "Host:\r\n");
 	if (macaroon != NULL) {
-		g_variant_get (macaroon, "(&sas)", &root, &iter);
-		g_string_append_printf (request, "Authorization: Macaroon root=\"%s\"", root);
+		gint i;
 
-		while (g_variant_iter_next (iter, "&s", &discharge))
-			g_string_append_printf (request, ",discharge=\"%s\"", discharge);
-
-		g_variant_iter_free (iter);
+		g_string_append_printf (request, "Authorization: Macaroon root=\"%s\"", macaroon);
+		for (i = 0; discharges[i] != NULL; i++)
+			g_string_append_printf (request, ",discharge=\"%s\"", discharges[i]);
 		g_string_append (request, "\r\n");
 	}
 	if (content)
-		g_string_append_printf (request, "Content-Length: %zi\r\n", strlen (content));
+		g_string_append_printf (request, "Content-Length: %zu\r\n", strlen (content));
 	g_string_append (request, "\r\n");
 	if (content)
 		g_string_append (request, content);
@@ -203,7 +202,9 @@ send_snapd_request (const gchar  *method,
 
 		gs_ubuntuone_clear_macaroon ();
 
-		macaroon = gs_ubuntuone_get_macaroon (FALSE, TRUE, NULL);
+		g_clear_pointer (&macaroon, g_free);
+		g_clear_pointer (&discharges, g_strfreev);
+		gs_ubuntuone_get_macaroon (FALSE, TRUE, &macaroon, &discharges, NULL);
 
 		if (macaroon == NULL) {
 			g_set_error_literal (error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
@@ -215,9 +216,9 @@ send_snapd_request (const gchar  *method,
 					  path,
 					  content,
 					  TRUE,
-					  macaroon,
+					  macaroon, discharges,
 					  FALSE,
-					  NULL,
+					  NULL, NULL,
 					  status_code,
 					  reason_phrase,
 					  response_type,
@@ -227,9 +228,8 @@ send_snapd_request (const gchar  *method,
 					  error);
 
 		if (ret && out_macaroon != NULL) {
-			*out_macaroon = macaroon;
-		} else {
-			g_variant_unref (macaroon);
+			*out_macaroon = g_steal_pointer (&macaroon);
+			*out_discharges = g_steal_pointer (&discharges);
 		}
 
 		return ret;
@@ -284,8 +284,10 @@ send_snapd_request (const gchar  *method,
 		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, cancellable, error))
 			return FALSE;
 
-	if (out_macaroon != NULL)
-		*out_macaroon = g_variant_ref (macaroon);
+	if (out_macaroon != NULL) {
+		*out_macaroon = g_steal_pointer (&macaroon);
+		*out_discharges = g_steal_pointer (&discharges);
+	}
 	if (response_type)
 		*response_type = g_strdup (soup_message_headers_get_one (headers, "Content-Type"));
 	if (response) {

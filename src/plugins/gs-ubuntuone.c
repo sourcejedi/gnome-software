@@ -112,15 +112,16 @@ show_login_dialog (gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
-GVariant *
+gboolean
 gs_ubuntuone_get_macaroon (gboolean   use_cache,
 			   gboolean   show_dialog,
+			   gchar    **macaroon,
+			   gchar   ***discharges,
 			   GError   **error)
 {
 	LoginContext login_context = { 0 };
 	g_autofree gchar *password = NULL;
 	g_autofree gchar *printed = NULL;
-	GVariant *macaroon = NULL;
 	GError *error_local = NULL;
 
 	if (use_cache) {
@@ -131,14 +132,19 @@ gs_ubuntuone_get_macaroon (gboolean   use_cache,
 							NULL);
 
 		if (password) {
-			macaroon = g_variant_parse (G_VARIANT_TYPE ("(sas)"),
-						    password,
-						    NULL,
-						    NULL,
-						    &error_local);
+			GVariant *value;
 
-			if (macaroon)
-				return macaroon;
+			value = g_variant_parse (G_VARIANT_TYPE ("(sas)"),
+						 password,
+						 NULL,
+						 NULL,
+						 &error_local);
+
+			if (value != NULL) {
+				g_variant_get (value, "(s^as)", macaroon, discharges);
+				g_variant_unref (value);
+				return TRUE;
+			}
 
 			g_warning ("could not parse macaroon: %s", error_local->message);
 			g_clear_error (&error_local);
@@ -181,10 +187,13 @@ gs_ubuntuone_get_macaroon (gboolean   use_cache,
 			}
 		}
 
-		return login_context.macaroon;
+		g_variant_get (login_context.macaroon, "(s^as)", macaroon, discharges);
+		g_variant_unref (login_context.macaroon);
+
+		return TRUE;
 	}
 
-	return NULL;
+	return FALSE;
 }
 
 void
