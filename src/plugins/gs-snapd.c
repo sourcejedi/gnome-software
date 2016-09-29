@@ -32,26 +32,31 @@
 // snapd API documentation is at https://github.com/ubuntu-core/snappy/blob/master/docs/rest.md
 
 static GSocket *
-open_snapd_socket (GError **error)
+open_snapd_socket (GCancellable *cancellable, GError **error)
 {
 	GSocket *socket;
 	g_autoptr(GSocketAddress) address = NULL;
-	g_autoptr(GError) sub_error = NULL;
+	g_autoptr(GError) error_local = NULL;
 
-	socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_DEFAULT, &sub_error);
+	socket = g_socket_new (G_SOCKET_FAMILY_UNIX,
+			       G_SOCKET_TYPE_STREAM,
+			       G_SOCKET_PROTOCOL_DEFAULT,
+			       &error_local);
 	if (!socket) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to open snapd socket: %s", sub_error->message);
+			     "Unable to open snapd socket: %s",
+			     error_local->message);
 		return NULL;
 	}
 	address = g_unix_socket_address_new (SNAPD_SOCKET_PATH);
-	if (!g_socket_connect (socket, address, NULL, &sub_error)) {
+	if (!g_socket_connect (socket, address, cancellable, &error_local)) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
 			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to connect snapd socket: %s", sub_error->message);
+			     "Unable to connect snapd socket: %s",
+			     error_local->message);
 		g_object_unref (socket);
 		return NULL;
 	}
@@ -60,13 +65,21 @@ open_snapd_socket (GError **error)
 }
 
 static gboolean
-read_from_snapd (GSocket *socket, gchar *buffer, gsize buffer_length, gsize *read_offset, GError **error)
+read_from_snapd (GSocket *socket,
+		 gchar *buffer, gsize buffer_length,
+		 gsize *read_offset,
+		 GCancellable *cancellable,
+		 GError **error)
 {
 	gssize n_read;
-	n_read = g_socket_receive (socket, buffer + *read_offset, buffer_length - *read_offset, NULL, error);
+	n_read = g_socket_receive (socket,
+				   buffer + *read_offset,
+				   buffer_length - *read_offset,
+				   cancellable,
+				   error);
 	if (n_read < 0)
 		return FALSE;
-	*read_offset += n_read;
+	*read_offset += (gsize) n_read;
 	buffer[*read_offset] = '\0';
 
 	return TRUE;
@@ -85,6 +98,7 @@ send_snapd_request (const gchar  *method,
 		    gchar       **response_type,
 		    gchar       **response,
 		    gsize        *response_length,
+		    GCancellable *cancellable,
 		    GError      **error)
 {
 	g_autoptr (GSocket) socket = NULL;
@@ -110,8 +124,7 @@ send_snapd_request (const gchar  *method,
 	// NOTE: Would love to use libsoup but it doesn't support unix sockets
 	// https://bugzilla.gnome.org/show_bug.cgi?id=727563
 
-	socket = open_snapd_socket (error);
-
+	socket = open_snapd_socket (cancellable, error);
 	if (socket == NULL)
 		return FALSE;
 
@@ -137,14 +150,19 @@ send_snapd_request (const gchar  *method,
 	if (g_strcmp0 (g_getenv ("GNOME_SOFTWARE_SNAPPY"), "debug") == 0)
 		g_print ("===== begin snapd request =====\n%s\n===== end snapd request =====\n", request->str);
 
-	/* Send HTTP request */
-	n_written = g_socket_send (socket, request->str, request->len, NULL, error);
+	/* send HTTP request */
+	n_written = g_socket_send (socket, request->str, request->len, cancellable, error);
 	if (n_written < 0)
 		return FALSE;
 
-	/* Read HTTP headers */
+	/* read HTTP headers */
 	while (data_length < max_data_length && !body) {
-		if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
+		if (!read_from_snapd (socket,
+				      data,
+				      max_data_length,
+				      &data_length,
+				      cancellable,
+				      error))
 			return FALSE;
 		body = strstr (data, "\r\n\r\n");
 	}
@@ -156,13 +174,14 @@ send_snapd_request (const gchar  *method,
 		return FALSE;
 	}
 
-	/* Body starts after header divider */
+	/* body starts after header divider */
 	body += 4;
-	header_length = body - data;
+	header_length = (gsize) (body - data);
 
-	/* Parse headers */
+	/* parse headers */
 	headers = soup_message_headers_new (SOUP_MESSAGE_HEADERS_RESPONSE);
-	if (!soup_headers_parse_response (data, header_length, headers, NULL, &code, reason_phrase)) {
+	if (!soup_headers_parse_response (data, header_length, headers,
+					  NULL, &code, reason_phrase)) {
 		g_set_error_literal (error,
 				     GS_PLUGIN_ERROR,
 				     GS_PLUGIN_ERROR_FAILED,
@@ -198,6 +217,7 @@ send_snapd_request (const gchar  *method,
 					  response_type,
 					  response,
 					  response_length,
+					  cancellable,
 					  error);
 
 		if (ret && out_macaroon != NULL) {
@@ -215,7 +235,7 @@ send_snapd_request (const gchar  *method,
 			chunk_start = strstr (body, "\r\n");
 			if (chunk_start)
 				break;
-			if (!read_from_snapd (socket, data, max_data_length, &data_length, error))
+			if (!read_from_snapd (socket, data, max_data_length, &data_length, cancellable, error))
 				return FALSE;
 		}
 		if (!chunk_start) {
@@ -255,7 +275,7 @@ send_snapd_request (const gchar  *method,
 
 	/* Read chunk content */
 	while (data_length < n_required)
-		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, error))
+		if (!read_from_snapd (socket, data, n_required - data_length, &data_length, cancellable, error))
 			return FALSE;
 
 	if (out_macaroon != NULL)

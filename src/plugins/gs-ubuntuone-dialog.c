@@ -440,6 +440,7 @@ send_login_request (GsUbuntuoneDialog *self)
 					&response_type,
 					&response,
 					&response_length,
+					NULL,
 					&error)) {
 			reenable_widgets (self);
 
