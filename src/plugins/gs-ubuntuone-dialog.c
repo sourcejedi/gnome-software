@@ -301,10 +301,7 @@ receive_login_response_cb (GsUbuntuoneDialog *self,
 static void
 check_snapd_response (GsUbuntuoneDialog *self,
 		      guint              status_code,
-		      gchar             *reason_phrase,
-		      gchar             *response_type,
-		      gchar             *response,
-		      gsize              response_length)
+		      gchar             *response)
 {
 	g_autoptr(GVariant) variant = NULL;
 	g_autoptr(GVariant) result = NULL;
@@ -380,16 +377,7 @@ err:
 static void
 send_login_request (GsUbuntuoneDialog *self)
 {
-	g_autofree gchar *content = NULL;
-	g_autofree gchar *username = NULL;
-	g_autofree gchar *password = NULL;
-	g_autofree gchar *otp = NULL;
 	GVariant *request;
-	guint status_code;
-	g_autofree gchar *reason_phrase = NULL;
-	g_autofree gchar *response_type = NULL;
-	g_autofree gchar *response = NULL;
-	gsize response_length;
 	g_autoptr(GError) error = NULL;
 
 	gtk_widget_set_sensitive (self->cancel_button, FALSE);
@@ -405,51 +393,20 @@ send_login_request (GsUbuntuoneDialog *self)
 	show_status (self, _("Signing in…"), FALSE);
 
 	if (self->get_macaroon) {
-		username = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->email_entry)), NULL);
-		password = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->password_entry)), NULL);
+		g_autofree gchar *response = NULL;
+		guint status_code;
 
-		if (gtk_entry_get_text_length (GTK_ENTRY (self->passcode_entry)) > 0) {
-			otp = g_strescape (gtk_entry_get_text (GTK_ENTRY (self->passcode_entry)), NULL);
-
-			content = g_strdup_printf ("{"
-						   "  \"username\" : \"%s\","
-						   "  \"password\" : \"%s\","
-						   "  \"otp\" : \"%s\""
-						   "}",
-						   username,
-						   password,
-						   otp);
-		} else {
-			content = g_strdup_printf ("{"
-						   "  \"username\" : \"%s\","
-						   "  \"password\" : \"%s\""
-						   "}",
-						   username,
-						   password);
-		}
-
-		if (send_snapd_request (SOUP_METHOD_POST,
-					"/v2/login",
-					content,
-					FALSE,
-					NULL, NULL,
-					FALSE,
-					NULL, NULL,
-					&status_code,
-					&reason_phrase,
-					&response_type,
-					&response,
-					&response_length,
-					NULL,
-					&error)) {
+		response = gs_snapd_login (gtk_entry_get_text (GTK_ENTRY (self->email_entry)),
+					   gtk_entry_get_text (GTK_ENTRY (self->password_entry)),
+					   gtk_entry_get_text (GTK_ENTRY (self->passcode_entry)),
+					   &status_code,
+					   NULL, &error);
+		if (response != NULL) {
 			reenable_widgets (self);
 
 			check_snapd_response (self,
 					      status_code,
-					      reason_phrase,
-					      response_type,
-					      response,
-					      response_length);
+					      response);
 		} else {
 			g_warning ("could not send request: %s", error->message);
 

@@ -49,46 +49,6 @@ gs_plugin_initialize (GsPlugin *plugin)
 	}
 }
 
-static JsonParser *
-parse_result (const gchar *response, const gchar *response_type, GError **error)
-{
-	g_autoptr(JsonParser) parser = NULL;
-	g_autoptr(GError) sub_error = NULL;
-
-	if (response_type == NULL) {
-		g_set_error_literal (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "snapd returned no content type");
-		return NULL;
-	}
-	if (g_strcmp0 (response_type, "application/json") != 0) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned unexpected content type %s", response_type);
-		return NULL;
-	}
-
-	parser = json_parser_new ();
-	if (!json_parser_load_from_data (parser, response, -1, &sub_error)) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "Unable to parse snapd response: %s", sub_error->message);
-		return NULL;
-	}
-	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
-		g_set_error_literal (error,
-				     GS_PLUGIN_ERROR,
-				     GS_PLUGIN_ERROR_FAILED,
-				     "snapd response does is not a valid JSON object");
-		return NULL;
-	}
-
-	return g_object_ref (parser);
-}
-
 static void
 refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_search)
 {
@@ -127,12 +87,8 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		g_autofree gchar *icon_response = NULL;
 		gsize icon_response_length;
 
-		if (send_snapd_request ("GET", icon_url, NULL,
-					TRUE,
-					NULL, NULL,
-					TRUE,
-					NULL, NULL,
-					NULL, NULL, NULL, &icon_response, &icon_response_length, NULL, NULL)) {
+		icon_response = gs_snapd_get_resource (icon_url, &icon_response_length, NULL, NULL);
+		if (icon_response != NULL) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
@@ -185,58 +141,19 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 static gboolean
 get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GCancellable *cancellable, GError **error)
 {
-	guint status_code;
-	GPtrArray *query_fields;
-	g_autoptr (GString) path = NULL;
-	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL;
-	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root;
-	JsonArray *result;
+	g_autoptr(JsonArray) result = NULL;
 	GList *snaps;
 	GList *i;
 
 	/* Get all the apps */
-	query_fields = g_ptr_array_new_with_free_func (g_free);
-	if (search_terms != NULL) {
-		g_autofree gchar *query = NULL;
-		query = g_strjoinv ("+", search_terms);
-		g_ptr_array_add (query_fields, g_strdup_printf ("q=%s", query));
-		path = g_string_new ("/v2/find");
-	}
+	if (search_terms != NULL)
+		result = gs_snapd_find (search_terms, cancellable, error);
 	else
-		path = g_string_new ("/v2/snaps");
-	g_ptr_array_add (query_fields, NULL);
-	if (query_fields->len > 1) {
-		g_autofree gchar *fields = NULL;
-		g_string_append (path, "?");
-		fields = g_strjoinv ("&", (gchar **) query_fields->pdata);
-		g_string_append (path, fields);
-	}
-	g_ptr_array_free (query_fields, TRUE);
-	if (!send_snapd_request ("GET", path->str, NULL,
-				 TRUE,
-				 NULL, NULL,
-				 TRUE,
-				 NULL, NULL,
-				 &status_code, &reason_phrase, &response_type, &response, NULL, cancellable, error))
+		result = gs_snapd_list (cancellable, error);
+	if (result == NULL)
 		return FALSE;
 
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
-		return FALSE;
-	}
-
-	parser = parse_result (response, response_type, error);
-	if (parser == NULL)
-		return FALSE;
-
-	root = json_node_get_object (json_parser_get_root (parser));
-	result = json_object_get_array_member (root, "result");
 	snaps = json_array_get_elements (result);
-
 	for (i = snaps; i != NULL; i = i->next) {
 		JsonObject *package = json_node_get_object (i->data);
 		g_autoptr(GsApp) app = NULL;
@@ -255,7 +172,6 @@ get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc fi
 		refine_app (plugin, app, package, TRUE);
 		gs_plugin_add_app (list, app);
 	}
-
 	g_list_free (snaps);
 
 	return TRUE;
@@ -264,43 +180,14 @@ get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc fi
 static gboolean
 get_app (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
 {
-	guint status_code;
-	g_autofree gchar *path = NULL, *reason_phrase = NULL, *response_type = NULL, *response = NULL;
-	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root, *result;
+	g_autoptr(JsonObject) result = NULL;
 
-	path = g_strdup_printf ("/v2/snaps/%s", gs_app_get_id (app));
-	if (!send_snapd_request ("GET", path, NULL,
-				 TRUE,
-				 NULL, NULL,
-				 TRUE,
-				 NULL, NULL,
-				 &status_code, &reason_phrase, &response_type, &response, NULL, cancellable, error))
+	result = gs_snapd_list_one (gs_app_get_id (app), cancellable, error);
+	if (result == NULL)
 		return FALSE;
-
-	if (status_code == SOUP_STATUS_NOT_FOUND)
+	// Hack to handle not found case
+	if (json_object_get_size (result) == 0)
 		return TRUE;
-
-	if (status_code != SOUP_STATUS_OK) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
-		return FALSE;
-	}
-
-	parser = parse_result (response, response_type, error);
-	if (parser == NULL)
-		return FALSE;
-	root = json_node_get_object (json_parser_get_root (parser));
-	result = json_object_get_object_member (root, "result");
-	if (result == NULL) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned no results for %s", gs_app_get_id (app));
-		return FALSE;
-	}
 
 	refine_app (plugin, app, result, FALSE);
 
@@ -361,121 +248,39 @@ gs_plugin_refine (GsPlugin *plugin,
 	return TRUE;
 }
 
-static gboolean
-send_package_action (GsPlugin *plugin, GsApp *app, const char *id, const gchar *action, GCancellable *cancellable, GError **error)
+typedef struct
 {
-	g_autofree gchar *content = NULL, *path = NULL;
-	guint status_code;
-	g_autofree gchar *reason_phrase = NULL, *response_type = NULL, *response = NULL, *status = NULL;
-	g_autoptr(JsonParser) parser = NULL;
-	JsonObject *root, *result, *task, *progress;
+	GsPlugin *plugin;
+	GsApp *app;
+} ProgressData;
+
+static void
+progress_cb (JsonObject *result, gpointer user_data)
+{
+	ProgressData *data = user_data;
 	JsonArray *tasks;
 	GList *task_list, *l;
-	gint64 done, total, task_done, task_total;
-        const gchar *resource_path;
-	const gchar *type;
-	const gchar *change_id;
-	g_autofree gchar *macaroon = NULL;
-	g_auto(GStrv) discharges = NULL;
+	gint64 done = 0, total = 0;
 
-	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
-	path = g_strdup_printf ("/v2/snaps/%s", id);
-	if (!send_snapd_request ("POST", path, content,
-				 TRUE,
-				 NULL, NULL,
-				 TRUE,
-				 &macaroon, &discharges,
-				 &status_code, &reason_phrase, &response_type, &response, NULL, cancellable, error))
-		return FALSE;
+	tasks = json_object_get_array_member (result, "tasks");
+	task_list = json_array_get_elements (tasks);
 
-	if (status_code != SOUP_STATUS_ACCEPTED) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd returned status code %d: %s", status_code, reason_phrase);
-		return FALSE;
+	for (l = task_list; l != NULL; l = l->next) {
+		JsonObject *task, *progress;
+		gint64 task_done, task_total;
+
+		task = json_node_get_object (l->data);
+		progress = json_object_get_object_member (task, "progress");
+		task_done = json_object_get_int_member (progress, "done");
+		task_total = json_object_get_int_member (progress, "total");
+
+		done += task_done;
+		total += task_total;
 	}
 
-	parser = parse_result (response, response_type, error);
-	if (parser == NULL)
-		return FALSE;
+	gs_plugin_progress_update (data->plugin, data->app, 100 * done / total);
 
-	root = json_node_get_object (json_parser_get_root (parser));
-	type = json_object_get_string_member (root, "type");
-
-	if (g_strcmp0 (type, "async") == 0) {
-		change_id = json_object_get_string_member (root, "change");
-		resource_path = g_strdup_printf ("/v2/changes/%s", change_id);
-
-		while (TRUE) {
-			g_autofree gchar *status_reason_phrase = NULL, *status_response_type = NULL, *status_response = NULL;
-			g_autoptr(JsonParser) status_parser = NULL;
-
-			/* Wait for a little bit before polling */
-			g_usleep (100 * 1000);
-
-			if (!send_snapd_request ("GET", resource_path, NULL,
-						 TRUE,
-						 macaroon, discharges,
-						 TRUE,
-						 NULL, NULL,
-						 &status_code, &status_reason_phrase, &status_response_type,
-						 &status_response, NULL, cancellable, error)) {
-				return FALSE;
-			}
-
-			if (status_code != SOUP_STATUS_OK) {
-				g_set_error (error,
-					     GS_PLUGIN_ERROR,
-					     GS_PLUGIN_ERROR_FAILED,
-					     "snapd returned status code %d: %s", status_code, status_reason_phrase);
-				return FALSE;
-			}
-
-			status_parser = parse_result (status_response, status_response_type, error);
-			if (status_parser == NULL)
-				return FALSE;
-
-			root = json_node_get_object (json_parser_get_root (status_parser));
-			result = json_object_get_object_member (root, "result");
-
-			g_free (status);
-			status = g_strdup (json_object_get_string_member (result, "status"));
-
-			if (g_strcmp0 (status, "Done") == 0)
-				break;
-
-			tasks = json_object_get_array_member (result, "tasks");
-			task_list = json_array_get_elements (tasks);
-
-			done = 0;
-			total = 0;
-
-			for (l = task_list; l != NULL; l = l->next) {
-				task = json_node_get_object (l->data);
-				progress = json_object_get_object_member (task, "progress");
-				task_done = json_object_get_int_member (progress, "done");
-				task_total = json_object_get_int_member (progress, "total");
-
-				done += task_done;
-				total += task_total;
-			}
-
-			gs_plugin_progress_update (plugin, app, 100 * done / total);
-
-			g_list_free (task_list);
-		}
-	}
-
-	if (g_strcmp0 (status, "Done") != 0) {
-		g_set_error (error,
-			     GS_PLUGIN_ERROR,
-			     GS_PLUGIN_ERROR_FAILED,
-			     "snapd operation finished with status %s", status);
-		return FALSE;
-	}
-
-	return TRUE;
+	g_list_free (task_list);
 }
 
 gboolean
@@ -484,20 +289,21 @@ gs_plugin_app_install (GsPlugin *plugin,
 		       GCancellable *cancellable,
 		       GError **error)
 {
-	gboolean result;
+	ProgressData data;
 
 	/* We can only install apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_INSTALLING);
-	result = send_package_action (plugin, app, gs_app_get_id (app), "install", cancellable, error);
-	if (result)
-		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-	else
+	data.plugin = plugin;
+	data.app = app;
+	if (!gs_snapd_install (gs_app_get_id (app), progress_cb, &data, cancellable, error)) {
 		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-
-	return result;
+		return FALSE;
+	}
+	gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+	return TRUE;
 }
 
 gboolean
@@ -539,18 +345,19 @@ gs_plugin_app_remove (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	gboolean result;
+	ProgressData data;
 
 	/* We can only remove apps we know of */
 	if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 		return TRUE;
 
 	gs_app_set_state (app, AS_APP_STATE_REMOVING);
-	result = send_package_action (plugin, app, gs_app_get_id (app), "remove", cancellable, error);
-	if (result)
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-	else
+	data.plugin = plugin;
+	data.app = app;
+	if (!gs_snapd_remove (gs_app_get_id (app), progress_cb, &data, cancellable, error)) {
 		gs_app_set_state (app, AS_APP_STATE_INSTALLED);
-
-	return result;
+		return FALSE;
+	}
+	gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+	return TRUE;
 }

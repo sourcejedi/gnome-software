@@ -91,23 +91,23 @@ read_from_snapd (GSocket *socket,
 	return TRUE;
 }
 
-gboolean
-send_snapd_request (const gchar  *method,
-		    const gchar  *path,
-		    const gchar  *content,
-		    gboolean      authenticate,
-		    const gchar  *macaroon_,
-		    gchar       **discharges_,
-		    gboolean      retry_after_login,
-		    gchar       **out_macaroon,
-		    gchar      ***out_discharges,
-		    guint        *status_code,
-		    gchar       **reason_phrase,
-		    gchar       **response_type,
-		    gchar       **response,
-		    gsize        *response_length,
-		    GCancellable *cancellable,
-		    GError      **error)
+static gboolean
+send_request (const gchar  *method,
+	      const gchar  *path,
+	      const gchar  *content,
+	      gboolean      authenticate,
+	      const gchar  *macaroon_,
+	      gchar       **discharges_,
+	      gboolean      retry_after_login,
+	      gchar       **out_macaroon,
+	      gchar      ***out_discharges,
+	      guint        *status_code,
+	      gchar       **reason_phrase,
+	      gchar       **response_type,
+	      gchar       **response,
+	      gsize        *response_length,
+	      GCancellable *cancellable,
+	      GError      **error)
 {
 	g_autoptr (GSocket) socket = NULL;
 	g_autoptr (GString) request = NULL;
@@ -212,20 +212,20 @@ send_snapd_request (const gchar  *method,
 			return FALSE;
 		}
 
-		ret = send_snapd_request (method,
-					  path,
-					  content,
-					  TRUE,
-					  macaroon, discharges,
-					  FALSE,
-					  NULL, NULL,
-					  status_code,
-					  reason_phrase,
-					  response_type,
-					  response,
-					  response_length,
-					  cancellable,
-					  error);
+		ret = send_request (method,
+				    path,
+				    content,
+				    TRUE,
+				    macaroon, discharges,
+				    FALSE,
+				    NULL, NULL,
+				    status_code,
+				    reason_phrase,
+				    response_type,
+				    response,
+				    response_length,
+				    cancellable,
+				    error);
 
 		if (ret && out_macaroon != NULL) {
 			*out_macaroon = g_steal_pointer (&macaroon);
@@ -302,4 +302,415 @@ send_snapd_request (const gchar  *method,
 		*response_length = chunk_length;
 
 	return TRUE;
+}
+
+static JsonParser *
+parse_result (const gchar *response, const gchar *response_type, GError **error)
+{
+	g_autoptr(JsonParser) parser = NULL;
+	g_autoptr(GError) error_local = NULL;
+
+	if (response_type == NULL) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd returned no content type");
+		return NULL;
+	}
+	if (g_strcmp0 (response_type, "application/json") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned unexpected content type %s", response_type);
+		return NULL;
+	}
+
+	parser = json_parser_new ();
+	if (!json_parser_load_from_data (parser, response, -1, &error_local)) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "Unable to parse snapd response: %s",
+			     error_local->message);
+		return NULL;
+	}
+	if (!JSON_NODE_HOLDS_OBJECT (json_parser_get_root (parser))) {
+		g_set_error_literal (error,
+				     GS_PLUGIN_ERROR,
+				     GS_PLUGIN_ERROR_FAILED,
+				     "snapd response does is not a valid JSON object");
+		return NULL;
+	}
+
+	return g_object_ref (parser);
+}
+
+gchar *
+gs_snapd_login (const gchar *username, const gchar *password, const gchar *otp,
+		guint *status_code,
+		GCancellable *cancellable, GError **error)
+{
+	g_autofree gchar *escaped_username = NULL;
+	g_autofree gchar *escaped_password = NULL;
+	g_autofree gchar *escaped_otp = NULL;
+	g_autofree gchar *content = NULL;
+	g_autofree gchar *response = NULL;
+
+	escaped_username = g_strescape (username, NULL);
+	escaped_password = g_strescape (password, NULL);
+
+	if (otp != NULL) {
+		escaped_otp = g_strescape (otp, NULL);
+
+		content = g_strdup_printf ("{"
+					   "  \"username\" : \"%s\","
+					   "  \"password\" : \"%s\","
+					   "  \"otp\" : \"%s\""
+					   "}",
+					   escaped_username,
+					   escaped_password,
+					   escaped_otp);
+	} else {
+		content = g_strdup_printf ("{"
+					   "  \"username\" : \"%s\","
+					   "  \"password\" : \"%s\""
+					   "}",
+					   escaped_username,
+					   escaped_password);
+	}
+
+	if (!send_request ("POST",
+			   "/v2/login",
+			   content,
+			   FALSE, NULL, NULL,
+			   FALSE, NULL, NULL,
+			   status_code,
+			   NULL,
+			   NULL,
+			   &response,
+			   NULL,
+			   NULL,
+			   error))
+		return NULL;
+
+	return g_steal_pointer (&response);
+}
+
+JsonObject *
+gs_snapd_list_one (const gchar *name,
+		   GCancellable *cancellable, GError **error)
+{
+	g_autofree gchar *path = NULL;
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root, *result;
+
+	path = g_strdup_printf ("/v2/snaps/%s", name);
+	if (!send_request ("GET", path, NULL,
+			   TRUE, NULL, NULL,
+			   TRUE, NULL, NULL,
+			   &status_code, &reason_phrase,
+			   &response_type, &response, NULL,
+			   cancellable, error))
+		return NULL;
+
+	// Hack to not generate an error if not found
+	if (status_code == SOUP_STATUS_NOT_FOUND)
+		return json_object_new ();
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return NULL;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return NULL;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_object_member (root, "result");
+	if (result == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned no results for %s", name);
+		return NULL;
+	}
+
+	return json_object_ref (result);
+}
+
+JsonArray *
+gs_snapd_list (GCancellable *cancellable, GError **error)
+{
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root;
+	JsonArray *result;
+
+	if (!send_request ("GET", "/v2/snaps", NULL,
+			   TRUE, NULL, NULL,
+			   TRUE, NULL, NULL,
+			   &status_code, &reason_phrase,
+			   &response_type, &response, NULL,
+			   cancellable, error))
+		return NULL;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return NULL;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return NULL;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_array_member (root, "result");
+	if (result == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned no result");
+		return NULL;
+	}
+
+	return json_array_ref (result);
+}
+
+JsonArray *
+gs_snapd_find (gchar **values,
+	       GCancellable *cancellable, GError **error)
+{
+	g_autoptr(GString) path = NULL;
+	g_autofree gchar *query = NULL;
+	g_autofree gchar *escaped = NULL;
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root;
+	JsonArray *result;
+
+	path = g_string_new ("/v2/find?q=");
+	query = g_strjoinv (" ", values);
+	escaped = soup_uri_encode (query, NULL);
+	g_string_append (path, escaped);
+	if (!send_request ("GET", path->str, NULL,
+			   TRUE, NULL, NULL,
+			   TRUE, NULL, NULL,
+			   &status_code, &reason_phrase,
+			   &response_type, &response, NULL,
+			   cancellable, error))
+		return NULL;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return NULL;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return NULL;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_array_member (root, "result");
+	if (result == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned no result");
+		return NULL;
+	}
+
+	return json_array_ref (result);
+}
+
+static JsonObject *
+get_changes (const gchar *macaroon, gchar **discharges,
+	     const gchar *change_id,
+	     GCancellable *cancellable, GError **error)
+{
+	g_autofree gchar *path = NULL;
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root, *result;
+
+	path = g_strdup_printf ("/v2/changes/%s", change_id);
+	if (!send_request ("GET", path, NULL,
+			   TRUE, macaroon, discharges,
+			   TRUE, NULL, NULL,
+			   &status_code, &reason_phrase,
+			   &response_type, &response, NULL,
+			   cancellable, error))
+		return NULL;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return NULL;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return NULL;
+	root = json_node_get_object (json_parser_get_root (parser));
+	result = json_object_get_object_member (root, "result");
+	if (result == NULL) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned no result");
+		return NULL;
+	}
+
+	return json_object_ref (result);
+}
+
+static gboolean
+send_package_action (const gchar *name,
+		     const gchar *action,
+		     GsSnapdProgressCallback callback,
+		     gpointer user_data,
+		     GCancellable *cancellable,
+		     GError **error)
+{
+	g_autofree gchar *content = NULL, *path = NULL;
+	guint status_code;
+	g_autofree gchar *macaroon = NULL;
+	g_auto(GStrv) discharges = NULL;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *response = NULL;
+	g_autofree gchar *status = NULL;
+	g_autoptr(JsonParser) parser = NULL;
+	JsonObject *root, *result;
+	const gchar *type;
+
+	content = g_strdup_printf ("{\"action\": \"%s\"}", action);
+	path = g_strdup_printf ("/v2/snaps/%s", name);
+	if (!send_request ("POST", path, content,
+			   TRUE, NULL, NULL,
+			   TRUE, &macaroon, &discharges,
+			   &status_code, &reason_phrase,
+			   &response_type, &response, NULL,
+			   cancellable, error))
+		return FALSE;
+
+	if (status_code != SOUP_STATUS_ACCEPTED) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return FALSE;
+	}
+
+	parser = parse_result (response, response_type, error);
+	if (parser == NULL)
+		return FALSE;
+
+	root = json_node_get_object (json_parser_get_root (parser));
+	type = json_object_get_string_member (root, "type");
+
+	if (g_strcmp0 (type, "async") == 0) {
+		const gchar *change_id;
+
+		change_id = json_object_get_string_member (root, "change");
+
+		while (TRUE) {
+			/* Wait for a little bit before polling */
+			g_usleep (100 * 1000);
+
+			result = get_changes (macaroon, discharges, change_id, cancellable, error);
+			if (result == NULL)
+				return FALSE;
+
+			status = g_strdup (json_object_get_string_member (result, "status"));
+
+			if (g_strcmp0 (status, "Done") == 0)
+				break;
+
+			callback (result, user_data);
+		}
+	}
+
+	if (g_strcmp0 (status, "Done") != 0) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd operation finished with status %s", status);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+gboolean
+gs_snapd_install (const gchar *name,
+		  GsSnapdProgressCallback callback, gpointer user_data,
+		  GCancellable *cancellable,
+		  GError **error)
+{
+	return send_package_action (name, "install", callback, user_data, cancellable, error);
+}
+
+gboolean
+gs_snapd_remove (const gchar *name,
+		 GsSnapdProgressCallback callback, gpointer user_data,
+		 GCancellable *cancellable, GError **error)
+{
+	return send_package_action (name, "remove", callback, user_data, cancellable, error);
+}
+
+gchar *
+gs_snapd_get_resource (const gchar *path,
+		       gsize *data_length,
+		       GCancellable *cancellable, GError **error)
+{
+	guint status_code;
+	g_autofree gchar *reason_phrase = NULL;
+	g_autofree gchar *response_type = NULL;
+	g_autofree gchar *data = NULL;
+
+	if (!send_request ("GET", path, NULL,
+			   TRUE, NULL, NULL,
+			   TRUE, NULL, NULL,
+			   &status_code, &reason_phrase,
+			   NULL, &data, data_length,
+			   cancellable, error))
+		return NULL;
+
+	if (status_code != SOUP_STATUS_OK) {
+		g_set_error (error,
+			     GS_PLUGIN_ERROR,
+			     GS_PLUGIN_ERROR_FAILED,
+			     "snapd returned status code %u: %s",
+			     status_code, reason_phrase);
+		return NULL;
+	}
+
+	return g_steal_pointer (&data);
 }
