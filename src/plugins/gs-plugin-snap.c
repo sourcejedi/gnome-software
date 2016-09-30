@@ -50,7 +50,7 @@ gs_plugin_initialize (GsPlugin *plugin)
 }
 
 static void
-refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_search)
+refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_search, GCancellable *cancellable)
 {
 	const gchar *status, *icon_url, *launch_name = NULL;
 	g_autoptr(GdkPixbuf) icon_pixbuf = NULL;
@@ -60,44 +60,55 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 	if (g_strcmp0 (status, "installed") == 0 || g_strcmp0 (status, "active") == 0) {
 		const gchar *update_available;
 
-		update_available = json_object_has_member (package, "update_available") ? json_object_get_string_member (package, "update_available") : NULL;
+		update_available = json_object_has_member (package, "update_available") ?
+			json_object_get_string_member (package, "update_available") : NULL;
 		if (update_available)
 			gs_app_set_state (app, AS_APP_STATE_UPDATABLE);
-		else
+		else {
+			if (gs_app_get_state (app) == AS_APP_STATE_AVAILABLE)
+				gs_app_set_state (app, AS_APP_STATE_UNKNOWN);
 			gs_app_set_state (app, AS_APP_STATE_INSTALLED);
+		}
 		size = json_object_get_int_member (package, "installed-size");
+	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
+		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
+		size = json_object_get_int_member (package, "download-size");
 	}
 	else if (g_strcmp0 (status, "removed") == 0) {
 		// A removed app is only available if it can be downloaded (it might have been sideloaded)
 		size = json_object_get_int_member (package, "download-size");
 		if (size > 0)
 			gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-	} else if (g_strcmp0 (status, "not installed") == 0 || g_strcmp0 (status, "available") == 0) {
-		gs_app_set_state (app, AS_APP_STATE_AVAILABLE);
-		size = json_object_get_int_member (package, "download-size");
 	}
-	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "name"));
-	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST, json_object_get_string_member (package, "description"));
+
+	gs_app_set_name (app, GS_APP_QUALITY_HIGHEST,
+			 json_object_get_string_member (package, "name"));
+	gs_app_set_summary (app, GS_APP_QUALITY_HIGHEST,
+			    json_object_get_string_member (package, "description"));
 	gs_app_set_version (app, json_object_get_string_member (package, "version"));
 	if (size > 0)
 		gs_app_set_size (app, size);
 	gs_app_add_quirk (app, AS_APP_QUIRK_PROVENANCE);
 	icon_url = json_object_get_string_member (package, "icon");
 	if (g_str_has_prefix (icon_url, "/")) {
-		g_autofree gchar *icon_response = NULL;
-		gsize icon_response_length;
+		g_autofree gchar *icon_data = NULL;
+		gsize icon_data_length;
+		g_autoptr(GError) error = NULL;
 
-		icon_response = gs_snapd_get_resource (icon_url, &icon_response_length, NULL, NULL);
-		if (icon_response != NULL) {
+		icon_data = gs_snapd_get_resource (icon_url, &icon_data_length, cancellable, &error);
+		if (icon_data != NULL) {
 			g_autoptr(GdkPixbufLoader) loader = NULL;
 
 			loader = gdk_pixbuf_loader_new ();
-			gdk_pixbuf_loader_write (loader, (guchar *) icon_response, icon_response_length, NULL);
+			gdk_pixbuf_loader_write (loader,
+						 (guchar *) icon_data,
+						 icon_data_length,
+						 NULL);
 			gdk_pixbuf_loader_close (loader, NULL);
 			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 		}
 		else
-			g_printerr ("Failed to get icon\n");
+			g_printerr ("Failed to get icon: %s\n", error->message);
 	}
 	else {
 		g_autoptr(SoupMessage) message = NULL;
@@ -107,15 +118,18 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 		if (message != NULL) {
 			soup_session_send_message (plugin->soup_session, message);
 			loader = gdk_pixbuf_loader_new ();
-			gdk_pixbuf_loader_write (loader, (guint8 *) message->response_body->data,  message->response_body->length, NULL);
+			gdk_pixbuf_loader_write (loader,
+						 (guint8 *) message->response_body->data,
+						 message->response_body->length,
+						 NULL);
 			gdk_pixbuf_loader_close (loader, NULL);
 			icon_pixbuf = g_object_ref (gdk_pixbuf_loader_get_pixbuf (loader));
 		}
 	}
 
-	if (icon_pixbuf)
+	if (icon_pixbuf) {
 		gs_app_set_pixbuf (app, icon_pixbuf);
-	else {
+	} else {
 		g_autoptr(AsIcon) icon = NULL;
 
 		icon = as_icon_new ();
@@ -138,72 +152,9 @@ refine_app (GsPlugin *plugin, GsApp *app, JsonObject *package, gboolean from_sea
 	}
 }
 
-static gboolean
-get_apps (GsPlugin *plugin, gchar **search_terms, GList **list, AppFilterFunc filter_func, gpointer user_data, GCancellable *cancellable, GError **error)
-{
-	g_autoptr(JsonArray) result = NULL;
-	GList *snaps;
-	GList *i;
-
-	/* Get all the apps */
-	if (search_terms != NULL)
-		result = gs_snapd_find (search_terms, cancellable, error);
-	else
-		result = gs_snapd_list (cancellable, error);
-	if (result == NULL)
-		return FALSE;
-
-	snaps = json_array_get_elements (result);
-	for (i = snaps; i != NULL; i = i->next) {
-		JsonObject *package = json_node_get_object (i->data);
-		g_autoptr(GsApp) app = NULL;
-		const gchar *id;
-
-		id = json_object_get_string_member (package, "name");
-
-		if (filter_func != NULL && !filter_func (id, package, user_data))
-			continue;
-
-		app = gs_app_new (id);
-		gs_app_set_management_plugin (app, "snap");
-		gs_app_set_origin (app, _("Ubuntu Snappy Store"));
-		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
-		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
-		refine_app (plugin, app, package, TRUE);
-		gs_plugin_add_app (list, app);
-	}
-	g_list_free (snaps);
-
-	return TRUE;
-}
-
-static gboolean
-get_app (GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
-{
-	g_autoptr(JsonObject) result = NULL;
-
-	result = gs_snapd_list_one (gs_app_get_id (app), cancellable, error);
-	if (result == NULL)
-		return FALSE;
-	// Hack to handle not found case
-	if (json_object_get_size (result) == 0)
-		return TRUE;
-
-	refine_app (plugin, app, result, FALSE);
-
-	return TRUE;
-}
-
 void
 gs_plugin_destroy (GsPlugin *plugin)
 {
-}
-
-static gboolean
-is_active (const gchar *id, JsonObject *object, gpointer data)
-{
-	const gchar *status = json_object_get_string_member (object, "status");
-	return g_strcmp0 (status, "active") == 0;
 }
 
 gboolean
@@ -212,7 +163,33 @@ gs_plugin_add_installed (GsPlugin *plugin,
 			 GCancellable *cancellable,
 			 GError **error)
 {
-	return get_apps (plugin, NULL, list, is_active, NULL, cancellable, error);
+	g_autoptr(JsonArray) result = NULL;
+	guint i;
+
+	result = gs_snapd_list (cancellable, error);
+	if (result == NULL)
+		return FALSE;
+
+	for (i = 0; i < json_array_get_length (result); i++) {
+		JsonObject *package = json_array_get_object_element (result, i);
+		g_autoptr(GsApp) app = NULL;
+		const gchar *status, *name;
+
+		status = json_object_get_string_member (package, "status");
+		if (g_strcmp0 (status, "active") != 0)
+			continue;
+
+		name = json_object_get_string_member (package, "name");
+		app = gs_app_new (name);
+		gs_app_set_management_plugin (app, "snap");
+		gs_app_set_origin (app, _("Ubuntu Snappy Store")); // FIXME: Not necessarily from the snap store...
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+		refine_app (plugin, app, package, TRUE, cancellable);
+		gs_plugin_add_app (list, app);
+	}
+
+	return TRUE;
 }
 
 gboolean
@@ -222,7 +199,29 @@ gs_plugin_add_search (GsPlugin *plugin,
 		      GCancellable *cancellable,
 		      GError **error)
 {
-	return get_apps (plugin, values, list, NULL, values, cancellable, error);
+	g_autoptr(JsonArray) result = NULL;
+	guint i;
+
+	result = gs_snapd_find (values, cancellable, error);
+	if (result == NULL)
+		return FALSE;
+
+	for (i = 0; i < json_array_get_length (result); i++) {
+		JsonObject *package = json_array_get_object_element (result, i);
+		g_autoptr(GsApp) app = NULL;
+		const gchar *name;
+
+		name = json_object_get_string_member (package, "name");
+		app = gs_app_new (name);
+		gs_app_set_management_plugin (app, "snap");
+		gs_app_set_origin (app, _("Ubuntu Snappy Store")); // FIXME: Not necessarily from the snap store...
+		gs_app_set_kind (app, AS_APP_KIND_DESKTOP);
+		gs_app_add_quirk (app, AS_APP_QUIRK_NOT_REVIEWABLE);
+		refine_app (plugin, app, package, TRUE, cancellable);
+		gs_plugin_add_app (list, app);
+	}
+
+	return TRUE;
 }
 
 gboolean
@@ -236,13 +235,15 @@ gs_plugin_refine (GsPlugin *plugin,
 
 	for (link = *list; link; link = link->next) {
 		GsApp *app = link->data;
+		g_autoptr(JsonObject) result = NULL;
 
 		if (g_strcmp0 (gs_app_get_management_plugin (app), "snap") != 0)
 			continue;
 
-		// Get info from snapd
-		if (!get_app (plugin, app, cancellable, error))
-			return FALSE;
+		result = gs_snapd_list_one (gs_app_get_id (app), cancellable, NULL);
+		if (result == NULL)
+			continue;
+		refine_app (plugin, app, result, FALSE, cancellable);
 	}
 
 	return TRUE;
@@ -328,7 +329,6 @@ gs_plugin_launch (GsPlugin *plugin,
 		binary_name = g_strdup_printf ("/snap/bin/%s", launch_name);
 	else
 		binary_name = g_strdup_printf ("/snap/bin/%s.%s", gs_app_get_id (app), launch_name);
-	g_printerr ("BINARY='%s'\n", binary_name);
 
 	// FIXME: Since we don't currently know if this app needs a terminal or not we launch everything with one
 	// https://bugs.launchpad.net/bugs/1595023

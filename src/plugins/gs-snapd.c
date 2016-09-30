@@ -417,10 +417,6 @@ gs_snapd_list_one (const gchar *name,
 			   cancellable, error))
 		return NULL;
 
-	// Hack to not generate an error if not found
-	if (status_code == SOUP_STATUS_NOT_FOUND)
-		return json_object_new ();
-
 	if (status_code != SOUP_STATUS_OK) {
 		g_set_error (error,
 			     GS_PLUGIN_ERROR,
